@@ -1,0 +1,19 @@
+receivers:
+  observiq/generate:
+    pipeline:
+      - type: generate_input
+      - type: channel_output
+
+# processors:
+#   exampleprocessor:
+
+exporters:
+  file:
+    path: /Users/djaglowski/tmp/fake.out
+
+service:
+  pipelines:
+    logs:
+      receivers: [observiq/generate]
+      # processors: [exampleprocessor]
+      exporters: [file]

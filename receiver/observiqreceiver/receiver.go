@@ -1,3 +1,17 @@
+// Copyright 2019, OpenTelemetry Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package observiqreceiver
 
 import (
@@ -22,7 +36,7 @@ type observiqReceiver struct {
 
 	config   *Config
 	agent    *observiq.LogAgent
-	logsChan chan obsentry.Entry
+	logsChan chan *obsentry.Entry
 	consumer consumer.LogsConsumer
 	logger   *zap.Logger
 }
@@ -36,7 +50,10 @@ func (r *observiqReceiver) Start(ctx context.Context, host component.Host) error
 	r.startOnce.Do(func() {
 		err = nil
 
-		r.agent.Start()
+		obsErr := r.agent.Start()
+		if obsErr != nil {
+			host.ReportFatalError(fmt.Errorf("start observiq: %v", obsErr))
+		}
 
 		go func() {
 			for {
@@ -44,9 +61,8 @@ func (r *observiqReceiver) Start(ctx context.Context, host component.Host) error
 				case <-r.done:
 					return
 				case obsLog := <-r.logsChan:
-					// TODO batch logs in agent output and handle mapping of slice here
 					if err := r.consumer.ConsumeLogs(ctx, convert(obsLog)); err != nil {
-						// TODO determine handling for unhandleable but non-fatal error
+						// TODO how to handle non-fatal error
 					}
 				}
 			}
@@ -56,7 +72,7 @@ func (r *observiqReceiver) Start(ctx context.Context, host component.Host) error
 	return err
 }
 
-func convert(obsLog obsentry.Entry) pdata.Logs {
+func convert(obsLog *obsentry.Entry) pdata.Logs {
 	out := pdata.NewLogs()
 	logs := out.ResourceLogs()
 	logs.Resize(1)

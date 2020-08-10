@@ -43,6 +43,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/collectdreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/observiqreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/receivercreator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/redisreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sapmreceiver"
@@ -77,6 +78,7 @@ func components() (component.Factories, error) {
 		sapmreceiver.NewFactory(),
 		&signalfxreceiver.Factory{},
 		&carbonreceiver.Factory{},
+		&observiqreceiver.Factory{},
 		&wavefrontreceiver.Factory{},
 		&redisreceiver.Factory{},
 		&kubeletstatsreceiver.Factory{},
