@@ -98,7 +98,6 @@ func (f *Factory) CreateLogsReceiver(
 		See additional comments in CustomUnmarshaler()
 	*/
 	rawCfg := cfg.(*Config)
-
 	cfgBytes, err := yaml.Marshal(rawCfg.Pipeline)
 	if err != nil {
 		return nil, fmt.Errorf("failed to remarshal config: %s", err)
@@ -110,8 +109,7 @@ func (f *Factory) CreateLogsReceiver(
 	}
 
 	logsChan := make(chan *obsentry.Entry)
-	// TODO allow configuration of plugins directory and offsets file
-	logAgent := observiq.NewLogAgent(obsCfg, params.Logger.Sugar(), "plugins", "offsets.db").
+	logAgent := observiq.NewLogAgent(obsCfg, params.Logger.Sugar(), rawCfg.PluginsDir, rawCfg.OffsetsFile).
 		WithBuildParameter("otel_output_chan", logsChan)
 
 	return &observiqReceiver{

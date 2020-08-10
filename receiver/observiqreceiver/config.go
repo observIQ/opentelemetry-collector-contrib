@@ -21,5 +21,7 @@ import (
 // Config defines configuration for the observiq receiver
 type Config struct {
 	configmodels.ReceiverSettings `mapstructure:",squash"`
+	OffsetsFile                   string        `mapstructure:"offsets_file"`
+	PluginsDir                    string        `mapstructure:"plugins_dir"`
 	Pipeline                      []interface{} `mapstructure:"pipeline"`
 }

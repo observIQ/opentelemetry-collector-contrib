@@ -2,6 +2,11 @@ receivers:
   observiq/generate:
     pipeline:
       - type: generate_input
+        entry:
+          severity: 70
+          record: log1
+      - type: rate_limit
+        rate: 10
       - type: channel_output
 
 # processors:
@@ -9,7 +14,7 @@ receivers:
 
 exporters:
   file:
-    path: /Users/djaglowski/tmp/fake.out
+    path: local/exporter.out
 
 service:
   pipelines:
