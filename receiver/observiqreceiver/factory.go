@@ -3,6 +3,9 @@ package observiqreceiver
 import (
 	"context"
 
+	observiq "github.com/observiq/carbon/agent"
+	entry "github.com/observiq/carbon/entry"
+
 	"github.com/observiq/carbon/agent"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configmodels"
@@ -37,7 +40,7 @@ func (f *Factory) CreateDefaultConfig() configmodels.Receiver {
 			TypeVal: configmodels.Type(typeStr),
 			NameVal: typeStr,
 		},
-		agentConfig: agent.Config{},
+		agentConfig: &agent.Config{},
 		// TODO additional config values
 	}
 }
@@ -51,7 +54,13 @@ func (f *Factory) CreateLogsReceiver(
 ) (component.LogsReceiver, error) {
 
 	c := cfg.(*Config)
+
+	logsChan := make(chan entry.Entry)
+	logAgent := observiq.NewLogAgent(c.agentConfig, params.Logger.Sugar(), "todo", "todo").
+		WithBuildParameter("otc_output_chan", logsChan)
+
 	return &observiqReceiver{
+		agent:    logAgent,
 		config:   c,
 		consumer: nextConsumer,
 		logger:   params.Logger,
