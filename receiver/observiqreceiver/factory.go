@@ -110,7 +110,8 @@ func (f *Factory) CreateLogsReceiver(
 	}
 
 	logsChan := make(chan *obsentry.Entry)
-	logAgent := observiq.NewLogAgent(obsCfg, params.Logger.Sugar(), "todo", "todo").
+	// TODO allow configuration of plugins directory and offsets file
+	logAgent := observiq.NewLogAgent(obsCfg, params.Logger.Sugar(), "plugins", "offsets.db").
 		WithBuildParameter("otel_output_chan", logsChan)
 
 	return &observiqReceiver{
