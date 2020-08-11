@@ -1,0 +1,15 @@
+receivers:
+  examplereceiver:
+
+processors:
+  exampleprocessor:
+
+exporters:
+  gcplogging:
+
+service:
+  pipelines:
+    metrics:
+      receivers: [examplereceiver]
+      processors: [exampleprocessor]
+      exporters: [gcplogging]
