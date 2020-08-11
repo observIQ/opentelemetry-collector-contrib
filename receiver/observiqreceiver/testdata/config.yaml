@@ -1,15 +1,10 @@
 receivers:
-  # TODO fully default config
-  # observiq:
   observiq/generate:
     plugins_dir: local/plugins
     pipeline:
       - type: sample_plugin
         message: hello
       - type: receiver_output
-
-# processors:
-#   exampleprocessor:
 
 exporters:
   file:
@@ -19,5 +14,4 @@ service:
   pipelines:
     logs:
       receivers: [observiq/generate]
-      # processors: [exampleprocessor]
       exporters: [file]
