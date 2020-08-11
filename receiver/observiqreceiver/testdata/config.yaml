@@ -1,20 +1,19 @@
 receivers:
+  # TODO fully default config
+  # observiq:
   observiq/generate:
+    plugins_dir: local/plugins
     pipeline:
-      - type: generate_input
-        entry:
-          severity: 70
-          record: log1
-      - type: rate_limit
-        rate: 10
-      - type: channel_output
+      - type: sample_plugin
+        message: hello
+      - type: receiver_output
 
 # processors:
 #   exampleprocessor:
 
 exporters:
   file:
-    path: local/exporter.out
+    path: local/exporter.log
 
 service:
   pipelines:

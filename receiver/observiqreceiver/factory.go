@@ -98,19 +98,21 @@ func (f *Factory) CreateLogsReceiver(
 		See additional comments in CustomUnmarshaler()
 	*/
 	rawCfg := cfg.(*Config)
-	cfgBytes, err := yaml.Marshal(rawCfg.Pipeline)
+	cfgMap := make(map[string]interface{})
+	cfgMap["pipeline"] = rawCfg.Pipeline
+	cfgBytes, err := yaml.Marshal(cfgMap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to remarshal config: %s", err)
 	}
 
 	obsCfg := &observiq.Config{}
-	if err := yaml.UnmarshalStrict(cfgBytes, &obsCfg.Pipeline); err != nil {
+	if err := yaml.UnmarshalStrict(cfgBytes, &obsCfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %s", err)
 	}
 
 	logsChan := make(chan *obsentry.Entry)
 	logAgent := observiq.NewLogAgent(obsCfg, params.Logger.Sugar(), rawCfg.PluginsDir, rawCfg.OffsetsFile).
-		WithBuildParameter("otel_output_chan", logsChan)
+		WithBuildParameter(logsChannelID, logsChan)
 
 	return &observiqReceiver{
 		agent:    logAgent,

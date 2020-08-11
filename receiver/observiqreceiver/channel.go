@@ -23,55 +23,58 @@ import (
 	"github.com/observiq/carbon/operator/helper"
 )
 
+const logsChannelID = "logs_channel"
+
+// This file implements an operator that consumes logs from the observiq pipeline
 func init() {
-	operator.Register("channel_output", func() operator.Builder { return NewChannelOutputConfig("") })
+	operator.Register("receiver_output", func() operator.Builder { return NewReceiverOutputConfig("") })
 }
 
-// NewChannelOutputConfig creates new output config
-func NewChannelOutputConfig(operatorID string) *ChannelOutputConfig {
-	return &ChannelOutputConfig{
-		OutputConfig: helper.NewOutputConfig(operatorID, "channel_output"),
+// NewReceiverOutputConfig creates new output config
+func NewReceiverOutputConfig(operatorID string) *ReceiverOutputConfig {
+	return &ReceiverOutputConfig{
+		OutputConfig: helper.NewOutputConfig(operatorID, "receiver_output"),
 	}
 }
 
-// ChannelOutputConfig is the configuration of an channel output operator
-type ChannelOutputConfig struct {
+// ReceiverOutputConfig is the configuration of an receiver output operator
+type ReceiverOutputConfig struct {
 	helper.OutputConfig `yaml:",inline"`
 }
 
-// Build will build an channel output operator
-func (c ChannelOutputConfig) Build(context operator.BuildContext) (operator.Operator, error) {
+// Build will build an receiver output operator
+func (c ReceiverOutputConfig) Build(context operator.BuildContext) (operator.Operator, error) {
 	outputOperator, err := c.OutputConfig.Build(context)
 	if err != nil {
 		return nil, err
 	}
 
-	buildParam, ok := context.Parameters["otel_output_chan"]
+	buildParam, ok := context.Parameters[logsChannelID]
 	if !ok {
-		return nil, fmt.Errorf("otel_output_chan not found in build context")
+		return nil, fmt.Errorf("%s not found in build context", logsChannelID)
 	}
 
 	outChan, ok := buildParam.(chan *entry.Entry)
 	if !ok {
-		return nil, fmt.Errorf("otel_output_chan not of correct type")
+		return nil, fmt.Errorf("%s not of correct type", logsChannelID)
 	}
 
-	channelOutput := &ChannelOutput{
+	receiverOutput := &ReceiverOutput{
 		OutputOperator: outputOperator,
 		outChan:        outChan,
 	}
 
-	return channelOutput, nil
+	return receiverOutput, nil
 }
 
-// ChannelOutput is an operator that sends entries to channel
-type ChannelOutput struct {
+// ReceiverOutput is an operator that sends entries to channel
+type ReceiverOutput struct {
 	helper.OutputOperator
 	outChan chan *entry.Entry
 }
 
 // Process will write an entry to the output channel
-func (c *ChannelOutput) Process(ctx context.Context, entry *entry.Entry) error {
+func (c *ReceiverOutput) Process(ctx context.Context, entry *entry.Entry) error {
 	c.outChan <- entry
 	return nil
 }
