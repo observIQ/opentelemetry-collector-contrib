@@ -67,6 +67,8 @@ func insertToAttributeVal(value interface{}, dest pdata.AttributeValue) {
 		dest.SetIntVal(int64(t))
 	case int8:
 		dest.SetIntVal(int64(t))
+	case int:
+		dest.SetIntVal(int64(t))
 	case uint64:
 		dest.SetIntVal(int64(t))
 	case uint32:
@@ -74,6 +76,8 @@ func insertToAttributeVal(value interface{}, dest pdata.AttributeValue) {
 	case uint16:
 		dest.SetIntVal(int64(t))
 	case uint8:
+		dest.SetIntVal(int64(t))
+	case uint:
 		dest.SetIntVal(int64(t))
 	case float64:
 		dest.SetDoubleVal(t)
@@ -106,6 +110,8 @@ func toAttributeMap(obsMap map[string]interface{}) pdata.AttributeMap {
 			attMap.InsertInt(k, int64(t))
 		case int8:
 			attMap.InsertInt(k, int64(t))
+		case int:
+			attMap.InsertInt(k, int64(t))
 		case uint64:
 			attMap.InsertInt(k, int64(t))
 		case uint32:
@@ -113,6 +119,8 @@ func toAttributeMap(obsMap map[string]interface{}) pdata.AttributeMap {
 		case uint16:
 			attMap.InsertInt(k, int64(t))
 		case uint8:
+			attMap.InsertInt(k, int64(t))
+		case uint:
 			attMap.InsertInt(k, int64(t))
 		case float64:
 			attMap.InsertDouble(k, t)
