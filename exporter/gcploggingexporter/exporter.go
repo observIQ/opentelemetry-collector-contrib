@@ -74,11 +74,9 @@ func (e *gcpLoggingExporter) ConsumeLogs(ctx context.Context, ld pdata.Logs) err
 	resourceLogs := ld.ResourceLogs()
 	for i := 0; i < numRecords; i++ {
 		resourceLog := resourceLogs.At(i)
+		resource := resourceLog.Resource()
 
 		pbEntries := []*logpb.LogEntry{}
-
-		// TODO convert and use resource in request
-		// resource := resourceLog.Resource()
 
 		instLogs := resourceLog.InstrumentationLibraryLogs()
 		numInstLogs := instLogs.Len()
@@ -101,7 +99,7 @@ func (e *gcpLoggingExporter) ConsumeLogs(ctx context.Context, ld pdata.Logs) err
 		req := logpb.WriteLogEntriesRequest{
 			Entries:  pbEntries,
 			LogName:  e.toLogNamePath("default"), // TODO placeholder
-			Resource: e.globalResource(),         // TODO placeholder
+			Resource: e.toResource(resource),     // TODO placeholder
 		}
 
 		clientCtx, cancel := context.WithCancel(ctx)
@@ -112,15 +110,8 @@ func (e *gcpLoggingExporter) ConsumeLogs(ctx context.Context, ld pdata.Logs) err
 			return err
 		}
 
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("PANIC!! %s", fmt.Errorf(r.(string)))
-			}
-		}()
-
 		_, err = client.WriteLogEntries(ctx, &req)
 		if err != nil {
-			fmt.Printf("ERROR SENDING LOGS: %v !! ", err)
 			return err
 		}
 	}
@@ -130,8 +121,8 @@ func (e *gcpLoggingExporter) ConsumeLogs(ctx context.Context, ld pdata.Logs) err
 
 func (e *gcpLoggingExporter) createProtobufEntry(lr pdata.LogRecord) (newEntry *logpb.LogEntry, err error) {
 
-	// ts, err := ptypes.TimestampProto(time.Unix(0, int64(lr.Timestamp())))
-	ts, err := ptypes.TimestampProto(time.Now()) // TODO For testing old logs only
+	ts, err := ptypes.TimestampProto(time.Unix(0, int64(lr.Timestamp())))
+	// ts, err := ptypes.TimestampProto(time.Now()) // TODO For testing old logs only
 	if err != nil {
 		return nil, err
 	}
@@ -141,34 +132,7 @@ func (e *gcpLoggingExporter) createProtobufEntry(lr pdata.LogRecord) (newEntry *
 		Severity:  toSeverity(lr.SeverityNumber()),
 	}
 
-	// TODO resource?
-
-	newEntry.Labels = map[string]string{}
-	attMap := lr.Attributes()
-	attMap.ForEach(func(k string, v pdata.AttributeValue) {
-		newEntry.Labels[k] = fmt.Sprintf("%v", v) // TODO do better
-
-		switch v.Type() {
-		case pdata.AttributeValueBOOL:
-			newEntry.Labels[k] = fmt.Sprintf("%t", v.BoolVal())
-		case pdata.AttributeValueINT:
-			newEntry.Labels[k] = fmt.Sprintf("%d", v.IntVal())
-		case pdata.AttributeValueDOUBLE:
-			newEntry.Labels[k] = fmt.Sprintf("%f", v.DoubleVal())
-		case pdata.AttributeValueSTRING:
-			newEntry.Labels[k] = v.StringVal()
-		case pdata.AttributeValueMAP:
-			attMap := v.MapVal()
-			encoded, err := json.Marshal(attMap)
-			if err != nil {
-				newEntry.Labels[k] = err.Error()
-			}
-			newEntry.Labels[k] = string(encoded)
-		// case pdata.AttributeValueARRAY: TODO when added
-		default: // including pdata.AttributeValueNULL
-			// don't include
-		}
-	})
+	newEntry.Labels = toLabelsMap(lr.Attributes())
 
 	body := lr.Body()
 	switch body.Type() {
@@ -189,6 +153,25 @@ func (e *gcpLoggingExporter) createProtobufEntry(lr pdata.LogRecord) (newEntry *
 	}
 
 	return newEntry, nil
+}
+
+func (e *gcpLoggingExporter) toLogNamePath(logName string) string {
+	return fmt.Sprintf("projects/%s/logs/%s", e.projectID, url.PathEscape(logName))
+}
+
+func (e *gcpLoggingExporter) toResource(r pdata.Resource) *mrpb.MonitoredResource {
+	mr := mrpb.MonitoredResource{
+		Type: "global", // TODO how best to support other types
+		Labels: map[string]string{
+			"project_id": e.projectID,
+		},
+	}
+
+	r.Attributes().ForEach(func(k string, v pdata.AttributeValue) {
+		mr.Labels[k] = attValToString(v)
+	})
+
+	return &mr
 }
 
 func toProtoStruct(attMap pdata.AttributeMap) *structpb.Struct {
@@ -213,20 +196,15 @@ func toProtoStruct(attMap pdata.AttributeMap) *structpb.Struct {
 	return &structpb.Struct{Fields: fields}
 }
 
-func (e *gcpLoggingExporter) toLogNamePath(logName string) string {
-	return fmt.Sprintf("projects/%s/logs/%s", e.projectID, url.PathEscape(logName))
+func toLabelsMap(attMap pdata.AttributeMap) map[string]string {
+	labelsMap := map[string]string{}
+	attMap.ForEach(func(k string, v pdata.AttributeValue) {
+		labelsMap[k] = attValToString(v)
+	})
+	return labelsMap
 }
 
-func (e *gcpLoggingExporter) globalResource() *mrpb.MonitoredResource {
-	return &mrpb.MonitoredResource{
-		Type: "global",
-		Labels: map[string]string{
-			"project_id": e.projectID,
-		},
-	}
-}
-
-// TODO make this mapping less crude
+// TODO validate mapping
 func toSeverity(s pdata.SeverityNumber) sev.LogSeverity {
 	switch s {
 	case pdata.SeverityNumberDEBUG:
@@ -271,5 +249,29 @@ func toSeverity(s pdata.SeverityNumber) sev.LogSeverity {
 		return sev.LogSeverity_EMERGENCY
 	default:
 		return sev.LogSeverity_DEFAULT
+	}
+}
+
+func attValToString(v pdata.AttributeValue) string {
+	switch v.Type() {
+	case pdata.AttributeValueBOOL:
+		return fmt.Sprintf("%t", v.BoolVal())
+	case pdata.AttributeValueINT:
+		return fmt.Sprintf("%d", v.IntVal())
+	case pdata.AttributeValueDOUBLE:
+		return fmt.Sprintf("%f", v.DoubleVal())
+	case pdata.AttributeValueSTRING:
+		return v.StringVal()
+	case pdata.AttributeValueMAP:
+		attMap := v.MapVal()
+		encoded, err := json.Marshal(attMap)
+		if err != nil {
+			return err.Error()
+		}
+		return string(encoded)
+	// case pdata.AttributeValueARRAY: TODO when added
+	default: // including pdata.AttributeValueNULL
+		// don't include
+		return "null"
 	}
 }
