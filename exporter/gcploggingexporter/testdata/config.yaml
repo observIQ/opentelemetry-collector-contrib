@@ -6,6 +6,8 @@ processors:
 
 exporters:
   gcplogging:
+    project: my-gcp-project
+    credentials_file: /path/to/creds/with/logging.write
 
 service:
   pipelines:

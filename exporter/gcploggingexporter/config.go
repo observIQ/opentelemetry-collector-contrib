@@ -22,4 +22,5 @@ import (
 type Config struct {
 	configmodels.ExporterSettings `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
 	ProjectID                     string                   `mapstructure:"project"`
+	CredentialsFile               string                   `mapstructure:"credentials_file"`
 }

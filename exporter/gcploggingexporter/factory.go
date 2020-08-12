@@ -17,6 +17,7 @@ package gcploggingexporter
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configmodels"
@@ -25,7 +26,8 @@ import (
 
 const (
 	// The value of "type" key in configuration.
-	typeStr = "gcplogging"
+	typeStr      = "gcplogging"
+	loggingWrite = "https://www.googleapis.com/auth/logging.write"
 )
 
 // Factory is the factory for the gcplogging exporter.
@@ -64,17 +66,33 @@ func (f *Factory) CreateLogsExporter(
 
 	eCfg := cfg.(*Config)
 
-	if eCfg.ProjectID == "" {
-		return nil, fmt.Errorf("project id empty")
+	ex := gcpLoggingExporter{
+		projectID: eCfg.ProjectID,
 	}
 
-	credentials, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/logging.write")
-	if err != nil {
-		return nil, fmt.Errorf("get default credentials: %s", err)
+	if eCfg.CredentialsFile != "" {
+		credentialsBytes, err := ioutil.ReadFile(eCfg.CredentialsFile)
+		if err != nil {
+			return nil, fmt.Errorf("read credentials file: %s", err)
+		}
+		ex.credentials, err = google.CredentialsFromJSON(context.Background(), credentialsBytes, loggingWrite)
+		if err != nil {
+			return nil, fmt.Errorf("parse credentials: %s", err)
+		}
+	} else {
+		var err error
+		ex.credentials, err = google.FindDefaultCredentials(ctx, loggingWrite)
+		if err != nil {
+			return nil, fmt.Errorf("no credentials found: %s", err)
+		}
 	}
 
-	return &gcpLoggingExporter{
-		projectID:   eCfg.ProjectID,
-		credentials: credentials,
-	}, nil
+	if ex.projectID == "" {
+		if ex.credentials.ProjectID == "" {
+			return nil, fmt.Errorf("project id empty")
+		}
+		ex.projectID = ex.credentials.ProjectID
+	}
+
+	return &ex, nil
 }
