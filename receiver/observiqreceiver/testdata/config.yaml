@@ -1,17 +1,29 @@
 receivers:
-  observiq/generate:
-    plugins_dir: local/plugins
+  observiq/hello:
     pipeline:
-      - type: sample_plugin
-        message: hello
+      - type: generate_input
+        entry:
+          record:
+            message: Hello, World!
+      - type: rate_limit
+        interval: 1s
+      - type: receiver_output
+  observiq/plugin:
+    plugins_dir: receiver/observiqreceiver/testdata/plugins
+    pipeline:
+      - type: say_hello
+        name: Tom
       - type: receiver_output
 
+processors:
+  exampleprocessor:
+
 exporters:
-  file:
-    path: local/exporter.log
+  exampleexporter:
 
 service:
   pipelines:
     logs:
-      receivers: [observiq/generate]
-      exporters: [file]
+      receivers: [observiq/hello, observiq/plugin]
+      processors: [exampleprocessor]
+      exporters: [exampleexporter]
