@@ -16,6 +16,7 @@ package gcploggingexporter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"time"
@@ -37,21 +38,29 @@ type gcpLoggingExporter struct {
 
 	projectID   string
 	credentials *google.Credentials
-
-	client *vkit.Client
 }
 
 // Ensure this exporter adheres to required interface
 var _ component.LogsExporter = (*gcpLoggingExporter)(nil)
 
-func (e *gcpLoggingExporter) Start(ctx context.Context, host component.Host) error {
+func (e *gcpLoggingExporter) getClient(ctx context.Context) (*vkit.Client, error) {
 	options := []option.ClientOption{option.WithCredentials(e.credentials)}
 	client, err := vkit.NewClient(ctx, options...)
 	if err != nil {
-		return fmt.Errorf("create client: %w", err)
+		return nil, fmt.Errorf("create client: %w", err)
 	}
-	e.client = client
-	return nil
+	return client, nil
+}
+
+func (e *gcpLoggingExporter) Start(ctx context.Context, host component.Host) error {
+
+	/*
+		TODO this just tests that a client can be created.
+		It should save the client on the exporter struct, but
+		for some reason this does not persist to ConsumeLogs()
+	*/
+	_, err := e.getClient(ctx)
+	return err
 }
 
 // Shutdown is invoked during service shutdown
@@ -61,17 +70,15 @@ func (e *gcpLoggingExporter) Shutdown(_ context.Context) error {
 }
 
 func (e *gcpLoggingExporter) ConsumeLogs(ctx context.Context, ld pdata.Logs) error {
-
 	numRecords := ld.LogRecordCount()
-
 	resourceLogs := ld.ResourceLogs()
 	for i := 0; i < numRecords; i++ {
 		resourceLog := resourceLogs.At(i)
 
-		// TODO convert and use in request
-		// resource := resourceLog.Resource()
-
 		pbEntries := []*logpb.LogEntry{}
+
+		// TODO convert and use resource in request
+		// resource := resourceLog.Resource()
 
 		instLogs := resourceLog.InstrumentationLibraryLogs()
 		numInstLogs := instLogs.Len()
@@ -97,11 +104,24 @@ func (e *gcpLoggingExporter) ConsumeLogs(ctx context.Context, ld pdata.Logs) err
 			Resource: e.globalResource(),         // TODO placeholder
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, time.Second) // TODO make configurable
+		clientCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		_, err := e.client.WriteLogEntries(ctx, &req)
+
+		client, err := e.getClient(clientCtx)
 		if err != nil {
-			// TODO capture and combine errors
+			return err
+		}
+
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("PANIC!! %s", fmt.Errorf(r.(string)))
+			}
+		}()
+
+		_, err = client.WriteLogEntries(ctx, &req)
+		if err != nil {
+			fmt.Printf("ERROR SENDING LOGS: %v !! ", err)
+			return err
 		}
 	}
 
@@ -110,7 +130,8 @@ func (e *gcpLoggingExporter) ConsumeLogs(ctx context.Context, ld pdata.Logs) err
 
 func (e *gcpLoggingExporter) createProtobufEntry(lr pdata.LogRecord) (newEntry *logpb.LogEntry, err error) {
 
-	ts, err := ptypes.TimestampProto(time.Unix(0, int64(lr.Timestamp())))
+	// ts, err := ptypes.TimestampProto(time.Unix(0, int64(lr.Timestamp())))
+	ts, err := ptypes.TimestampProto(time.Now()) // TODO For testing old logs only
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +147,27 @@ func (e *gcpLoggingExporter) createProtobufEntry(lr pdata.LogRecord) (newEntry *
 	attMap := lr.Attributes()
 	attMap.ForEach(func(k string, v pdata.AttributeValue) {
 		newEntry.Labels[k] = fmt.Sprintf("%v", v) // TODO do better
+
+		switch v.Type() {
+		case pdata.AttributeValueBOOL:
+			newEntry.Labels[k] = fmt.Sprintf("%t", v.BoolVal())
+		case pdata.AttributeValueINT:
+			newEntry.Labels[k] = fmt.Sprintf("%d", v.IntVal())
+		case pdata.AttributeValueDOUBLE:
+			newEntry.Labels[k] = fmt.Sprintf("%f", v.DoubleVal())
+		case pdata.AttributeValueSTRING:
+			newEntry.Labels[k] = v.StringVal()
+		case pdata.AttributeValueMAP:
+			attMap := v.MapVal()
+			encoded, err := json.Marshal(attMap)
+			if err != nil {
+				newEntry.Labels[k] = err.Error()
+			}
+			newEntry.Labels[k] = string(encoded)
+		// case pdata.AttributeValueARRAY: TODO when added
+		default: // including pdata.AttributeValueNULL
+			// don't include
+		}
 	})
 
 	body := lr.Body()
