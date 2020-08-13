@@ -3,7 +3,6 @@ module github.com/open-telemetry/opentelemetry-collector-contrib/receiver/observ
 go 1.14
 
 require (
-	github.com/bluemedora/bpagent v0.0.0-20200805204301-8c203d709109
 	github.com/observiq/carbon v0.9.7
 	github.com/spf13/viper v1.7.1
 	go.opentelemetry.io/collector v0.7.1-0.20200806173121-44d010f860b3
