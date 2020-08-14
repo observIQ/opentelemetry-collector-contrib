@@ -80,11 +80,11 @@ func components() (component.Factories, error) {
 		&carbonreceiver.Factory{},
 		&observiqreceiver.Factory{},
 		&wavefrontreceiver.Factory{},
-		&redisreceiver.Factory{},
-		&kubeletstatsreceiver.Factory{},
+		redisreceiver.NewFactory(),
+		kubeletstatsreceiver.NewFactory(),
 		&simpleprometheusreceiver.Factory{},
 		&k8sclusterreceiver.Factory{},
-		&receivercreator.Factory{},
+		receivercreator.NewFactory(),
 	}
 	for _, rcv := range factories.Receivers {
 		receivers = append(receivers, rcv)
