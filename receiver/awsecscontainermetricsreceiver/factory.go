@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package redisreceiver
+package awsecscontainermetricsreceiver
 
 import (
 	"context"
@@ -25,10 +25,13 @@ import (
 )
 
 const (
-	typeStr = "redis"
+	typeStr = "awsecscontainermetrics"
+
+	// Default collection interval
+	defaultCollectionInterval = 20 * time.Second
 )
 
-// NewFactory creates a factory for Redis receiver.
+// NewFactory creates a factory for Aws ECS Container Metrics receiver.
 func NewFactory() component.ReceiverFactory {
 	return receiverhelper.NewFactory(
 		typeStr,
@@ -37,16 +40,21 @@ func NewFactory() component.ReceiverFactory {
 }
 
 func createDefaultConfig() configmodels.Receiver {
-	return &config{CollectionInterval: 10 * time.Second}
+	return &Config{
+		ReceiverSettings: configmodels.ReceiverSettings{
+			TypeVal: typeStr,
+			NameVal: typeStr,
+		},
+		CollectionInterval: defaultCollectionInterval,
+	}
 }
 
 func createMetricsReceiver(
-	ctx context.Context,
+	_ context.Context,
 	params component.ReceiverCreateParams,
 	cfg configmodels.Receiver,
-	consumer consumer.MetricsConsumer,
+	nextConsumer consumer.MetricsConsumer,
 ) (component.MetricsReceiver, error) {
-	oCfg := cfg.(*config)
-
-	return newRedisReceiver(params.Logger, oCfg, consumer), nil
+	rCfg := cfg.(*Config)
+	return newAwsEcsContainerMetricsReceiver(params.Logger, rCfg, nextConsumer)
 }
