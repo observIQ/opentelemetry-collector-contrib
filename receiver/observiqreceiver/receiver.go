@@ -31,8 +31,8 @@ type observiqReceiver struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
 	done      chan struct{}
+	wg        sync.WaitGroup
 
-	config   *Config
 	agent    *observiq.LogAgent
 	logsChan chan *obsentry.Entry
 	consumer consumer.LogsConsumer
@@ -50,10 +50,12 @@ func (r *observiqReceiver) Start(ctx context.Context, host component.Host) error
 
 		obsErr := r.agent.Start()
 		if obsErr != nil {
-			host.ReportFatalError(fmt.Errorf("start observiq: %v", obsErr))
+			err = fmt.Errorf("start observiq: %s", err)
 		}
 
+		r.wg.Add(1)
 		go func() {
+			defer r.wg.Done()
 			for {
 				select {
 				case <-r.done:
@@ -74,6 +76,7 @@ func (r *observiqReceiver) Start(ctx context.Context, host component.Host) error
 func (r *observiqReceiver) Shutdown(context.Context) error {
 	r.stopOnce.Do(func() {
 		close(r.done)
+		r.wg.Wait()
 	})
 	return nil
 }
