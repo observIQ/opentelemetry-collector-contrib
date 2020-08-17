@@ -15,13 +15,14 @@
 package observiqreceiver
 
 import (
+	"github.com/observiq/carbon/pipeline"
 	"go.opentelemetry.io/collector/config/configmodels"
 )
 
 // Config defines configuration for the observiq receiver
 type Config struct {
 	configmodels.ReceiverSettings `mapstructure:",squash"`
-	OffsetsFile                   string        `mapstructure:"offsets_file"`
-	PluginsDir                    string        `mapstructure:"plugins_dir"`
-	Pipeline                      []interface{} `mapstructure:"pipeline"`
+	OffsetsFile                   string          `mapstructure:"offsets_file"`
+	PluginsDir                    string          `mapstructure:"plugins_dir"`
+	Pipeline                      pipeline.Config `mapstructure:"pipeline"`
 }
