@@ -16,14 +16,12 @@ package observiqreceiver
 
 import (
 	"context"
-	"fmt"
 
 	observiq "github.com/observiq/carbon/agent"
 	obsentry "github.com/observiq/carbon/entry"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configmodels"
 	"go.opentelemetry.io/collector/consumer"
-	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -42,33 +40,6 @@ func (f *Factory) Type() configmodels.Type {
 	return configmodels.Type(typeStr)
 }
 
-// CustomUnmarshaler returns nil even though custom unmarshalling is necessary
-func (f *Factory) CustomUnmarshaler() component.CustomUnmarshaler {
-	/*
-		TODO is the mapstructure requirement absolutely necessary?
-		If not, the following custom unmarshal pattern would work
-	*/
-
-	// return func(componentViperSection *viper.Viper, intoCfg interface{}) error {
-
-	// 	var cfgMap map[string]interface{}
-	// 	componentViperSection.Unmarshal(&cfgMap)
-
-	// 	cfgBytes, err := yaml.Marshal(cfgMap)
-	// 	if err != nil {
-	// 		return fmt.Errorf("failed to remarshal config: %s", err)
-	// 	}
-
-	// 	cfg := &observiq.Config{}
-	// 	if err := yaml.UnmarshalStrict(cfgBytes, cfg); err != nil {
-	// 		return fmt.Errorf("failed to unmarshal config: %s", err)
-	// 	}
-	// 	intoCfg = cfg
-	// 	return nil
-	// }
-	return nil
-}
-
 // CreateDefaultConfig creates the default configuration for the observiq receiver
 func (f *Factory) CreateDefaultConfig() configmodels.Receiver {
 	return &Config{
@@ -76,7 +47,6 @@ func (f *Factory) CreateDefaultConfig() configmodels.Receiver {
 			TypeVal: configmodels.Type(typeStr),
 			NameVal: typeStr,
 		},
-		Pipeline: []interface{}{},
 	}
 }
 
@@ -87,36 +57,13 @@ func (f *Factory) CreateLogsReceiver(
 	cfg configmodels.Receiver,
 	nextConsumer consumer.LogsConsumer,
 ) (component.LogsReceiver, error) {
-
-	/*
-		TODO reconcile mapstructure requirement with observiq's decisiont to opt out of mapstructure
-
-		mapstructure has some custom unmarshaling limitations that were solvable with yaml unmarshal hooks.
-		However, opentelemetry appears to have committed to requiring mapstructure.
-		See: https://github.com/mitchellh/mapstructure/pull/183
-
-		See additional comments in CustomUnmarshaler()
-	*/
-	rawCfg := cfg.(*Config)
-	cfgMap := make(map[string]interface{})
-	cfgMap["pipeline"] = rawCfg.Pipeline
-	cfgBytes, err := yaml.Marshal(cfgMap)
-	if err != nil {
-		return nil, fmt.Errorf("failed to remarshal config: %s", err)
-	}
-
-	obsCfg := &observiq.Config{}
-	if err := yaml.UnmarshalStrict(cfgBytes, &obsCfg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %s", err)
-	}
-
+	obsConfig := cfg.(*Config)
 	logsChan := make(chan *obsentry.Entry)
-	logAgent := observiq.NewLogAgent(obsCfg, params.Logger.Sugar(), rawCfg.PluginsDir, rawCfg.OffsetsFile).
+	logAgent := observiq.NewLogAgent(&observiq.Config{Pipeline: obsConfig.Pipeline}, params.Logger.Sugar(), obsConfig.PluginsDir, obsConfig.OffsetsFile).
 		WithBuildParameter(logsChannelID, logsChan)
 
 	return &observiqReceiver{
 		agent:    logAgent,
-		config:   rawCfg, // TODO relax mapstructure requirement or migrate observiq to mapstructure
 		logsChan: logsChan,
 		consumer: nextConsumer,
 		logger:   params.Logger,
