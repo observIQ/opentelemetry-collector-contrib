@@ -27,7 +27,11 @@ const logsChannelID = "logs_channel"
 
 // This file implements an operator that consumes logs from the observiq pipeline
 func init() {
-	operator.Register("receiver_output", func() operator.Builder { return NewReceiverOutputConfig("") })
+	operator.Register("receiver_output", defaultCfg)
+}
+
+func defaultCfg() operator.Builder {
+	return NewReceiverOutputConfig("receiver_output")
 }
 
 // NewReceiverOutputConfig creates new output config
@@ -47,6 +51,10 @@ func (c ReceiverOutputConfig) Build(context operator.BuildContext) (operator.Ope
 	outputOperator, err := c.OutputConfig.Build(context)
 	if err != nil {
 		return nil, err
+	}
+
+	if context.Parameters == nil {
+		return nil, fmt.Errorf("Build parameters not found in build context")
 	}
 
 	buildParam, ok := context.Parameters[logsChannelID]
