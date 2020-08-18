@@ -47,9 +47,9 @@ func (r *observiqReceiver) Start(ctx context.Context, host component.Host) error
 	err := componenterror.ErrAlreadyStarted
 	r.startOnce.Do(func() {
 		err = nil
+		r.logger.Info("Starting observiq receiver")
 
-		obsErr := r.agent.Start()
-		if obsErr != nil {
+		if obsErr := r.agent.Start(); obsErr != nil {
 			err = fmt.Errorf("start observiq: %s", err)
 		}
 
@@ -62,7 +62,7 @@ func (r *observiqReceiver) Start(ctx context.Context, host component.Host) error
 					return
 				case obsLog := <-r.logsChan:
 					if err := r.consumer.ConsumeLogs(ctx, convert(obsLog)); err != nil {
-						// TODO how to handle non-fatal error
+						r.logger.Error("ConsumeLogs() error", zap.String("error", err.Error()))
 					}
 				}
 			}
@@ -75,6 +75,7 @@ func (r *observiqReceiver) Start(ctx context.Context, host component.Host) error
 // Shutdown is invoked during service shutdown
 func (r *observiqReceiver) Shutdown(context.Context) error {
 	r.stopOnce.Do(func() {
+		r.logger.Info("Shutting down observiq receiver")
 		close(r.done)
 		r.wg.Wait()
 	})
