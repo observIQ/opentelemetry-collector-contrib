@@ -57,10 +57,19 @@ func (f *Factory) CreateLogsReceiver(
 	cfg configmodels.Receiver,
 	nextConsumer consumer.LogsConsumer,
 ) (component.LogsReceiver, error) {
+
 	obsConfig := cfg.(*Config)
 	logsChan := make(chan *obsentry.Entry)
-	logAgent := observiq.NewLogAgent(&observiq.Config{Pipeline: obsConfig.Pipeline}, params.Logger.Sugar(), obsConfig.PluginsDir, obsConfig.OffsetsFile).
-		WithBuildParameter(logsChannelID, logsChan)
+	buildParams := map[string]interface{}{logsChannelID: logsChan}
+	logAgent, err := observiq.NewLogAgent(
+		&observiq.Config{Pipeline: obsConfig.Pipeline},
+		params.Logger.Sugar(),
+		obsConfig.PluginsDir,
+		obsConfig.OffsetsFile,
+		buildParams)
+	if err != nil {
+		return nil, err
+	}
 
 	return &observiqReceiver{
 		agent:    logAgent,
