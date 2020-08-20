@@ -21,6 +21,7 @@ import (
 
 	"github.com/observiq/carbon/entry"
 	"github.com/observiq/carbon/operator"
+	"github.com/observiq/carbon/testutil"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
@@ -31,11 +32,8 @@ func TestChannelOperator(t *testing.T) {
 	logsChan := make(chan *entry.Entry)
 	defer close(logsChan)
 
-	buildContext := operator.BuildContext{
-		Logger:     zaptest.NewLogger(t).Sugar(),
-		Parameters: map[string]interface{}{"logs_channel": logsChan},
-	}
-
+	buildContext := testutil.NewBuildContext(t)
+	buildContext.Parameters = map[string]interface{}{"logs_channel": logsChan}
 	operator, err := cfg.Build(buildContext)
 	require.NoError(t, err)
 

@@ -24,6 +24,50 @@ import (
 	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
+func BenchmarkConvertSimple(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		convert(obsentry.New())
+	}
+}
+
+func BenchmarkConvertComplex(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		e := complexEntry()
+		b.StartTimer()
+		convert(e)
+	}
+}
+
+func complexEntry() *obsentry.Entry {
+	entry := obsentry.New()
+	entry.Severity = obsentry.Error
+	entry.AddLabel("one", "two")
+	entry.AddLabel("two", "three")
+	entry.Record = map[string]interface{}{
+		"bool":   true,
+		"int":    123,
+		"double": 12.34,
+		"string": "hello",
+		"bytes":  []byte("asdf"),
+		"object": map[string]interface{}{
+			"bool":   true,
+			"int":    123,
+			"double": 12.34,
+			"string": "hello",
+			"bytes":  []byte("asdf"),
+			"object": map[string]interface{}{
+				"bool":   true,
+				"int":    123,
+				"double": 12.34,
+				"string": "hello",
+				"bytes":  []byte("asdf"),
+			},
+		},
+	}
+	return entry
+}
+
 func TestConvertMetadata(t *testing.T) {
 
 	now := time.Now()

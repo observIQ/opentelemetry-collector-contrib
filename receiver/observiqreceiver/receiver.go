@@ -61,8 +61,8 @@ func (r *observiqReceiver) Start(ctx context.Context, host component.Host) error
 				case <-r.done:
 					return
 				case obsLog := <-r.logsChan:
-					if err := r.consumer.ConsumeLogs(ctx, convert(obsLog)); err != nil {
-						r.logger.Error("ConsumeLogs() error", zap.String("error", err.Error()))
+					if consumeErr := r.consumer.ConsumeLogs(ctx, convert(obsLog)); consumeErr != nil {
+						r.logger.Error("ConsumeLogs() error", zap.String("error", consumeErr.Error()))
 					}
 				}
 			}
