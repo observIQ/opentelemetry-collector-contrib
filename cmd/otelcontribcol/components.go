@@ -80,6 +80,7 @@ func components() (component.Factories, error) {
 		sapmreceiver.NewFactory(),
 		signalfxreceiver.NewFactory(),
 		carbonreceiver.NewFactory(),
+		observiqreceiver.NewFactory(),
 		wavefrontreceiver.NewFactory(),
 		redisreceiver.NewFactory(),
 		kubeletstatsreceiver.NewFactory(),

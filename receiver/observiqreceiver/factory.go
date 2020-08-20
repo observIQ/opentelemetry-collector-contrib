@@ -22,26 +22,22 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configmodels"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/receiver/receiverhelper"
 )
 
 const (
 	typeStr = "observiq"
 )
 
-// Factory is the factory for the observiq receiver.
-type Factory struct {
+// NewFactory creates a factory for Carbon receiver.
+func NewFactory() component.ReceiverFactory {
+	return receiverhelper.NewFactory(
+		typeStr,
+		createDefaultConfig,
+		receiverhelper.WithLogs(createLogsReceiver))
 }
 
-// Ensure this factory adheres to required interface
-var _ component.LogsReceiverFactory = (*Factory)(nil)
-
-// Type gets the type of the Receiver config created by this factory
-func (f *Factory) Type() configmodels.Type {
-	return configmodels.Type(typeStr)
-}
-
-// CreateDefaultConfig creates the default configuration for the observiq receiver
-func (f *Factory) CreateDefaultConfig() configmodels.Receiver {
+func createDefaultConfig() configmodels.Receiver {
 	return &Config{
 		ReceiverSettings: configmodels.ReceiverSettings{
 			TypeVal: configmodels.Type(typeStr),
@@ -51,7 +47,7 @@ func (f *Factory) CreateDefaultConfig() configmodels.Receiver {
 }
 
 // CreateLogsReceiver creates a logs receiver based on provided config
-func (f *Factory) CreateLogsReceiver(
+func createLogsReceiver(
 	ctx context.Context,
 	params component.ReceiverCreateParams,
 	cfg configmodels.Receiver,

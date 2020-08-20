@@ -25,7 +25,7 @@ import (
 	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
-// This file implements an operator that consumes logs from the observiq pipeline
+// This file implements some useful testing components
 func init() {
 	operator.Register("unstartable_operator", func() operator.Builder { return NewUnstartableConfig() })
 }
