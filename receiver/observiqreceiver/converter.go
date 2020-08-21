@@ -28,9 +28,9 @@ func convert(obsLog *obsentry.Entry) pdata.Logs {
 	logs.Resize(1)
 	rls := logs.At(0)
 
+	resource := rls.Resource()
+	resource.InitEmpty()
 	if len(obsLog.Resource) > 0 {
-		resource := rls.Resource()
-		resource.InitEmpty()
 		resourceAtts := resource.Attributes()
 		for k, v := range obsLog.Resource {
 			resourceAtts.InsertString(k, v)
