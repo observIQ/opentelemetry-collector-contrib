@@ -81,7 +81,7 @@ func TestHandleConsumeError(t *testing.T) {
 	require.Equal(t, 1, mockConsumer.rejected, "one log entry expected")
 }
 
-func BenchmarkSimplePipeline(b *testing.B) {
+func BenchmarkPipelineSimple(b *testing.B) {
 
 	tempDir, err := ioutil.TempDir("", "")
 	if err != nil {
@@ -128,7 +128,7 @@ func BenchmarkSimplePipeline(b *testing.B) {
 	}
 }
 
-func BenchmarkRealPipeline(b *testing.B) {
+func BenchmarkPipelineComplex(b *testing.B) {
 
 	tempDir, err := ioutil.TempDir("", "")
 	if err != nil {

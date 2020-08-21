@@ -42,6 +42,7 @@ func BenchmarkConvertComplex(b *testing.B) {
 func complexEntry() *obsentry.Entry {
 	entry := obsentry.New()
 	entry.Severity = obsentry.Error
+	entry.AddResourceKey("type", "global")
 	entry.AddLabel("one", "two")
 	entry.AddLabel("two", "three")
 	entry.Record = map[string]interface{}{
@@ -75,6 +76,7 @@ func TestConvertMetadata(t *testing.T) {
 	obsEntry := obsentry.New()
 	obsEntry.Timestamp = now
 	obsEntry.Severity = obsentry.Error
+	obsEntry.AddResourceKey("type", "global")
 	obsEntry.AddLabel("one", "two")
 	obsEntry.Record = true
 

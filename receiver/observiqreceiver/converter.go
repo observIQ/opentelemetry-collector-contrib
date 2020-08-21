@@ -27,25 +27,38 @@ func convert(obsLog *obsentry.Entry) pdata.Logs {
 	logs := out.ResourceLogs()
 	logs.Resize(1)
 	rls := logs.At(0)
-	rls.Resource().InitEmpty()
+
+	if len(obsLog.Resource) > 0 {
+		resource := rls.Resource()
+		resource.InitEmpty()
+		resourceAtts := resource.Attributes()
+		for k, v := range obsLog.Resource {
+			resourceAtts.InsertString(k, v)
+		}
+	}
+
 	rls.InstrumentationLibraryLogs().Resize(1)
 	logSlice := rls.InstrumentationLibraryLogs().At(0).Logs()
 
 	lr := pdata.NewLogRecord()
 	lr.InitEmpty()
-	lr.Body().InitEmpty()
 
 	lr.SetTimestamp(pdata.TimestampUnixNano(obsLog.Timestamp.UnixNano()))
+
 	sevText, sevNum := convertSeverity(obsLog.Severity)
 	lr.SetSeverityText(sevText)
 	lr.SetSeverityNumber(sevNum)
 
-	attributes := lr.Attributes()
-	for lblKey, lblVal := range obsLog.Labels {
-		attributes.InsertString(lblKey, lblVal)
+	if len(obsLog.Labels) > 0 {
+		attributes := lr.Attributes()
+		for k, v := range obsLog.Labels {
+			attributes.InsertString(k, v)
+		}
 	}
 
+	lr.Body().InitEmpty()
 	insertToAttributeVal(obsLog.Record, lr.Body())
+
 	logSlice.Append(&lr)
 
 	return out
@@ -94,6 +107,7 @@ func insertToAttributeVal(value interface{}, dest pdata.AttributeValue) {
 
 func toAttributeMap(obsMap map[string]interface{}) pdata.AttributeMap {
 	attMap := pdata.NewAttributeMap()
+	attMap.InitEmptyWithCapacity(len(obsMap))
 	for k, v := range obsMap {
 		switch t := v.(type) {
 		case bool:
@@ -155,56 +169,53 @@ func sliceToMap(arr []interface{}) map[string]interface{} {
 
 func convertSeverity(s obsentry.Severity) (string, pdata.SeverityNumber) {
 	switch {
+
+	// Handle standard severity levels
+	case s == obsentry.Default:
+		return "Undefined", pdata.SeverityNumberUNDEFINED
+	case s == obsentry.Trace:
+		return "Trace", pdata.SeverityNumberTRACE2
+	case s == obsentry.Debug:
+		return "Debug", pdata.SeverityNumberDEBUG
+	case s == obsentry.Info:
+		return "Info", pdata.SeverityNumberINFO
+	case s == obsentry.Notice:
+		return "Info", pdata.SeverityNumberINFO3
+	case s == obsentry.Warning:
+		return "Info", pdata.SeverityNumberINFO4
+	case s == obsentry.Error:
+		return "Error", pdata.SeverityNumberERROR
+	case s == obsentry.Critical:
+		return "Error", pdata.SeverityNumberERROR2
+	case s == obsentry.Alert:
+		return "Error", pdata.SeverityNumberERROR3
+	case s == obsentry.Emergency:
+		return "Error", pdata.SeverityNumberFATAL
 	case s == obsentry.Catastrophe:
 		return "Fatal", pdata.SeverityNumberFATAL4
 
+		// Handle custom severity levels
 	case s > obsentry.Emergency:
 		return "Fatal", pdata.SeverityNumberFATAL2
-	case s == obsentry.Emergency:
-		return "Error", pdata.SeverityNumberFATAL
-
 	case s > obsentry.Alert:
 		return "Error", pdata.SeverityNumberERROR4
-	case s == obsentry.Alert:
-		return "Error", pdata.SeverityNumberERROR3
-
 	case s > obsentry.Critical:
 		return "Error", pdata.SeverityNumberERROR3
-	case s == obsentry.Critical:
-		return "Error", pdata.SeverityNumberERROR2
-
 	case s > obsentry.Error:
 		return "Error", pdata.SeverityNumberERROR2
-	case s == obsentry.Error:
-		return "Error", pdata.SeverityNumberERROR
-
 	case s > obsentry.Warning:
 		return "Info", pdata.SeverityNumberINFO4
-	case s == obsentry.Warning:
-		return "Info", pdata.SeverityNumberINFO4
-
 	case s > obsentry.Notice:
 		return "Info", pdata.SeverityNumberINFO3
-	case s == obsentry.Notice:
-		return "Info", pdata.SeverityNumberINFO3
-
 	case s > obsentry.Info:
 		return "Info", pdata.SeverityNumberINFO2
-	case s == obsentry.Info:
-		return "Info", pdata.SeverityNumberINFO
-
 	case s > obsentry.Debug:
 		return "Debug", pdata.SeverityNumberDEBUG2
-	case s == obsentry.Debug:
-		return "Debug", pdata.SeverityNumberDEBUG
-
 	case s > obsentry.Trace:
 		return "Trace", pdata.SeverityNumberTRACE3
-	case s == obsentry.Trace:
-		return "Trace", pdata.SeverityNumberTRACE2
-
 	case s > obsentry.Default:
 		return "Trace", pdata.SeverityNumberTRACE
+
 	default:
 		return "Undefined", pdata.SeverityNumberUNDEFINED
 	}
