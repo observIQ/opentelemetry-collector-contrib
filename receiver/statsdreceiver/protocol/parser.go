@@ -12,18 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package protocol
 
 import (
-	"os"
-	"time"
+	metricspb "github.com/census-instrumentation/opencensus-proto/gen-go/metrics/v1"
 )
 
-const defaultSleepTime = 5 * time.Millisecond
-
-// This program is simply a test program that does nothing but crash after a certain time, with a non-zero exit code, used in
-// subprocessmanager tests
-func main() {
-	time.Sleep(defaultSleepTime)
-	os.Exit(2)
+// Parser is something that can map input StatsD strings to OTLP Metric representations.
+type Parser interface {
+	Parse(in string) (*metricspb.Metric, error)
 }
