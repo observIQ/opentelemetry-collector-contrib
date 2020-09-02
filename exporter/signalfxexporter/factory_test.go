@@ -172,7 +172,7 @@ func TestCreateMetricsExporterWithDefaultTranslaitonRules(t *testing.T) {
 
 	// Validate that default translation rules are loaded
 	// Expected values has to be updated once default config changed
-	assert.Equal(t, 33, len(config.TranslationRules))
+	assert.Equal(t, 38, len(config.TranslationRules))
 	assert.Equal(t, translation.ActionRenameDimensionKeys, config.TranslationRules[0].Action)
 	assert.Equal(t, 32, len(config.TranslationRules[0].Mapping))
 }
@@ -213,9 +213,10 @@ func TestDefaultTranslationRules(t *testing.T) {
 	require.NotNil(t, rules, "rules are nil")
 	tr, err := translation.NewMetricTranslator(rules)
 	require.NoError(t, err)
-	data := md()
+	data := testMetricsData()
 
-	translated, _ := translation.MetricDataToSignalFxV2(zap.NewNop(), tr, data)
+	c := translation.NewMetricsConverter(zap.NewNop(), tr)
+	translated, _ := c.MetricDataToSignalFxV2(data, nil)
 	require.NotNil(t, translated)
 
 	metrics := make(map[string][]*sfxpb.DataPoint)
@@ -269,7 +270,7 @@ func TestDefaultTranslationRules(t *testing.T) {
 	require.True(t, ok, "container_memory_major_page_faults not found")
 }
 
-func md() consumerdata.MetricsData {
+func testMetricsData() []consumerdata.MetricsData {
 	md := consumerdata.MetricsData{
 		Metrics: []*metricspb.Metric{
 			{
@@ -613,7 +614,7 @@ func md() consumerdata.MetricsData {
 			},
 		},
 	}
-	return md
+	return []consumerdata.MetricsData{md}
 }
 
 func TestDefaultDiskTranslations(t *testing.T) {
@@ -642,16 +643,23 @@ func TestDefaultDiskTranslations(t *testing.T) {
 		m[pt.Metric] = l
 	}
 
-	dtPts := m["disk.total"]
-	require.Equal(t, 4, len(dtPts))
-	require.Equal(t, 4, len(dtPts[0].Dimensions))
+	_, ok := m["disk.total"]
+	require.False(t, ok)
 
-	dstPts := m["disk.summary_total"]
-	require.Equal(t, 1, len(dstPts))
-	require.Equal(t, 3, len(dstPts[0].Dimensions))
+	_, ok = m["disk.summary_total"]
+	require.False(t, ok)
 
-	utPts, ok := m["df_complex.used_total"]
+	_, ok = m["df_complex.used_total"]
+	require.False(t, ok)
+
+	du, ok := m["disk.utilization"]
 	require.True(t, ok)
-	require.Equal(t, 1, len(utPts))
-	require.Equal(t, 3, len(utPts[0].Dimensions))
+	require.Equal(t, 4, len(du[0].Dimensions))
+	// cheap test for pct conversion
+	require.True(t, *du[0].Value.DoubleValue > 1)
+
+	dsu, ok := m["disk.summary_utilization"]
+	require.True(t, ok)
+	require.Equal(t, 3, len(dsu[0].Dimensions))
+	require.True(t, *dsu[0].Value.DoubleValue > 1)
 }

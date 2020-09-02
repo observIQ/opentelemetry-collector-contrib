@@ -7,7 +7,7 @@ require (
 	github.com/go-redis/redis/v7 v7.4.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/common v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.6.1
-	go.opentelemetry.io/collector v0.8.1-0.20200820203435-961c48b75778
+	go.opentelemetry.io/collector v0.9.1-0.20200901221426-ec327358d634
 	go.uber.org/zap v1.15.0
 	google.golang.org/protobuf v1.25.0
 )

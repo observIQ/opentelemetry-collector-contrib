@@ -19,6 +19,7 @@ package stackdriverexporter
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"contrib.go.opencensus.io/exporter/stackdriver"
 	cloudtrace "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
@@ -63,10 +64,10 @@ func (me *metricsExporter) Shutdown(context.Context) error {
 	return nil
 }
 
-func generateClientOptions(cfg *Config) ([]option.ClientOption, error) {
+func generateClientOptions(cfg *Config, dialOpts ...grpc.DialOption) ([]option.ClientOption, error) {
 	var copts []option.ClientOption
 	if cfg.UseInsecure {
-		conn, err := grpc.Dial(cfg.Endpoint, grpc.WithInsecure())
+		conn, err := grpc.Dial(cfg.Endpoint, append(dialOpts, grpc.WithInsecure())...)
 		if err != nil {
 			return nil, fmt.Errorf("cannot configure grpc conn: %w", err)
 		}
@@ -80,6 +81,7 @@ func generateClientOptions(cfg *Config) ([]option.ClientOption, error) {
 func newStackdriverTraceExporter(cfg *Config) (component.TraceExporter, error) {
 	topts := []cloudtrace.Option{
 		cloudtrace.WithProjectID(cfg.ProjectID),
+		cloudtrace.WithTimeout(cfg.Timeout),
 	}
 	if cfg.Endpoint != "" {
 		copts, err := generateClientOptions(cfg)
@@ -100,10 +102,13 @@ func newStackdriverTraceExporter(cfg *Config) (component.TraceExporter, error) {
 	return exporterhelper.NewTraceExporter(
 		cfg,
 		tExp.pushTraces,
-		exporterhelper.WithShutdown(tExp.Shutdown))
+		exporterhelper.WithShutdown(tExp.Shutdown),
+		// Disable exporterhelper Timeout, since we are using a custom mechanism
+		// within exporter itself
+		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}))
 }
 
-func newStackdriverMetricsExporter(cfg *Config) (component.MetricsExporter, error) {
+func newStackdriverMetricsExporter(cfg *Config, version string) (component.MetricsExporter, error) {
 	// TODO:  For each ProjectID, create a different exporter
 	// or at least a unique Stackdriver client per ProjectID.
 	options := stackdriver.Options{
@@ -115,15 +120,27 @@ func newStackdriverMetricsExporter(cfg *Config) (component.MetricsExporter, erro
 
 		// Set DefaultMonitoringLabels to an empty map to avoid getting the "opencensus_task" label
 		DefaultMonitoringLabels: &stackdriver.Labels{},
+
+		Timeout: cfg.Timeout,
 	}
+
+	userAgent := strings.ReplaceAll(cfg.UserAgent, "{{version}}", version)
 	if cfg.Endpoint != "" {
-		copts, err := generateClientOptions(cfg)
+		// WithGRPCConn option takes precedent over all other supplied options so need to provide user agent here as well
+		dialOpts := []grpc.DialOption{}
+		if userAgent != "" {
+			dialOpts = append(dialOpts, grpc.WithUserAgent(userAgent))
+		}
+
+		copts, err := generateClientOptions(cfg, dialOpts...)
 		if err != nil {
 			return nil, err
 		}
 		options.TraceClientOptions = copts
 		options.MonitoringClientOptions = copts
 	}
+	options.MonitoringClientOptions = append(options.MonitoringClientOptions, option.WithUserAgent(options.UserAgent))
+
 	if cfg.NumOfWorkers > 0 {
 		options.NumberOfWorkers = cfg.NumOfWorkers
 	}
@@ -136,6 +153,7 @@ func newStackdriverMetricsExporter(cfg *Config) (component.MetricsExporter, erro
 		}
 		options.MapResource = rm.mapResource
 	}
+
 	sde, serr := stackdriver.NewExporter(options)
 	if serr != nil {
 		return nil, fmt.Errorf("cannot configure Stackdriver metric exporter: %w", serr)
@@ -145,7 +163,10 @@ func newStackdriverMetricsExporter(cfg *Config) (component.MetricsExporter, erro
 	return exporterhelper.NewMetricsExporter(
 		cfg,
 		mExp.pushMetrics,
-		exporterhelper.WithShutdown(mExp.Shutdown))
+		exporterhelper.WithShutdown(mExp.Shutdown),
+		// Disable exporterhelper Timeout, since we are using a custom mechanism
+		// within exporter itself
+		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}))
 }
 
 // pushMetrics calls StackdriverExporter.PushMetricsProto on each element of the given metrics
