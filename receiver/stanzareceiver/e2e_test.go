@@ -198,14 +198,24 @@ func (rt *rotationTest) Run(t *testing.T) {
 	require.NoError(t, rcvr.Shutdown(context.Background()))
 }
 
+// newRotatingLogger initializes a standard log.Logger with a custom io.Writer that
+// is designed specifically for precisely testing log file rotation scenarios.
+// The io.Writer is a nanojack.Logger, which provides configuration for standard log
+// rotation patterns, including a maximum number of lines per file, maximum number of
+// backup files, backup mechanism, and backup naming convention.
+//   Backup mechanism "MoveCreate" will move the original file and create a new one
+//   Backup mechanism "CopyTruncate" will copy the original file and then truncate it
+//   Naming convention "Sequential" will follow "my.log", "my.log.1", "my.log.2", etc
+//   Naming convention "Timestamped" will follow "my.log", my-timestamp1.log", etc
+// For more information, see the nanojack repository
 func newRotatingLogger(t *testing.T, tempDir string, maxLines, maxBackups int, copyTruncate, sequential bool) *log.Logger {
 	path := filepath.Join(tempDir, "test.log")
 	rotator := &nanojack.Logger{
-		Filename:     path,
-		MaxLines:     maxLines,
-		MaxBackups:   maxBackups,
-		CopyTruncate: copyTruncate,
-		Sequential:   sequential,
+		Filename:     path,         // path to the primary log file
+		MaxLines:     maxLines,     // maximum number of lines per file
+		MaxBackups:   maxBackups,   // maximum number of backup files
+		CopyTruncate: copyTruncate, // backup mechanism (true = CopyTruncate, false = MoveCreate)
+		Sequential:   sequential,   // backup naming convention (true = Sequential, false = Timestamped)
 	}
 
 	t.Cleanup(func() { _ = rotator.Close() })
