@@ -80,7 +80,7 @@ func TestReadStaticFile(t *testing.T) {
 	e3.Set(entry.NewRecordField("msg"), "Some details...")
 	e3.AddLabel("file_name", "simple.log")
 
-	expectedLogs := []pdata.Logs{convert(e1), convert(e2), convert(e3)}
+	expectedLogs := []pdata.Logs{convert(sliceOf(e1)), convert(sliceOf(e2)), convert(sliceOf(e3))}
 
 	f := NewFactory()
 	sink := &exportertest.SinkLogsExporter{}
@@ -168,7 +168,7 @@ func (rt *rotationTest) Run(t *testing.T) {
 		e := entry.New()
 		e.Timestamp = expectedTimestamp
 		e.Set(entry.NewRecordField("msg"), msg)
-		expectedLogs[i] = convert(e)
+		expectedLogs[i] = convert(sliceOf(e))
 	}
 
 	cfg := f.CreateDefaultConfig().(*Config)

@@ -26,7 +26,7 @@ import (
 
 func BenchmarkConvertSimple(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		convert(entry.New())
+		convert(sliceOf(entry.New()))
 	}
 }
 
@@ -35,7 +35,7 @@ func BenchmarkConvertComplex(b *testing.B) {
 		b.StopTimer()
 		e := complexEntry()
 		b.StartTimer()
-		convert(e)
+		convert(sliceOf(e))
 	}
 }
 
@@ -80,7 +80,7 @@ func TestConvertMetadata(t *testing.T) {
 	e.AddLabel("one", "two")
 	e.Record = true
 
-	result := convert(e)
+	result := convert(sliceOf(e))
 
 	resourceLogs := result.ResourceLogs()
 	require.Equal(t, 1, resourceLogs.Len(), "expected 1 resource")
@@ -266,8 +266,12 @@ func recordToBody(record interface{}) pdata.AttributeValue {
 	return convertAndDrill(entry).Body()
 }
 
-func convertAndDrill(entry *entry.Entry) pdata.LogRecord {
-	return convert(entry).ResourceLogs().At(0).InstrumentationLibraryLogs().At(0).Logs().At(0)
+func convertAndDrill(e *entry.Entry) pdata.LogRecord {
+	return convert(sliceOf(e)).ResourceLogs().At(0).InstrumentationLibraryLogs().At(0).Logs().At(0)
+}
+
+func sliceOf(e *entry.Entry) []*entry.Entry {
+	return []*entry.Entry{e}
 }
 
 func TestConvertSeverity(t *testing.T) {

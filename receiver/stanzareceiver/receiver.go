@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	stanza "github.com/observiq/stanza/agent"
+	"github.com/observiq/stanza/entry"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenterror"
 	"go.opentelemetry.io/collector/consumer"
@@ -65,11 +66,15 @@ func (r *stanzareceiver) Start(ctx context.Context, host component.Host) error {
 				select {
 				case <-rctx.Done():
 					return
-				case obsLog, ok := <-r.emitter.logChan:
+				case ent, ok := <-r.emitter.logChan:
 					if !ok {
 						continue
 					}
-					if consumeErr := r.consumer.ConsumeLogs(ctx, convert(obsLog)); consumeErr != nil {
+
+					// TODO consume channel until empty
+					entries := []*entry.Entry{ent}
+
+					if consumeErr := r.consumer.ConsumeLogs(ctx, convert(entries)); consumeErr != nil {
 						r.logger.Error("ConsumeLogs() error", zap.String("error", consumeErr.Error()))
 					}
 				}

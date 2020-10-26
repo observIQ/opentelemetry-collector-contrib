@@ -15,57 +15,89 @@
 package stanzareceiver
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/observiq/stanza/entry"
 	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
-func convert(obsLog *entry.Entry) pdata.Logs {
+func convert(entries []*entry.Entry) pdata.Logs {
+
 	out := pdata.NewLogs()
 	logs := out.ResourceLogs()
-	logs.Resize(1)
-	rls := logs.At(0)
 
-	resource := rls.Resource()
-	resource.InitEmpty()
-	if len(obsLog.Resource) > 0 {
+	entriesByResource := groupByResource(entries)
+
+	logs.Resize(len(entriesByResource))
+
+	for i, resourceEntries := range entriesByResource {
+		rls := logs.At(i)
+		resource := rls.Resource()
+		resource.InitEmpty()
+
 		resourceAtts := resource.Attributes()
-		for k, v := range obsLog.Resource {
+		for k, v := range resourceEntries[0].Resource {
 			resourceAtts.InsertString(k, v)
 		}
-	}
 
-	rls.InstrumentationLibraryLogs().Resize(1)
-	ills := rls.InstrumentationLibraryLogs().At(0)
-	ills.InitEmpty()
+		rls.InstrumentationLibraryLogs().Resize(1)
+		ills := rls.InstrumentationLibraryLogs().At(0)
+		ills.InitEmpty()
 
-	il := ills.InstrumentationLibrary()
-	il.InitEmpty()
-	il.SetName(typeStr)
-	il.SetVersion(verStr)
+		il := ills.InstrumentationLibrary()
+		il.InitEmpty()
+		il.SetName(typeStr)
+		il.SetVersion(verStr)
 
-	lr := pdata.NewLogRecord()
-	lr.InitEmpty()
-	lr.SetTimestamp(pdata.TimestampUnixNano(obsLog.Timestamp.UnixNano()))
+		for _, entry := range resourceEntries {
+			lr := pdata.NewLogRecord()
+			lr.InitEmpty()
+			lr.SetTimestamp(pdata.TimestampUnixNano(entry.Timestamp.UnixNano()))
 
-	sevText, sevNum := convertSeverity(obsLog.Severity)
-	lr.SetSeverityText(sevText)
-	lr.SetSeverityNumber(sevNum)
+			sevText, sevNum := convertSeverity(entry.Severity)
+			lr.SetSeverityText(sevText)
+			lr.SetSeverityNumber(sevNum)
 
-	if len(obsLog.Labels) > 0 {
-		attributes := lr.Attributes()
-		for k, v := range obsLog.Labels {
-			attributes.InsertString(k, v)
+			if len(entry.Labels) > 0 {
+				attributes := lr.Attributes()
+				for k, v := range entry.Labels {
+					attributes.InsertString(k, v)
+				}
+			}
+
+			lr.Body().InitEmpty()
+			insertToAttributeVal(entry.Record, lr.Body())
+
+			ills.Logs().Append(lr)
 		}
 	}
 
-	lr.Body().InitEmpty()
-	insertToAttributeVal(obsLog.Record, lr.Body())
-
-	ills.Logs().Append(lr)
-
 	return out
+}
+
+func groupByResource(entries []*entry.Entry) [][]*entry.Entry {
+	resourceMap := make(map[string][]*entry.Entry)
+
+	for _, ent := range entries {
+		resourceBytes, err := json.Marshal(ent.Resource)
+		if err != nil {
+			continue // not expected to ever happen
+		}
+		resourceHash := string(resourceBytes)
+
+		if resourceEntries, ok := resourceMap[resourceHash]; ok {
+			resourceEntries = append(resourceEntries, ent)
+		} else {
+			resourceMap[resourceHash] = []*entry.Entry{ent}
+		}
+	}
+
+	entriesByResource := make([][]*entry.Entry, 0, len(resourceMap))
+	for _, v := range resourceMap {
+		entriesByResource = append(entriesByResource, v)
+	}
+	return entriesByResource
 }
 
 func insertToAttributeVal(value interface{}, dest pdata.AttributeValue) {
