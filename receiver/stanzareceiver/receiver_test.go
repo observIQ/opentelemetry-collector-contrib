@@ -101,7 +101,7 @@ func BenchmarkReadLines(b *testing.B) {
 	pipelineCfg := pipeline.Config{}
 	require.NoError(b, yaml.Unmarshal([]byte(pipelineYaml), &pipelineCfg))
 
-	emitter := NewLogEmitter(zap.NewNop().Sugar())
+	emitter := NewLogEmitter(zap.NewNop().Sugar(), 1)
 	defer emitter.Stop()
 
 	buildContext := testutil.NewBuildContext(b)
@@ -121,7 +121,7 @@ func BenchmarkReadLines(b *testing.B) {
 	b.ResetTimer()
 	require.NoError(b, pl.Start())
 	for i := 0; i < b.N; i++ {
-		convert(sliceOf(<-emitter.logChan))
+		convert(<-emitter.logChan)
 	}
 }
 
@@ -161,7 +161,7 @@ func BenchmarkParseAndMap(b *testing.B) {
 	pipelineCfg := pipeline.Config{}
 	require.NoError(b, yaml.Unmarshal([]byte(pipelineYaml), &pipelineCfg))
 
-	emitter := NewLogEmitter(zap.NewNop().Sugar())
+	emitter := NewLogEmitter(zap.NewNop().Sugar(), 1)
 	defer emitter.Stop()
 
 	buildContext := testutil.NewBuildContext(b)
@@ -181,6 +181,6 @@ func BenchmarkParseAndMap(b *testing.B) {
 	b.ResetTimer()
 	require.NoError(b, pl.Start())
 	for i := 0; i < b.N; i++ {
-		convert(sliceOf(<-emitter.logChan))
+		convert(<-emitter.logChan)
 	}
 }

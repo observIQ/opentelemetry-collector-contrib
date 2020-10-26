@@ -16,6 +16,7 @@ package stanzareceiver
 
 import (
 	"context"
+	"time"
 
 	stanza "github.com/observiq/stanza/agent"
 	"go.opentelemetry.io/collector/component"
@@ -43,10 +44,11 @@ func createDefaultConfig() configmodels.Receiver {
 			TypeVal: configmodels.Type(typeStr),
 			NameVal: typeStr,
 		},
+		MaxBatchSize: 1000,
+		MaxBatchTime: 100 * time.Millisecond,
 	}
 }
 
-// CreateLogsReceiver creates a logs receiver based on provided config
 func createLogsReceiver(
 	ctx context.Context,
 	params component.ReceiverCreateParams,
@@ -54,13 +56,13 @@ func createLogsReceiver(
 	nextConsumer consumer.LogsConsumer,
 ) (component.LogsReceiver, error) {
 
-	obsConfig := cfg.(*Config)
+	stanzaConfig := cfg.(*Config)
 
-	emitter := NewLogEmitter(params.Logger.Sugar())
+	emitter := NewLogEmitter(params.Logger.Sugar(), stanzaConfig.MaxBatchSize)
 
-	logAgent, err := stanza.NewBuilder(&stanza.Config{Pipeline: obsConfig.Pipeline}, params.Logger.Sugar()).
-		WithPluginDir(obsConfig.PluginDir).
-		WithDatabaseFile(obsConfig.OffsetsFile).
+	logAgent, err := stanza.NewBuilder(&stanza.Config{Pipeline: stanzaConfig.Pipeline}, params.Logger.Sugar()).
+		WithPluginDir(stanzaConfig.PluginDir).
+		WithDatabaseFile(stanzaConfig.OffsetsFile).
 		WithDefaultOutput(emitter).
 		Build()
 	if err != nil {
@@ -68,9 +70,11 @@ func createLogsReceiver(
 	}
 
 	return &stanzareceiver{
-		agent:    logAgent,
-		emitter:  emitter,
-		consumer: nextConsumer,
-		logger:   params.Logger,
+		agent:        logAgent,
+		emitter:      emitter,
+		consumer:     nextConsumer,
+		logger:       params.Logger,
+		maxBatchSize: stanzaConfig.MaxBatchSize,
+		maxBatchTime: stanzaConfig.MaxBatchTime,
 	}, nil
 }

@@ -22,7 +22,7 @@ import (
 	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
-func convert(entries []*entry.Entry) pdata.Logs {
+func convert(entries ...*entry.Entry) pdata.Logs {
 
 	out := pdata.NewLogs()
 	logs := out.ResourceLogs()
@@ -87,7 +87,7 @@ func groupByResource(entries []*entry.Entry) [][]*entry.Entry {
 		resourceHash := string(resourceBytes)
 
 		if resourceEntries, ok := resourceMap[resourceHash]; ok {
-			resourceEntries = append(resourceEntries, ent)
+			resourceMap[resourceHash] = append(resourceEntries, ent)
 		} else {
 			resourceMap[resourceHash] = []*entry.Entry{ent}
 		}

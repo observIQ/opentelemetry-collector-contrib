@@ -15,6 +15,8 @@
 package stanzareceiver
 
 import (
+	"time"
+
 	"github.com/observiq/stanza/pipeline"
 	"go.opentelemetry.io/collector/config/configmodels"
 )
@@ -25,4 +27,6 @@ type Config struct {
 	OffsetsFile                   string          `mapstructure:"offsets_file"`
 	PluginDir                     string          `mapstructure:"plugin_dir"`
 	Pipeline                      pipeline.Config `mapstructure:"pipeline"`
+	MaxBatchSize                  int             `mapstructure:"max_batch_size"`
+	MaxBatchTime                  time.Duration   `mapstructure:"max_batch_time"`
 }

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	stanza "github.com/observiq/stanza/agent"
 	"github.com/observiq/stanza/entry"
@@ -33,6 +34,9 @@ type stanzareceiver struct {
 	stopOnce  sync.Once
 	wg        sync.WaitGroup
 	cancel    context.CancelFunc
+
+	maxBatchSize int
+	maxBatchTime time.Duration
 
 	agent    *stanza.LogAgent
 	emitter  *LogEmitter
@@ -68,13 +72,9 @@ func (r *stanzareceiver) Start(ctx context.Context, host component.Host) error {
 					return
 				case ent, ok := <-r.emitter.logChan:
 					if !ok {
-						continue
+						break
 					}
-
-					// TODO consume channel until empty
-					entries := []*entry.Entry{ent}
-
-					if consumeErr := r.consumer.ConsumeLogs(ctx, convert(entries)); consumeErr != nil {
+					if consumeErr := r.consumer.ConsumeLogs(ctx, convert(r.drainBatch(ctx, ent)...)); consumeErr != nil {
 						r.logger.Error("ConsumeLogs() error", zap.String("error", consumeErr.Error()))
 					}
 				}
@@ -83,6 +83,30 @@ func (r *stanzareceiver) Start(ctx context.Context, host component.Host) error {
 	})
 
 	return err
+}
+
+func (r *stanzareceiver) drainBatch(ctx context.Context, first *entry.Entry) []*entry.Entry {
+	entries := []*entry.Entry{first}
+
+	batchTimeout := time.After(r.maxBatchTime)
+	for {
+		select {
+		case <-ctx.Done():
+			return entries
+		case <-batchTimeout:
+			return entries
+		case e, ok := <-r.emitter.logChan:
+			if !ok {
+				return entries
+			}
+			entries = append(entries, e)
+			if len(entries) == r.maxBatchSize {
+				return entries
+			}
+		default: // channel empty
+			return entries
+		}
+	}
 }
 
 // Shutdown is invoked during service shutdown

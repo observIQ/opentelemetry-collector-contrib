@@ -53,8 +53,11 @@ func unmarshalConfig(t *testing.T, pipelineYaml string) pipeline.Config {
 	return pipelineCfg
 }
 
-func expectNLogs(sink *exportertest.SinkLogsExporter, expected int) func() bool {
-	return func() bool { return sink.LogRecordsCount() == expected }
+func expectNLogs(expected int, sink *exportertest.SinkLogsExporter) func() bool {
+	return func() bool {
+		actual := sink.LogRecordsCount()
+		return expected == actual
+	}
 }
 
 func TestReadStaticFile(t *testing.T) {
@@ -80,7 +83,7 @@ func TestReadStaticFile(t *testing.T) {
 	e3.Set(entry.NewRecordField("msg"), "Some details...")
 	e3.AddLabel("file_name", "simple.log")
 
-	expectedLogs := []pdata.Logs{convert(sliceOf(e1)), convert(sliceOf(e2)), convert(sliceOf(e3))}
+	expectedLogs := []pdata.Logs{convert(sliceOf(e1, e2, e3)...)}
 
 	f := NewFactory()
 	sink := &exportertest.SinkLogsExporter{}
@@ -102,9 +105,9 @@ func TestReadStaticFile(t *testing.T) {
 	require.NoError(t, err, "failed to create receiver")
 
 	require.NoError(t, rcvr.Start(context.Background(), &testHost{t: t}))
-	require.Eventually(t, expectNLogs(sink, 3), time.Second, time.Millisecond)
-	require.Equal(t, expectedLogs, sink.AllLogs())
+	require.Eventually(t, expectNLogs(3, sink), time.Second, 10*time.Millisecond)
 	require.NoError(t, rcvr.Shutdown(context.Background()))
+	require.Equal(t, expectedLogs, sink.AllLogs())
 }
 
 func TestReadRotatingFiles(t *testing.T) {
@@ -168,7 +171,7 @@ func (rt *rotationTest) Run(t *testing.T) {
 		e := entry.New()
 		e.Timestamp = expectedTimestamp
 		e.Set(entry.NewRecordField("msg"), msg)
-		expectedLogs[i] = convert(sliceOf(e))
+		expectedLogs[i] = convert(e)
 	}
 
 	cfg := f.CreateDefaultConfig().(*Config)
@@ -193,7 +196,7 @@ func (rt *rotationTest) Run(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	require.Eventually(t, expectNLogs(sink, numLogs), 2*time.Second, time.Millisecond)
+	require.Eventually(t, expectNLogs(numLogs, sink), 2*time.Second, time.Millisecond)
 	require.ElementsMatch(t, expectedLogs, sink.AllLogs())
 	require.NoError(t, rcvr.Shutdown(context.Background()))
 }

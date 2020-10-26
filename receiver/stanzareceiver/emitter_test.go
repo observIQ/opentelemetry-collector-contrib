@@ -26,7 +26,7 @@ import (
 
 func TestLogEmitter(t *testing.T) {
 
-	emitter := NewLogEmitter(zaptest.NewLogger(t).Sugar())
+	emitter := NewLogEmitter(zaptest.NewLogger(t).Sugar(), 1)
 	defer emitter.Stop()
 
 	in := entry.New()

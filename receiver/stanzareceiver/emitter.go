@@ -31,7 +31,7 @@ type LogEmitter struct {
 }
 
 // NewLogEmitter creates a new receiver output
-func NewLogEmitter(logger *zap.SugaredLogger) *LogEmitter {
+func NewLogEmitter(logger *zap.SugaredLogger, size int) *LogEmitter {
 	return &LogEmitter{
 		OutputOperator: helper.OutputOperator{
 			BasicOperator: helper.BasicOperator{
@@ -40,7 +40,7 @@ func NewLogEmitter(logger *zap.SugaredLogger) *LogEmitter {
 				SugaredLogger: logger,
 			},
 		},
-		logChan: make(chan *entry.Entry),
+		logChan: make(chan *entry.Entry, size),
 	}
 }
 
