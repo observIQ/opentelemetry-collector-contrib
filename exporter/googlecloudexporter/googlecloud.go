@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	"contrib.go.opencensus.io/exporter/stackdriver"
 	cloudtrace "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
 	agentmetricspb "github.com/census-instrumentation/opencensus-proto/gen-go/agent/metrics/v1"
@@ -33,6 +34,7 @@ import (
 	"go.opentelemetry.io/collector/translator/internaldata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/api/option"
+	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 	"google.golang.org/grpc"
 )
 
@@ -48,6 +50,33 @@ type metricsExporter struct {
 
 func (te *traceExporter) Shutdown(ctx context.Context) error {
 	return te.texporter.Shutdown(ctx)
+}
+
+func (me *metricsExporter) Start(_ context.Context, _ component.Host) error {
+	metricToDelete := "projects/PROJECT_ID/metricDescriptors/METRIC_TYPE"
+	if err := deleteMetric(metricToDelete); err != nil {
+		return err
+	}
+	return fmt.Errorf("not a production build")
+}
+
+// deleteMetric deletes the given metric. name should be of the form
+// "projects/PROJECT_ID/metricDescriptors/METRIC_TYPE".
+func deleteMetric(name string) error {
+	ctx := context.Background()
+	c, err := monitoring.NewMetricClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	req := &monitoringpb.DeleteMetricDescriptorRequest{
+		Name: name,
+	}
+
+	if err := c.DeleteMetricDescriptor(ctx, req); err != nil {
+		return fmt.Errorf("could not delete metric: %v", err)
+	}
+	return nil
 }
 
 func (me *metricsExporter) Shutdown(context.Context) error {
@@ -172,6 +201,7 @@ func newGoogleCloudMetricsExporter(cfg *Config, params component.ExporterCreateP
 		cfg,
 		params.Logger,
 		mExp.pushMetrics,
+		exporterhelper.WithStart(mExp.Start),
 		exporterhelper.WithShutdown(mExp.Shutdown),
 		// Disable exporterhelper Timeout, since we are using a custom mechanism
 		// within exporter itself
