@@ -1,0 +1,51 @@
+name: httpdreceiver
+
+labels:
+  state:
+    description: The state of a connection
+    enum:
+      - open
+      - waiting
+      - starting
+      - reading
+      - sending
+      - keepalive
+      - dnslookup
+      - closing
+      - logging
+      - finishing
+      - idle_cleanup
+
+metrics:
+  httpd.current_connections:
+    description: The number of active connections currently attached to the HTTP server
+    unit: connections
+    data:
+      type: int gauge
+    labels: []
+  httpd.idle_workers:
+    description: The number of idle workers currently attached to the HTTP server
+    unit: connections
+    data:
+      type: int gauge
+    labels: []
+  httpd.requests:
+    description: The number of requests serviced by the HTTP server per second
+    unit: /s
+    data:
+      type: double gauge
+    labels: []
+  httpd.traffic:
+    description: Total HTTP server traffic
+    unit: connections
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: []
+  httpd.scoreboard:
+    description: Apache HTTP server scoreboard values
+    unit: scoreboard
+    data:
+      type: int gauge
+    labels: [state]

@@ -86,7 +86,7 @@ func (r *httpdScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, erro
 	parsedMetrics := parseResponse(string(body))
 	processedMetrics := processMetrics(parsedMetrics)
 
-	r.logger.Error(fmt.Sprintf("%v", processedMetrics))
+	r.logger.Error(processedMetrics.String())
 
 	metrics := simple.Metrics{
 		Metrics:   pdata.NewMetrics(),
@@ -136,6 +136,10 @@ type Metrics struct {
 	Scoreboard  Scoreboard
 }
 
+func (m *Metrics) String() string {
+	return fmt.Sprintf("\n\tConnsTotal: %#v\n\tIdleWorkers: %#v\n\tReqPerSec: %#v\n\tTotalAccess: %#v\n\tScoreboard: %#v\n", m.ConnsTotal, m.IdleWorkers, m.ReqPerSec, m.TotalAccess, m.Scoreboard)
+}
+
 // parseFloat converts string to float64.
 func parseFloat(value string) float64 {
 	if f, err := strconv.ParseFloat(value, 64); err == nil {
@@ -163,7 +167,7 @@ type Scoreboard struct {
 // NewScoreboard returns a new instance of a scoreboard.
 func NewScoreboard() *Scoreboard {
 	return &Scoreboard{
-		Desc: scoreboardDesc(),
+		// Desc: scoreboardDesc(),
 		Freq: make(map[string]int),
 	}
 }
