@@ -28,6 +28,8 @@ import (
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/consumer/simple"
 	"go.uber.org/zap"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/httpdreceiver/internal/metadata"
 )
 
 type httpdScraper struct {
@@ -89,21 +91,43 @@ func (r *httpdScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, erro
 	r.logger.Error(processedMetrics.String())
 
 	metrics := simple.Metrics{
-		Metrics:   pdata.NewMetrics(),
-		Timestamp: time.Now(),
-		// MetricFactoriesByName:      metadata.M.FactoriesByName(),
+		Metrics:                    pdata.NewMetrics(),
+		Timestamp:                  time.Now(),
+		MetricFactoriesByName:      metadata.M.FactoriesByName(),
 		InstrumentationLibraryName: "otelcol/httpd",
 	}
 
-	// stats, err := r.client.GetStubStats()
-	// if err != nil {
-	// 	r.logger.Error("Failed to fetch nginx stats", zap.Error(err))
-	// 	return pdata.ResourceMetricsSlice{}, err
-	// }
+	metrics.AddSumDataPoint(metadata.M.HttpdTraffic.Name(), processedMetrics.TotalAccess)
 
 	// metrics.AddSumDataPoint(metadata.M.HttpdRequests.Name(), stats.Requests)
 	// metrics.AddSumDataPoint(metadata.M.HttpdConnectionsAccepted.Name(), stats.Connections.Accepted)
 	// metrics.AddSumDataPoint(metadata.M.HttpdConnectionsHandled.Name(), stats.Connections.Handled)
+
+	metrics.AddGaugeDataPoint(metadata.M.HttpdCurrentConnections.Name(), int64(processedMetrics.ConnsTotal))
+	metrics.AddGaugeDataPoint(metadata.M.HttpdIdleWorkers.Name(), int64(processedMetrics.IdleWorkers))
+	metrics.AddDGaugeDataPoint(metadata.M.HttpdRequests.Name(), float64(processedMetrics.ReqPerSec))
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Open}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Open])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Waiting}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Waiting])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Starting}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Starting])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Reading}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Reading])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Sending}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Sending])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Keepalive}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Keepalive])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Dnslookup}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Dnslookup])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Closing}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Closing])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Logging}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Logging])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Finishing}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.Finishing])
+
+	metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.IdleCleanup}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), processedMetrics.Scoreboard.Freq[metadata.LabelState.IdleCleanup])
 
 	// metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Active}).AddGaugeDataPoint(metadata.M.HttpdConnectionsCurrent.Name(), stats.Connections.Active)
 	// metrics.WithLabels(map[string]string{metadata.L.State: metadata.LabelState.Reading}).AddGaugeDataPoint(metadata.M.HttpdConnectionsCurrent.Name(), stats.Connections.Reading)
@@ -161,14 +185,14 @@ func parseInt(value string) int64 {
 // Scoreboard stores a description of the mappings and the freq of each instance found.
 type Scoreboard struct {
 	Desc string
-	Freq map[string]int
+	Freq map[string]int64
 }
 
 // NewScoreboard returns a new instance of a scoreboard.
 func NewScoreboard() *Scoreboard {
 	return &Scoreboard{
 		// Desc: scoreboardDesc(),
-		Freq: make(map[string]int),
+		Freq: make(map[string]int64),
 	}
 }
 
@@ -195,27 +219,27 @@ func parseScoreboard(values string) *Scoreboard {
 	for _, char := range values {
 		switch string(char) {
 		case "_":
-			scoreboard.Freq["_"] += 1
+			scoreboard.Freq["waiting"] += 1
 		case "S":
-			scoreboard.Freq["S"] += 1
+			scoreboard.Freq["starting"] += 1
 		case "R":
-			scoreboard.Freq["R"] += 1
+			scoreboard.Freq["reading"] += 1
 		case "W":
-			scoreboard.Freq["W"] += 1
+			scoreboard.Freq["sending"] += 1
 		case "K":
-			scoreboard.Freq["K"] += 1
+			scoreboard.Freq["keepalive"] += 1
 		case "D":
-			scoreboard.Freq["D"] += 1
+			scoreboard.Freq["dnslookup"] += 1
 		case "C":
-			scoreboard.Freq["C"] += 1
+			scoreboard.Freq["closing"] += 1
 		case "L":
-			scoreboard.Freq["L"] += 1
+			scoreboard.Freq["logging"] += 1
 		case "G":
-			scoreboard.Freq["G"] += 1
+			scoreboard.Freq["finishing"] += 1
 		case "I":
-			scoreboard.Freq["I"] += 1
+			scoreboard.Freq["idle_cleanup"] += 1
 		case ".":
-			scoreboard.Freq["."] += 1
+			scoreboard.Freq["open"] += 1
 		default:
 			continue
 		}
