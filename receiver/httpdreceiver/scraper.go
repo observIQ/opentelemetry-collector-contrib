@@ -16,6 +16,7 @@ package httpdreceiver
 
 import (
 	"context"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -59,17 +60,8 @@ func (r *httpdScraper) start(_ context.Context, host component.Host) error {
 
 func (r *httpdScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, error) {
 
-	resp, err := r.httpClient.Get(r.cfg.HTTPClientSettings.Endpoint)
-	if err != nil {
-		r.logger.Error(err.Error())
-		return pdata.ResourceMetricsSlice{}, err
-	}
-
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		r.logger.Error(err.Error())
+	if r.httpClient == nil {
+		return pdata.ResourceMetricsSlice{}, errors.New("Error: no httpd client to connect to.")
 	}
 
 	metrics := simple.Metrics{
@@ -79,20 +71,24 @@ func (r *httpdScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, erro
 		InstrumentationLibraryName: "otelcol/httpd",
 	}
 
-	parsedMetrics := parseResponse(string(body))
+	stats, err := r.GetStats()
+	if err != nil {
+		r.logger.Error("Failed to fetch httpd stats", zap.Error(err))
+		return pdata.ResourceMetricsSlice{}, err
+	}
 
-	for k, v := range parsedMetrics {
-		switch k {
+	for metricKey, metricValue := range parseStats(stats) {
+		switch metricKey {
 		case "ConnsTotal":
-			metrics.AddGaugeDataPoint(metadata.M.HttpdCurrentConnections.Name(), parseInt(v))
+			metrics.AddGaugeDataPoint(metadata.M.HttpdCurrentConnections.Name(), parseInt(metricValue))
 		case "IdleWorkers":
-			metrics.AddGaugeDataPoint(metadata.M.HttpdIdleWorkers.Name(), parseInt(v))
+			metrics.AddGaugeDataPoint(metadata.M.HttpdIdleWorkers.Name(), parseInt(metricValue))
 		case "ReqPerSec":
-			metrics.AddDGaugeDataPoint(metadata.M.HttpdRequests.Name(), parseFloat(v))
+			metrics.AddDGaugeDataPoint(metadata.M.HttpdRequests.Name(), parseFloat(metricValue))
 		case "Total Accesses":
-			metrics.AddSumDataPoint(metadata.M.HttpdTraffic.Name(), parseInt(v))
+			metrics.AddSumDataPoint(metadata.M.HttpdTraffic.Name(), parseInt(metricValue))
 		case "Scoreboard":
-			scoreboard := parseScoreboard(v)
+			scoreboard := parseScoreboard(metricValue)
 			for identifier, score := range scoreboard {
 				metrics.WithLabels(map[string]string{metadata.L.State: identifier}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), score)
 			}
@@ -102,8 +98,24 @@ func (r *httpdScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, erro
 	return metrics.Metrics.ResourceMetrics(), nil
 }
 
-// parseResponse converts a response body key:values into a map.
-func parseResponse(resp string) map[string]string {
+// GetStats collects metric stats by making a get request at an endpoint.
+func (r *httpdScraper) GetStats() (string, error) {
+	resp, err := r.httpClient.Get(r.cfg.HTTPClientSettings.Endpoint)
+	if err != nil {
+		return "", err
+	}
+
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+// parseStats converts a response body key:values into a map.
+func parseStats(resp string) map[string]string {
 	metrics := make(map[string]string)
 
 	fields := strings.Split(resp, "\n")
