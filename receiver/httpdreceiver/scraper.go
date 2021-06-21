@@ -61,7 +61,7 @@ func (r *httpdScraper) start(_ context.Context, host component.Host) error {
 func (r *httpdScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, error) {
 
 	if r.httpClient == nil {
-		return pdata.ResourceMetricsSlice{}, errors.New("Error: no httpd client to connect to.")
+		return pdata.ResourceMetricsSlice{}, errors.New("failed to connect to http client")
 	}
 
 	metrics := simple.Metrics{
