@@ -94,17 +94,36 @@ func (suite *HttpdIntegrationSuite) TestHttpdScraperHappyPath() {
 	ilm := ilms.At(0)
 	ms := ilm.Metrics()
 
-	require.EqualValues(t, 5, ms.Len())
+	require.EqualValues(t, 7, ms.Len())
 
 	for i := 0; i < ms.Len(); i++ {
 		m := ms.At(i)
 
 		switch m.Name() {
+		case metadata.M.HttpdUptime.Name():
+			require.Equal(t, 1, m.IntSum().DataPoints().Len())
 		case metadata.M.HttpdCurrentConnections.Name():
 			require.Equal(t, 1, m.IntGauge().DataPoints().Len())
-		case metadata.M.HttpdIdleWorkers.Name():
-			require.Equal(t, 1, m.IntGauge().DataPoints().Len())
+		case metadata.M.HttpdWorkers.Name():
+			require.Equal(t, 2, m.IntGauge().DataPoints().Len())
+			dps := m.IntGauge().DataPoints()
+			present := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get("state")
+				switch state {
+				case metadata.LabelWorkersState.Busy:
+					present[state] = true
+				case metadata.LabelWorkersState.Idle:
+					present[state] = true
+				default:
+					require.Nil(t, state, fmt.Sprintf("connections with state %s not expected", state))
+				}
+			}
+			require.Equal(t, 2, len(present))
 		case metadata.M.HttpdRequests.Name():
+			require.Equal(t, 1, m.DoubleGauge().DataPoints().Len())
+		case metadata.M.HttpdBytes.Name():
 			require.Equal(t, 1, m.DoubleGauge().DataPoints().Len())
 		case metadata.M.HttpdTraffic.Name():
 			require.Equal(t, 1, m.IntSum().DataPoints().Len())
@@ -117,27 +136,27 @@ func (suite *HttpdIntegrationSuite) TestHttpdScraperHappyPath() {
 				dp := dps.At(j)
 				state, _ := dp.LabelsMap().Get("state")
 				switch state {
-				case metadata.LabelState.Waiting:
+				case metadata.LabelScoreboardState.Waiting:
 					present[state] = true
-				case metadata.LabelState.Starting:
+				case metadata.LabelScoreboardState.Starting:
 					present[state] = true
-				case metadata.LabelState.Reading:
+				case metadata.LabelScoreboardState.Reading:
 					present[state] = true
-				case metadata.LabelState.Sending:
+				case metadata.LabelScoreboardState.Sending:
 					present[state] = true
-				case metadata.LabelState.Keepalive:
+				case metadata.LabelScoreboardState.Keepalive:
 					present[state] = true
-				case metadata.LabelState.Dnslookup:
+				case metadata.LabelScoreboardState.Dnslookup:
 					present[state] = true
-				case metadata.LabelState.Closing:
+				case metadata.LabelScoreboardState.Closing:
 					present[state] = true
-				case metadata.LabelState.Logging:
+				case metadata.LabelScoreboardState.Logging:
 					present[state] = true
-				case metadata.LabelState.Finishing:
+				case metadata.LabelScoreboardState.Finishing:
 					present[state] = true
-				case metadata.LabelState.IdleCleanup:
+				case metadata.LabelScoreboardState.IdleCleanup:
 					present[state] = true
-				case metadata.LabelState.Open:
+				case metadata.LabelScoreboardState.Open:
 					present[state] = true
 				default:
 					require.Nil(t, state, fmt.Sprintf("connections with state %s not expected", state))

@@ -35,8 +35,11 @@ func TestScraper(t *testing.T) {
 	httpdMock := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		if req.URL.String() == "/server-status?auto" {
 			rw.WriteHeader(200)
-			_, _ = rw.Write([]byte(`Total Accesses: 14169
+			_, _ = rw.Write([]byte(`ServerUptimeSeconds: 410
+Total Accesses: 14169
 ReqPerSec: 719.771
+BytesPerSec: 1129490
+BusyWorkers: 13
 IdleWorkers: 227
 ConnsTotal: 110
 Scoreboard: S_DD_L_GGG_____W__IIII_C________________W__________________________________.........................____WR______W____W________________________C______________________________________W_W____W______________R_________R________C_________WK_W________K_____W__C__________W___R______.............................................................................................................................
@@ -67,23 +70,35 @@ Scoreboard: S_DD_L_GGG_____W__IIII_C________________W___________________________
 	ilm := ilms.At(0)
 	ms := ilm.Metrics()
 
-	require.Equal(t, 5, ms.Len())
+	require.Equal(t, 7, ms.Len())
 
 	for i := 0; i < ms.Len(); i++ {
 		m := ms.At(i)
 		switch m.Name() {
+		case metadata.M.HttpdUptime.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 1, m.IntSum().DataPoints().Len())
+			require.True(t, m.IntSum().IsMonotonic())
+			require.EqualValues(t, 410, dps.At(0).Value())
 		case metadata.M.HttpdCurrentConnections.Name():
 			dps := m.IntGauge().DataPoints()
 			require.Equal(t, 1, dps.Len())
 			require.EqualValues(t, 110, dps.At(0).Value())
-		case metadata.M.HttpdIdleWorkers.Name():
+		case metadata.M.HttpdWorkers.Name():
 			dps := m.IntGauge().DataPoints()
-			require.Equal(t, 1, m.IntGauge().DataPoints().Len())
-			require.EqualValues(t, 227, dps.At(0).Value())
+			require.Equal(t, 2, m.IntGauge().DataPoints().Len())
+			busyWorker := dps.At(0).Value()
+			idleWorker := dps.At(1).Value()
+			require.EqualValues(t, 13, busyWorker)
+			require.EqualValues(t, 227, idleWorker)
 		case metadata.M.HttpdRequests.Name():
 			dps := m.DoubleGauge().DataPoints()
 			require.Equal(t, 1, m.DoubleGauge().DataPoints().Len())
 			require.EqualValues(t, 719.771, dps.At(0).Value())
+		case metadata.M.HttpdBytes.Name():
+			dps := m.DoubleGauge().DataPoints()
+			require.Equal(t, 1, m.DoubleGauge().DataPoints().Len())
+			require.EqualValues(t, 1129490, dps.At(0).Value())
 		case metadata.M.HttpdTraffic.Name():
 			dps := m.IntSum().DataPoints()
 			require.Equal(t, 1, m.IntSum().DataPoints().Len())
@@ -95,7 +110,7 @@ Scoreboard: S_DD_L_GGG_____W__IIII_C________________W___________________________
 			scoreboardMetrics := map[string]int{}
 			for j := 0; j < dps.Len(); j++ {
 				dp := dps.At(j)
-				state, _ := dp.LabelsMap().Get(metadata.L.State)
+				state, _ := dp.LabelsMap().Get(metadata.L.ScoreboardState)
 				label := fmt.Sprintf("%s state:%s", m.Name(), state)
 				scoreboardMetrics[label] = int(dp.Value())
 			}
