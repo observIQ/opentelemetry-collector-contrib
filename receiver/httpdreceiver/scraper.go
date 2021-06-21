@@ -79,18 +79,24 @@ func (r *httpdScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, erro
 
 	for metricKey, metricValue := range parseStats(stats) {
 		switch metricKey {
+		case "ServerUptimeSeconds":
+			metrics.AddSumDataPoint(metadata.M.HttpdUptime.Name(), parseInt(metricValue))
 		case "ConnsTotal":
 			metrics.AddGaugeDataPoint(metadata.M.HttpdCurrentConnections.Name(), parseInt(metricValue))
+		case "BusyWorkers":
+			metrics.WithLabels(map[string]string{metadata.L.WorkersState: "busy"}).AddGaugeDataPoint(metadata.M.HttpdWorkers.Name(), parseInt(metricValue))
 		case "IdleWorkers":
-			metrics.AddGaugeDataPoint(metadata.M.HttpdIdleWorkers.Name(), parseInt(metricValue))
+			metrics.WithLabels(map[string]string{metadata.L.WorkersState: "idle"}).AddGaugeDataPoint(metadata.M.HttpdWorkers.Name(), parseInt(metricValue))
 		case "ReqPerSec":
 			metrics.AddDGaugeDataPoint(metadata.M.HttpdRequests.Name(), parseFloat(metricValue))
+		case "BytesPerSec":
+			metrics.AddDGaugeDataPoint(metadata.M.HttpdBytes.Name(), parseFloat(metricValue))
 		case "Total Accesses":
 			metrics.AddSumDataPoint(metadata.M.HttpdTraffic.Name(), parseInt(metricValue))
 		case "Scoreboard":
 			scoreboard := parseScoreboard(metricValue)
 			for identifier, score := range scoreboard {
-				metrics.WithLabels(map[string]string{metadata.L.State: identifier}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), score)
+				metrics.WithLabels(map[string]string{metadata.L.ScoreboardState: identifier}).AddGaugeDataPoint(metadata.M.HttpdScoreboard.Name(), score)
 			}
 		}
 	}

@@ -1,7 +1,14 @@
 name: httpdreceiver
 
 labels:
-  state:
+  workers_state:
+    value: state
+    description: The state workers
+    enum:
+      - busy
+      - idle
+  scoreboard_state:
+    value: state
     description: The state of a connection
     enum:
       - open
@@ -15,23 +22,37 @@ labels:
       - logging
       - finishing
       - idle_cleanup
-
+    
 metrics:
+  httpd.uptime:
+    description: The amount of time that the server has been running in seconds
+    unit: /s
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: []
   httpd.current_connections:
     description: The number of active connections currently attached to the HTTP server
     unit: connections
     data:
       type: int gauge
     labels: []
-  httpd.idle_workers:
-    description: The number of idle workers currently attached to the HTTP server
+  httpd.workers:
+    description: The number of workers currently attached to the HTTP server
     unit: connections
     data:
       type: int gauge
-    labels: []
+    labels: [workers_state]
   httpd.requests:
     description: The number of requests serviced by the HTTP server per second
     unit: /s
+    data:
+      type: double gauge
+    labels: []
+  httpd.bytes:
+    description: The number of bytes transferred by the HTTP server per second
+    unit: By
     data:
       type: double gauge
     labels: []
@@ -48,4 +69,4 @@ metrics:
     unit: scoreboard
     data:
       type: int gauge
-    labels: [state]
+    labels: [scoreboard_state]

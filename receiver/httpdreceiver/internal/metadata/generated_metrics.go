@@ -55,30 +55,36 @@ func (m *metricImpl) Init(metric pdata.Metric) {
 }
 
 type metricStruct struct {
+	HttpdBytes              MetricIntf
 	HttpdCurrentConnections MetricIntf
-	HttpdIdleWorkers        MetricIntf
 	HttpdRequests           MetricIntf
 	HttpdScoreboard         MetricIntf
 	HttpdTraffic            MetricIntf
+	HttpdUptime             MetricIntf
+	HttpdWorkers            MetricIntf
 }
 
 // Names returns a list of all the metric name strings.
 func (m *metricStruct) Names() []string {
 	return []string{
+		"httpd.bytes",
 		"httpd.current_connections",
-		"httpd.idle_workers",
 		"httpd.requests",
 		"httpd.scoreboard",
 		"httpd.traffic",
+		"httpd.uptime",
+		"httpd.workers",
 	}
 }
 
 var metricsByName = map[string]MetricIntf{
+	"httpd.bytes":               Metrics.HttpdBytes,
 	"httpd.current_connections": Metrics.HttpdCurrentConnections,
-	"httpd.idle_workers":        Metrics.HttpdIdleWorkers,
 	"httpd.requests":            Metrics.HttpdRequests,
 	"httpd.scoreboard":          Metrics.HttpdScoreboard,
 	"httpd.traffic":             Metrics.HttpdTraffic,
+	"httpd.uptime":              Metrics.HttpdUptime,
+	"httpd.workers":             Metrics.HttpdWorkers,
 }
 
 func (m *metricStruct) ByName(n string) MetricIntf {
@@ -87,11 +93,13 @@ func (m *metricStruct) ByName(n string) MetricIntf {
 
 func (m *metricStruct) FactoriesByName() map[string]func(pdata.Metric) {
 	return map[string]func(pdata.Metric){
+		Metrics.HttpdBytes.Name():              Metrics.HttpdBytes.Init,
 		Metrics.HttpdCurrentConnections.Name(): Metrics.HttpdCurrentConnections.Init,
-		Metrics.HttpdIdleWorkers.Name():        Metrics.HttpdIdleWorkers.Init,
 		Metrics.HttpdRequests.Name():           Metrics.HttpdRequests.Init,
 		Metrics.HttpdScoreboard.Name():         Metrics.HttpdScoreboard.Init,
 		Metrics.HttpdTraffic.Name():            Metrics.HttpdTraffic.Init,
+		Metrics.HttpdUptime.Name():             Metrics.HttpdUptime.Init,
+		Metrics.HttpdWorkers.Name():            Metrics.HttpdWorkers.Init,
 	}
 }
 
@@ -99,19 +107,19 @@ func (m *metricStruct) FactoriesByName() map[string]func(pdata.Metric) {
 // manipulating those metrics.
 var Metrics = &metricStruct{
 	&metricImpl{
+		"httpd.bytes",
+		func(metric pdata.Metric) {
+			metric.SetName("httpd.bytes")
+			metric.SetDescription("The number of bytes transferred by the HTTP server per second")
+			metric.SetUnit("By")
+			metric.SetDataType(pdata.MetricDataTypeDoubleGauge)
+		},
+	},
+	&metricImpl{
 		"httpd.current_connections",
 		func(metric pdata.Metric) {
 			metric.SetName("httpd.current_connections")
 			metric.SetDescription("The number of active connections currently attached to the HTTP server")
-			metric.SetUnit("connections")
-			metric.SetDataType(pdata.MetricDataTypeIntGauge)
-		},
-	},
-	&metricImpl{
-		"httpd.idle_workers",
-		func(metric pdata.Metric) {
-			metric.SetName("httpd.idle_workers")
-			metric.SetDescription("The number of idle workers currently attached to the HTTP server")
 			metric.SetUnit("connections")
 			metric.SetDataType(pdata.MetricDataTypeIntGauge)
 		},
@@ -145,6 +153,26 @@ var Metrics = &metricStruct{
 			metric.IntSum().SetAggregationTemporality(pdata.AggregationTemporalityCumulative)
 		},
 	},
+	&metricImpl{
+		"httpd.uptime",
+		func(metric pdata.Metric) {
+			metric.SetName("httpd.uptime")
+			metric.SetDescription("The amount of time that the server has been running in seconds")
+			metric.SetUnit("/s")
+			metric.SetDataType(pdata.MetricDataTypeIntSum)
+			metric.IntSum().SetIsMonotonic(true)
+			metric.IntSum().SetAggregationTemporality(pdata.AggregationTemporalityCumulative)
+		},
+	},
+	&metricImpl{
+		"httpd.workers",
+		func(metric pdata.Metric) {
+			metric.SetName("httpd.workers")
+			metric.SetDescription("The number of workers currently attached to the HTTP server")
+			metric.SetUnit("connections")
+			metric.SetDataType(pdata.MetricDataTypeIntGauge)
+		},
+	},
 }
 
 // M contains a set of methods for each metric that help with
@@ -153,9 +181,12 @@ var M = Metrics
 
 // Labels contains the possible metric labels that can be used.
 var Labels = struct {
-	// State (The state of a connection)
-	State string
+	// ScoreboardState (The state of a connection)
+	ScoreboardState string
+	// WorkersState (The state workers)
+	WorkersState string
 }{
+	"state",
 	"state",
 }
 
@@ -163,8 +194,8 @@ var Labels = struct {
 // Labels.
 var L = Labels
 
-// LabelState are the possible values that the label "state" can have.
-var LabelState = struct {
+// LabelScoreboardState are the possible values that the label "scoreboard_state" can have.
+var LabelScoreboardState = struct {
 	Open        string
 	Waiting     string
 	Starting    string
@@ -188,4 +219,13 @@ var LabelState = struct {
 	"logging",
 	"finishing",
 	"idle_cleanup",
+}
+
+// LabelWorkersState are the possible values that the label "workers_state" can have.
+var LabelWorkersState = struct {
+	Busy string
+	Idle string
+}{
+	"busy",
+	"idle",
 }
