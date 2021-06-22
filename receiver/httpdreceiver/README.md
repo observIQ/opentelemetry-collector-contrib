@@ -6,6 +6,8 @@ This receiver can fetch stats from a Httpd instance using the
 
 ## Details
 
+This receiver supports Apache httpd version 2.4
+
 ## Configuration
 
 ### Httpd module

@@ -87,10 +87,20 @@ Scoreboard: S_DD_L_GGG_____W__IIII_C________________W___________________________
 		case metadata.M.HttpdWorkers.Name():
 			dps := m.IntGauge().DataPoints()
 			require.Equal(t, 2, m.IntGauge().DataPoints().Len())
-			busyWorker := dps.At(0).Value()
-			idleWorker := dps.At(1).Value()
-			require.EqualValues(t, 13, busyWorker)
-			require.EqualValues(t, 227, idleWorker)
+
+			workerMetrics := map[string]int{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.WorkersState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				workerMetrics[label] = int(dp.Value())
+			}
+
+			require.Equal(t, 2, len(workerMetrics))
+			require.Equal(t, map[string]int{
+				"httpd.workers state:busy": 13,
+				"httpd.workers state:idle": 227,
+			}, workerMetrics)
 		case metadata.M.HttpdRequests.Name():
 			dps := m.DoubleGauge().DataPoints()
 			require.Equal(t, 1, m.DoubleGauge().DataPoints().Len())
