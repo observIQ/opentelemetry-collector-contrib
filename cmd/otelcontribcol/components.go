@@ -80,6 +80,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/simpleprometheusreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/splunkhecreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/statsdreceiver"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/stubreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/syslogreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplogreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver"
@@ -134,6 +135,7 @@ func components() (component.Factories, error) {
 		simpleprometheusreceiver.NewFactory(),
 		splunkhecreceiver.NewFactory(),
 		statsdreceiver.NewFactory(),
+		stubreceiver.NewFactory(),
 		wavefrontreceiver.NewFactory(),
 		windowsperfcountersreceiver.NewFactory(),
 		zookeeperreceiver.NewFactory(),

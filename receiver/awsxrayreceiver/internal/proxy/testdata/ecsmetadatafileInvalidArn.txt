@@ -8,7 +8,7 @@
     "ContainerName": "simple-app",
     "DockerContainerName": "/ecs-console-sample-app-static-1-simple-app-e4e8e495e8baa5de1a00",
     "ImageID": "sha256:2ae34abc2ed0a22e280d17e13f9c01aaf725688b09b7a1525d1a2750e2c0d1de",
-    "ImageName": "httpd:2.4",
+    "ImageName": "stub:2.4",
     "PortMappings": [
         {
             "ContainerPort": 80,
