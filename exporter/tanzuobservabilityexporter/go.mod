@@ -7,5 +7,5 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/wavefronthq/wavefront-sdk-go v0.9.8
 	go.opentelemetry.io/collector v0.28.0
-	go.uber.org/zap v1.17.0
+	go.uber.org/zap v1.18.1
 )
