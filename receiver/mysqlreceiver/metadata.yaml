@@ -1,0 +1,166 @@
+name: mysqlreceiver
+
+labels:
+  buffer_pool_pages_state:
+    description: The buffer pool pages types
+    enum: [data, dirty, flushed, free, misc, total]
+labels:
+  buffer_pool_operations_state:
+    description: The buffer pool operations types
+    enum: [read_ahead_rnd, read_ahead, read_ahead_evicted, read_requests, reads, wait_free, write_requests]
+labels:
+  buffer_pool_size_state:
+    description: The buffer pool size types
+    enum: [data, dirty, size]
+labels:
+  command_state:
+    description: The command types
+    enum: [execute, close, fetch, prepare, reset, send_long_data]
+labels:
+  handler_state:
+    description: The handler types
+    enum: [commit, delete, discover, external_lock, mrr_init, prepare, read_first, read_key, read_last, read_next, read_prev, read_rnd, read_rnd_next, rollback, savepoint, savepoint_rollback, update, write]
+labels:
+  double_writes_state:
+    description: The doublewrite types
+    enum: [pages_written, writes]
+labels:
+  log_operations_state:
+    description: The log operation types
+    enum: [waits, write_requests, writes]
+labels:
+  operations_state:
+    description: The operation types
+    enum: [fsyncs, reads, writes]
+labels:
+  page_operations_state:
+    description: The page operation types
+    enum: [created, read, written]
+labels:
+  row_locks_state:
+    description: The row lock type
+    enum: [waits, time]
+labels:
+  row_operations_state:
+    description: The row operation type
+    enum: [deleted, inserted, read, updated]
+labels:
+  locks_state:
+    description: The table locks type
+    enum: [immediate, waited]
+labels:
+  sorts_state:
+    description: The sort count type
+    enum: [merge_passes, range, rows, scan]
+labels:
+  threads_state:
+    description: The thread count type
+    enum: [cached, connected, created, running]
+
+metrics:
+  mysql.buffer_pool_pages:
+    description: Buffer pool page count
+    unit: 1
+    data:
+      type: double gauge
+    labels: [buffer_pool_pages_state]
+  mysql.buffer_pool_operations:
+    description: Buffer pool operation count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [buffer_pool_operations_state]
+  mysql.buffer_pool_size:
+    description: Buffer pool size
+    unit: 1
+    data:
+      type: double gauge
+    labels: [buffer_pool_size_state]
+  mysql.commands:
+    description: MySQL command count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [command_state]
+  mysql.handlers:
+    description: MySQL handler count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [handler_state]
+  mysql.double_writes:
+    description: InnoDB doublewrite buffer count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [double_writes_state]
+  mysql.log_operations:
+    description: InndoDB log operation count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [log_operations_state]
+  mysql.operations:
+    description: InndoDB operation count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [operations_state]
+  mysql.page_operations:
+    description: InndoDB page operation count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [page_operations_state]
+  mysql.row_locks:
+    description: InndoDB row lock count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [row_locks_state]
+  mysql.row_operations:
+    description: InndoDB row operation count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [row_operations_state]
+  mysql.locks:
+    description: MySQL lock count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [locks_state]
+  mysql.sorts:
+    description: MySQL sort count
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [sorts_state]
+  mysql.threads:
+    description: Thread count
+    unit: 1
+    data:
+      type: double gauge
+    labels: [threads_state]
