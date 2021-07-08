@@ -4,16 +4,12 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"time"
 
-	// "time"
-
-	// "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mysqlreceiver/internal/metadata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mysqlreceiver/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/model/pdata"
 
-	//"go.opentelemetry.io/collector/receiver/scraperhelper"
-
-	//"go.opentelemetry.io/collector/consumer/simple"
 	"go.uber.org/zap"
 )
 
@@ -23,17 +19,6 @@ type mySQLScraper struct {
 	logger *zap.Logger
 	config *Config
 }
-
-// func newMySQLScraper(
-// 	logger *zap.Logger,
-// 	config *Config,
-// ) scraperhelper.Scraper {
-// 	sc := mySQLScraper{
-// 		logger: logger,
-// 		config: config,
-// 	}
-// 	return scraperhelper.NewResourceMetricsScraper(config.ID(), sc.scrape())
-// }
 
 func newMySQLScraper(
 	logger *zap.Logger,
@@ -72,207 +57,257 @@ func (m *mySQLScraper) shutdown(context.Context) error {
 }
 
 func (m *mySQLScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, error) {
-	m.logger.Error("Hello world")
-	// if m.client == nil {
-	// 	return pdata.ResourceMetricsSlice{}, errors.New("failed to connect to http client")
-	// }
 
-	// now := pdata.TimestampFromTime(time.Now())
-	// metrics := pdata.NewMetrics()
-	// ilm := metrics.ResourceMetrics().AppendEmpty().InstrumentationLibraryMetrics().AppendEmpty()
-	// ilm.InstrumentationLibrary().SetName("otel/mysql")
+	if m.client == nil {
+		return pdata.ResourceMetricsSlice{}, errors.New("failed to connect to http client")
+	}
 
-	// metrics := simple.Metrics{
-	// 	Metrics:   pdata.NewMetrics(),
-	// 	Timestamp: time.Now(),
-	// 	//MetricFactoriesByName:      metadata.M.FactoriesByName(),
-	// 	InstrumentationLibraryName: "otelcol/mysql",
-	// }
+	now := pdata.TimestampFromTime(time.Now())
+	metrics := pdata.NewMetrics()
+	ilm := metrics.ResourceMetrics().AppendEmpty().InstrumentationLibraryMetrics().AppendEmpty()
+	ilm.InstrumentationLibrary().SetName("otel/mysql")
 
-	// innodbStats, _ := m.client.getInnodbStats()
+	innodbStats, err := m.client.getInnodbStats()
 
-	// for _, stat := range innodbStats {
-	// 	switch stat.key {
-	// 	case "buffer_pool_size":
-	// 		// metrics.WithLabels(map[string]string{metadata.L.BufferPoolSizeState: "size"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolSize.Name(), parseFloat(stat.value))
-	// 		metric := ilm.Metrics().AppendEmpty()
-	// 		//initFunc(metric)
-	// 		dp := metric.DoubleGauge().DataPoints().AppendEmpty()
-	// 		dp.SetStartTimestamp(now)
-	// 		dp.SetValue(parseFloat(stat.value))
-	// 	}
-	// }
+	for _, stat := range innodbStats {
+		labels := pdata.NewStringMap()
+		switch stat.key {
+		case "buffer_pool_size":
+			labels.Insert(metadata.L.BufferPoolSizeState, "size")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		}
+	}
 
-	// for _, stat := range innodbStats {
-	// 	switch stat.key {
-	// 	case "buffer_pool_size":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolSizeState: "size"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolSize.Name(), parseFloat(stat.value))
-	// 	}
-	// }
+	if err != nil {
+		m.logger.Error("Failed to fetch InnoDB stats", zap.Error(err))
+		return pdata.ResourceMetricsSlice{}, err
+	}
 
-	// if err != nil {
-	// 	m.logger.Error("Failed to fetch InnoDB stats", zap.Error(err))
-	// 	return pdata.ResourceMetricsSlice{}, err
-	// }
+	globalStats, err := m.client.getGlobalStats()
+	if err != nil {
+		m.logger.Error("Failed to fetch global stats", zap.Error(err))
+		return pdata.ResourceMetricsSlice{}, err
+	}
 
-	// globalStats, err := m.client.getGlobalStats()
-	// if err != nil {
-	// 	m.logger.Error("Failed to fetch global stats", zap.Error(err))
-	// 	return pdata.ResourceMetricsSlice{}, err
-	// }
+	for _, stat := range globalStats {
+		labels := pdata.NewStringMap()
+		switch stat.key {
+		// buffer_pool_pages
+		case "Innodb_buffer_pool_pages_data":
+			labels.Insert(metadata.L.BufferPoolPagesState, "data")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		case "Innodb_buffer_pool_pages_dirty":
+			labels.Insert(metadata.L.BufferPoolPagesState, "dirty")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		case "Innodb_buffer_pool_pages_flushed":
+			labels.Insert(metadata.L.BufferPoolPagesState, "flushed")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		case "Innodb_buffer_pool_pages_free":
+			labels.Insert(metadata.L.BufferPoolPagesState, "free")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		case "Innodb_buffer_pool_pages_misc":
+			labels.Insert(metadata.L.BufferPoolPagesState, "misc")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		case "Innodb_buffer_pool_pages_total":
+			labels.Insert(metadata.L.BufferPoolPagesState, "total")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+			// 	// buffer_pool_operations
+		case "Innodb_buffer_pool_read_ahead_rnd":
+			labels.Insert(metadata.L.BufferPoolOperationsState, "read_ahead_rnd")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
 
-	// for _, stat := range globalStats {
-	// 	switch stat.key {
-	// 	// buffer_pool_pages
-	// 	case "Innodb_buffer_pool_pages_data":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolPagesState: "data"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolPages.Name(), parseFloat(stat.value))
-	// 	case "Innodb_buffer_pool_pages_dirty":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolPagesState: "dirty"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolPages.Name(), parseFloat(stat.value))
-	// 	case "Innodb_buffer_pool_pages_flushed":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolPagesState: "flushed"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolPages.Name(), parseFloat(stat.value))
-	// 	case "Innodb_buffer_pool_pages_free":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolPagesState: "free"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolPages.Name(), parseFloat(stat.value))
-	// 	case "Innodb_buffer_pool_pages_misc":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolPagesState: "misc"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolPages.Name(), parseFloat(stat.value))
-	// 	case "Innodb_buffer_pool_pages_total":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolPagesState: "total"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolPages.Name(), parseFloat(stat.value))
-	// 	// buffer_pool_operations
-	// 	case "Innodb_buffer_pool_read_ahead_rnd":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolOperationsState: "read_ahead_rnd"}).AddSumDataPoint(metadata.M.MysqlBufferPoolOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_buffer_pool_read_ahead":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolOperationsState: "read_ahead"}).AddSumDataPoint(metadata.M.MysqlBufferPoolOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_buffer_pool_read_ahead_evicted":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolOperationsState: "read_ahead_evicted"}).AddSumDataPoint(metadata.M.MysqlBufferPoolOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_buffer_pool_read_requests":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolOperationsState: "read_requests"}).AddSumDataPoint(metadata.M.MysqlBufferPoolOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_buffer_pool_reads":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolOperationsState: "reads"}).AddSumDataPoint(metadata.M.MysqlBufferPoolOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_buffer_pool_wait_free":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolOperationsState: "wait_free"}).AddSumDataPoint(metadata.M.MysqlBufferPoolOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_buffer_pool_write_requests":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolOperationsState: "write_requests"}).AddSumDataPoint(metadata.M.MysqlBufferPoolOperations.Name(), parseInt(stat.value))
-	// 	// buffer_pool_size
-	// 	case "Innodb_buffer_pool_bytes_data":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolSizeState: "data"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolSize.Name(), parseFloat(stat.value))
-	// 	case "Innodb_buffer_pool_bytes_dirty":
-	// 		metrics.WithLabels(map[string]string{metadata.L.BufferPoolSizeState: "dirty"}).AddDGaugeDataPoint(metadata.M.MysqlBufferPoolSize.Name(), parseFloat(stat.value))
-	// 	// commands
-	// 	case "Com_stmt_execute":
-	// 		metrics.WithLabels(map[string]string{metadata.L.CommandState: "execute"}).AddSumDataPoint(metadata.M.MysqlCommands.Name(), parseInt(stat.value))
-	// 	case "Com_stmt_close":
-	// 		metrics.WithLabels(map[string]string{metadata.L.CommandState: "close"}).AddSumDataPoint(metadata.M.MysqlCommands.Name(), parseInt(stat.value))
-	// 	case "Com_stmt_fetch":
-	// 		metrics.WithLabels(map[string]string{metadata.L.CommandState: "fetch"}).AddSumDataPoint(metadata.M.MysqlCommands.Name(), parseInt(stat.value))
-	// 	case "Com_stmt_prepare":
-	// 		metrics.WithLabels(map[string]string{metadata.L.CommandState: "prepare"}).AddSumDataPoint(metadata.M.MysqlCommands.Name(), parseInt(stat.value))
-	// 	case "Com_stmt_reset":
-	// 		metrics.WithLabels(map[string]string{metadata.L.CommandState: "reset"}).AddSumDataPoint(metadata.M.MysqlCommands.Name(), parseInt(stat.value))
-	// 	case "Com_stmt_send_long_data":
-	// 		metrics.WithLabels(map[string]string{metadata.L.CommandState: "send_long_data"}).AddSumDataPoint(metadata.M.MysqlCommands.Name(), parseInt(stat.value))
-	// 	// handlers
-	// 	case "Handler_commit":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "commit"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_delete":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "delete"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_discover":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "discover"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_external_lock":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "lock"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_mrr_init":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "mrr_init"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_prepare":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "prepare"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_read_first":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "read_first"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_read_key":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "read_key"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_read_last":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "read_last"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_read_next":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "read_next"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_read_prev":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "read_prev"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_read_rnd":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "read_rnd"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_read_rnd_next":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "read_rnd_next"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_rollback":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "rollback"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_savepoint":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "savepoint"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_savepoint_rollback":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "savepoint_rollback"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_update":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "update"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	case "Handler_write":
-	// 		metrics.WithLabels(map[string]string{metadata.L.HandlerState: "write"}).AddSumDataPoint(metadata.M.MysqlHandlers.Name(), parseInt(stat.value))
-	// 	// double_writes
-	// 	case "Innodb_dblwr_pages_written":
-	// 		metrics.WithLabels(map[string]string{metadata.L.DoubleWritesState: "written"}).AddSumDataPoint(metadata.M.MysqlDoubleWrites.Name(), parseInt(stat.value))
-	// 	case "Innodb_dblwr_writes":
-	// 		metrics.WithLabels(map[string]string{metadata.L.DoubleWritesState: "writes"}).AddSumDataPoint(metadata.M.MysqlDoubleWrites.Name(), parseInt(stat.value))
-	// 	// log_operations
-	// 	case "Innodb_log_waits":
-	// 		metrics.WithLabels(map[string]string{metadata.L.LogOperationsState: "waits"}).AddSumDataPoint(metadata.M.MysqlLogOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_log_write_requests":
-	// 		metrics.WithLabels(map[string]string{metadata.L.LogOperationsState: "requests"}).AddSumDataPoint(metadata.M.MysqlLogOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_log_writes":
-	// 		metrics.WithLabels(map[string]string{metadata.L.LogOperationsState: "writes"}).AddSumDataPoint(metadata.M.MysqlLogOperations.Name(), parseInt(stat.value))
-	// 	// operations
-	// 	case "Innodb_data_fsyncs":
-	// 		metrics.WithLabels(map[string]string{metadata.L.OperationsState: "fsyncs"}).AddSumDataPoint(metadata.M.MysqlOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_data_reads":
-	// 		metrics.WithLabels(map[string]string{metadata.L.OperationsState: "reads"}).AddSumDataPoint(metadata.M.MysqlOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_data_writes":
-	// 		metrics.WithLabels(map[string]string{metadata.L.OperationsState: "writes"}).AddSumDataPoint(metadata.M.MysqlOperations.Name(), parseInt(stat.value))
-	// 	// page_operations
-	// 	case "Innodb_pages_created":
-	// 		metrics.WithLabels(map[string]string{metadata.L.PageOperationsState: "created"}).AddSumDataPoint(metadata.M.MysqlPageOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_pages_read":
-	// 		metrics.WithLabels(map[string]string{metadata.L.PageOperationsState: "read"}).AddSumDataPoint(metadata.M.MysqlPageOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_pages_written":
-	// 		metrics.WithLabels(map[string]string{metadata.L.PageOperationsState: "written"}).AddSumDataPoint(metadata.M.MysqlPageOperations.Name(), parseInt(stat.value))
-	// 	// row_locks
-	// 	case "Innodb_row_lock_waits":
-	// 		metrics.WithLabels(map[string]string{metadata.L.RowLocksState: "waits"}).AddSumDataPoint(metadata.M.MysqlRowLocks.Name(), parseInt(stat.value))
-	// 	case "Innodb_row_lock_time":
-	// 		metrics.WithLabels(map[string]string{metadata.L.RowLocksState: "time"}).AddSumDataPoint(metadata.M.MysqlRowLocks.Name(), parseInt(stat.value))
-	// 	// row_operations
-	// 	case "Innodb_rows_deleted":
-	// 		metrics.WithLabels(map[string]string{metadata.L.RowOperationsState: "deleted"}).AddSumDataPoint(metadata.M.MysqlRowOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_rows_inserted":
-	// 		metrics.WithLabels(map[string]string{metadata.L.RowOperationsState: "inserted"}).AddSumDataPoint(metadata.M.MysqlRowOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_rows_read":
-	// 		metrics.WithLabels(map[string]string{metadata.L.RowOperationsState: "read"}).AddSumDataPoint(metadata.M.MysqlRowOperations.Name(), parseInt(stat.value))
-	// 	case "Innodb_rows_updated":
-	// 		metrics.WithLabels(map[string]string{metadata.L.RowOperationsState: "updated"}).AddSumDataPoint(metadata.M.MysqlRowOperations.Name(), parseInt(stat.value))
-	// 	// locks
-	// 	case "Table_locks_immediate":
-	// 		metrics.WithLabels(map[string]string{metadata.L.LocksState: "immediate"}).AddSumDataPoint(metadata.M.MysqlLocks.Name(), parseInt(stat.value))
-	// 	case "Table_locks_waited":
-	// 		metrics.WithLabels(map[string]string{metadata.L.LocksState: "waited"}).AddSumDataPoint(metadata.M.MysqlLocks.Name(), parseInt(stat.value))
-	// 	// sorts
-	// 	case "Sort_merge_passes":
-	// 		metrics.WithLabels(map[string]string{metadata.L.SortsState: "merge_passes"}).AddSumDataPoint(metadata.M.MysqlSorts.Name(), parseInt(stat.value))
-	// 	case "Sort_range":
-	// 		metrics.WithLabels(map[string]string{metadata.L.SortsState: "range"}).AddSumDataPoint(metadata.M.MysqlSorts.Name(), parseInt(stat.value))
-	// 	case "Sort_rows":
-	// 		metrics.WithLabels(map[string]string{metadata.L.SortsState: "rows"}).AddSumDataPoint(metadata.M.MysqlSorts.Name(), parseInt(stat.value))
-	// 	case "Sort_scan":
-	// 		metrics.WithLabels(map[string]string{metadata.L.SortsState: "scan"}).AddSumDataPoint(metadata.M.MysqlSorts.Name(), parseInt(stat.value))
-	// 	// threads
-	// 	case "Threads_cached":
-	// 		metrics.WithLabels(map[string]string{metadata.L.ThreadsState: "cached"}).AddDGaugeDataPoint(metadata.M.MysqlThreads.Name(), parseFloat(stat.value))
-	// 	case "Threads_connected":
-	// 		metrics.WithLabels(map[string]string{metadata.L.ThreadsState: "connected"}).AddDGaugeDataPoint(metadata.M.MysqlThreads.Name(), parseFloat(stat.value))
-	// 	case "Threads_created":
-	// 		metrics.WithLabels(map[string]string{metadata.L.ThreadsState: "created"}).AddDGaugeDataPoint(metadata.M.MysqlThreads.Name(), parseFloat(stat.value))
-	// 	case "Threads_running":
-	// 		metrics.WithLabels(map[string]string{metadata.L.ThreadsState: "running"}).AddDGaugeDataPoint(metadata.M.MysqlThreads.Name(), parseFloat(stat.value))
-	// 	}
-	// }
-	return pdata.NewResourceMetricsSlice(), nil
-	//return metrics.ResourceMetrics(), nil
+		case "Innodb_buffer_pool_read_ahead":
+			labels.Insert(metadata.L.BufferPoolOperationsState, "read_ahead")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_buffer_pool_read_ahead_evicted":
+			labels.Insert(metadata.L.BufferPoolOperationsState, "read_ahead_evicted")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_buffer_pool_read_requests":
+			labels.Insert(metadata.L.BufferPoolOperationsState, "read_requests")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_buffer_pool_reads":
+			labels.Insert(metadata.L.BufferPoolOperationsState, "reads")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_buffer_pool_wait_free":
+			labels.Insert(metadata.L.BufferPoolOperationsState, "wait_free")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_buffer_pool_write_requests":
+			labels.Insert(metadata.L.BufferPoolOperationsState, "write_requests")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// buffer_pool_size
+		case "Innodb_buffer_pool_bytes_data":
+			labels.Insert(metadata.L.BufferPoolSizeState, "data")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		case "Innodb_buffer_pool_bytes_dirty":
+			labels.Insert(metadata.L.BufferPoolSizeState, "dirty")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+			// 	// commands
+		case "Com_stmt_execute":
+			labels.Insert(metadata.L.CommandState, "execute")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Com_stmt_close":
+			labels.Insert(metadata.L.CommandState, "close")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Com_stmt_fetch":
+			labels.Insert(metadata.L.CommandState, "fetch")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Com_stmt_prepare":
+			labels.Insert(metadata.L.CommandState, "prepare")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Com_stmt_reset":
+			labels.Insert(metadata.L.CommandState, "reset")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Com_stmt_send_long_data":
+			labels.Insert(metadata.L.CommandState, "send_long_data")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// handlers
+		case "Handler_commit":
+			labels.Insert(metadata.L.HandlerState, "commit")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_delete":
+			labels.Insert(metadata.L.HandlerState, "delete")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_discover":
+			labels.Insert(metadata.L.HandlerState, "discover")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_external_lock":
+			labels.Insert(metadata.L.HandlerState, "lock")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_mrr_init":
+			labels.Insert(metadata.L.HandlerState, "mrr_init")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_prepare":
+			labels.Insert(metadata.L.HandlerState, "prepare")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_read_first":
+			labels.Insert(metadata.L.HandlerState, "read_first")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_read_key":
+			labels.Insert(metadata.L.HandlerState, "read_key")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_read_last":
+			labels.Insert(metadata.L.HandlerState, "read_last")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_read_next":
+			labels.Insert(metadata.L.HandlerState, "read_next")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_read_prev":
+			labels.Insert(metadata.L.HandlerState, "read_prev")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_read_rnd":
+			labels.Insert(metadata.L.HandlerState, "read_rnd")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_read_rnd_next":
+			labels.Insert(metadata.L.HandlerState, "read_rnd_next")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_rollback":
+			labels.Insert(metadata.L.HandlerState, "rollback")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_savepoint":
+			labels.Insert(metadata.L.HandlerState, "savepoint")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_savepoint_rollback":
+			labels.Insert(metadata.L.HandlerState, "savepoint_rollback")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_update":
+			labels.Insert(metadata.L.HandlerState, "update")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Handler_write":
+			labels.Insert(metadata.L.HandlerState, "write")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// double_writes
+		case "Innodb_dblwr_pages_written":
+			labels.Insert(metadata.L.DoubleWritesState, "written")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_dblwr_writes":
+			labels.Insert(metadata.L.DoubleWritesState, "writes")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// log_operations
+		case "Innodb_log_waits":
+			labels.Insert(metadata.L.LogOperationsState, "waits")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_log_write_requests":
+			labels.Insert(metadata.L.LogOperationsState, "requests")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_log_writes":
+			labels.Insert(metadata.L.LogOperationsState, "writes")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// operations
+		case "Innodb_data_fsyncs":
+			labels.Insert(metadata.L.OperationsState, "fsyncs")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_data_reads":
+			labels.Insert(metadata.L.OperationsState, "reads")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_data_writes":
+			labels.Insert(metadata.L.OperationsState, "writes")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// page_operations
+		case "Innodb_pages_created":
+			labels.Insert(metadata.L.PageOperationsState, "created")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_pages_read":
+			labels.Insert(metadata.L.PageOperationsState, "read")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_pages_written":
+			labels.Insert(metadata.L.PageOperationsState, "written")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// row_locks
+		case "Innodb_row_lock_waits":
+			labels.Insert(metadata.L.RowLocksState, "waits")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_row_lock_time":
+			labels.Insert(metadata.L.RowLocksState, "time")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// row_operations
+		case "Innodb_rows_deleted":
+			labels.Insert(metadata.L.RowOperationsState, "deleted")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_rows_inserted":
+			labels.Insert(metadata.L.RowOperationsState, "inserted")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_rows_read":
+			labels.Insert(metadata.L.RowOperationsState, "read")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Innodb_rows_updated":
+			labels.Insert(metadata.L.RowOperationsState, "updated")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// locks
+		case "Table_locks_immediate":
+			labels.Insert(metadata.L.LocksState, "immediate")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Table_locks_waited":
+			labels.Insert(metadata.L.LocksState, "waited")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// sorts
+		case "Sort_merge_passes":
+			labels.Insert(metadata.L.SortsState, "merge_passes")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Sort_range":
+			labels.Insert(metadata.L.SortsState, "range")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Sort_rows":
+			labels.Insert(metadata.L.SortsState, "rows")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+		case "Sort_scan":
+			labels.Insert(metadata.L.SortsState, "scan")
+			addIntSum(ilm.Metrics(), stat.key, now, labels, parseInt(stat.value))
+			// 	// threads
+		case "Threads_cached":
+			labels.Insert(metadata.L.ThreadsState, "cached")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		case "Threads_connected":
+			labels.Insert(metadata.L.ThreadsState, "connected")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		case "Threads_created":
+			labels.Insert(metadata.L.ThreadsState, "created")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		case "Threads_running":
+			labels.Insert(metadata.L.ThreadsState, "running")
+			addDoubleGauge(ilm.Metrics(), stat.key, now, labels, parseFloat(stat.value))
+		}
+	}
+	return metrics.ResourceMetrics(), nil
 }
 
 // parseFloat converts string to float64.
@@ -285,4 +320,24 @@ func parseFloat(value string) float64 {
 func parseInt(value string) int64 {
 	i, _ := strconv.ParseInt(value, 10, 64)
 	return i
+}
+
+func addDoubleGauge(ms pdata.MetricSlice, name string, now pdata.Timestamp, labels pdata.StringMap, value float64) {
+	m := ms.AppendEmpty()
+	m.SetName(name)
+	m.SetDataType(pdata.MetricDataTypeDoubleGauge)
+	dp := m.DoubleGauge().DataPoints().AppendEmpty()
+	dp.SetTimestamp(now)
+	dp.SetValue(value)
+	labels.CopyTo(dp.LabelsMap())
+}
+
+func addIntSum(ms pdata.MetricSlice, name string, now pdata.Timestamp, labels pdata.StringMap, value int64) {
+	m := ms.AppendEmpty()
+	m.SetName(name)
+	m.SetDataType(pdata.MetricDataTypeIntSum)
+	dp := m.IntSum().DataPoints().AppendEmpty()
+	dp.SetTimestamp(now)
+	dp.SetValue(value)
+	labels.CopyTo(dp.LabelsMap())
 }
