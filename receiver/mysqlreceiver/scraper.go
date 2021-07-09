@@ -31,14 +31,13 @@ func newMySQLScraper(
 }
 
 func (m *mySQLScraper) start(_ context.Context, host component.Host) error {
-	if m.config.User == "" || m.config.Password == "" || m.config.Addr == "" || m.config.Port == 0 {
+	if m.config.User == "" || m.config.Password == "" || m.config.Endpoint == "" {
 		return errors.New("missing database configuration parameters")
 	}
 	client, err := newMySQLClient(mySQLConfig{
-		user: m.config.User,
-		pass: m.config.Password,
-		addr: m.config.Addr,
-		port: m.config.Port,
+		user:     m.config.User,
+		pass:     m.config.Password,
+		endpoint: m.config.Endpoint,
 	})
 	if err != nil {
 		return err

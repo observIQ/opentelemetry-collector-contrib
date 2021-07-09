@@ -3,8 +3,7 @@ receivers:
     collection_interval: 10s
     user: otel
     password: otel
-    address: 127.0.0.1
-    port: 3306
+    endpoint: "localhost:3306"
 
 processors:
 

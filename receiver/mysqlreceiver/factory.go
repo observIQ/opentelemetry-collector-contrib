@@ -24,7 +24,6 @@ import (
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
 
-	// "go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver/receiverhelper"
 	"go.opentelemetry.io/collector/receiver/scraperhelper"
 )
@@ -60,15 +59,9 @@ func createMetricsReceiver(
 	ns := newMySQLScraper(params.Logger, cfg)
 	scraper := scraperhelper.NewResourceMetricsScraper(cfg.ID(), ns.scrape, scraperhelper.WithStart(ns.start),
 		scraperhelper.WithShutdown(ns.shutdown))
-	//scraper := scraperhelper.NewResourceMetricsScraper(cfg.ID(), ns.scrape)
 
 	return scraperhelper.NewScraperControllerReceiver(
 		&cfg.ScraperControllerSettings, params.Logger, consumer,
 		scraperhelper.AddScraper(scraper),
 	)
-
-	// return scraperhelper.NewScraperControllerReceiver(
-	// 	&cfg.ScraperControllerSettings, params.Logger,
-	// 	scraperhelper.AddResourceMetricsScraper(scraper),
-	// )
 }

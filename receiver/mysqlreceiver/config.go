@@ -8,6 +8,5 @@ type Config struct {
 	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
 	User                                    string `mapstructure:"user"`
 	Password                                string `mapstructure:"password"`
-	Addr                                    string `mapstructure:"address"`
-	Port                                    int    `mapstructure:"port"`
+	Endpoint                                string `mapstructure:"endpoint"`
 }

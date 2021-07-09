@@ -23,14 +23,13 @@ type mySQLClient struct {
 var _ client = (*mySQLClient)(nil)
 
 type mySQLConfig struct {
-	user string
-	pass string
-	addr string
-	port int
+	user     string
+	pass     string
+	endpoint string
 }
 
 func newMySQLClient(conf mySQLConfig) (client, error) {
-	connStr := fmt.Sprintf("%s:%s@tcp(%s:%d)/", conf.user, conf.pass, conf.addr, conf.port)
+	connStr := fmt.Sprintf("%s:%s@tcp(%s)/", conf.user, conf.pass, conf.endpoint)
 
 	db, err := sql.Open("mysql", connStr)
 	if err != nil {

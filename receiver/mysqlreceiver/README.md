@@ -18,8 +18,7 @@ The following settings are required to create a database connection:
 
 - `user`
 - `password`
-- `address`
-- `port`
+- `endpoint`
 
 The following settings are optional:
 
@@ -38,8 +37,7 @@ receivers:
     collection_interval: 10s
     user: otel
     password: otel
-    address: 127.0.0.1
-    port: 3306
+    endpoint: "localhost:3306"
 ```
 
 The full list of settings exposed for this receiver are documented [here](./config.go)

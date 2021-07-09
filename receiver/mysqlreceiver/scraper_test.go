@@ -17,8 +17,7 @@ func TestScraper(t *testing.T) {
 	sc := newMySQLScraper(zap.NewNop(), &Config{
 		User:     "otel",
 		Password: "otel",
-		Addr:     "127.0.0.1",
-		Port:     3306,
+		Endpoint: "localhost:3306",
 	})
 	sc.client = &mysqlMock
 
@@ -46,13 +45,10 @@ func TestScraper(t *testing.T) {
 	for i := 0; i < ms.Len(); i++ {
 		m := ms.At(i)
 
-		fmt.Println(m.DataType())
 		switch m.DataType() {
 		case pdata.MetricDataTypeDoubleGauge:
-			fmt.Println(m.Name(), m.DoubleGauge().DataPoints().At(0).Value())
 			floatMetrics[m.Name()] = m.DoubleGauge().DataPoints().At(0).Value()
 		case pdata.MetricDataTypeIntSum:
-			fmt.Println(m.Name(), m.IntSum().DataPoints().At(0).Value())
 			intMetrics[m.Name()] = m.IntSum().DataPoints().At(0).Value()
 		default:
 			require.Nil(t, m.Name(), fmt.Sprintf("metrics %s not expected", m.Name()))
@@ -138,31 +134,23 @@ func TestScrapeErrorBadConfig(t *testing.T) {
 		desc     string
 		user     string
 		password string
-		address  string
-		port     int64
+		endpoint string
 	}{
 		{
 			desc:     "no user",
 			password: "otel",
-			address:  "127.0.0.1",
-			port:     3306,
+			endpoint: "localhost:3306",
 		},
 		{
-			user:    "",
-			address: "127.0.0.1",
-			port:    3306,
+			desc:     "no password",
+			user:     "otel",
+			endpoint: "localhost:3306",
 		},
 		{
-			desc:     "no address",
-			user:     "",
+			desc:     "no endpoint",
+			user:     "otel",
 			password: "otel",
-			port:     3306,
-		},
-		{
-			desc:     "no port",
-			user:     "",
-			password: "otel",
-			address:  "127.0.0.1",
+			endpoint: "",
 		},
 	}
 	for _, tC := range testCases {
@@ -171,8 +159,7 @@ func TestScrapeErrorBadConfig(t *testing.T) {
 			sc := newMySQLScraper(zap.NewNop(), &Config{
 				User:     tC.user,
 				Password: tC.password,
-				Addr:     tC.address,
-				Port:     int(tC.port),
+				Endpoint: tC.endpoint,
 			})
 			sc.client = &mysqlMock
 			err := sc.start(context.Background(), componenttest.NewNopHost())
@@ -185,8 +172,7 @@ func TestScrapeErrorBadConfig(t *testing.T) {
 		sc := newMySQLScraper(zap.NewNop(), &Config{
 			User:     "otel",
 			Password: "otel",
-			Addr:     "127.0.0.1",
-			Port:     3306,
+			Endpoint: "localhost:3306",
 		})
 		sc.client = &mysqlMock
 		err := sc.start(context.Background(), componenttest.NewNopHost())
