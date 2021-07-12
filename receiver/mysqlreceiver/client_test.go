@@ -19,24 +19,24 @@ func newFakeClient() *fakeClient {
 	return &fakeClient{}
 }
 
-func readFile(fname string) ([]Stat, error) {
-	var stats = []Stat{}
+func readFile(fname string) ([]*Stat, error) {
+	var stats = []*Stat{}
 	file, err := os.Open(path.Join("testdata", fname+".txt"))
 	if err != nil {
-		return stats, err
+		return nil, err
 	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		text := strings.Split(scanner.Text(), "\t")
-		stats = append(stats, Stat{key: text[0], value: text[1]})
+		stats = append(stats, &Stat{key: text[0], value: text[1]})
 
 	}
 	return stats, nil
 }
 
-func (c *fakeClient) getGlobalStats() ([]Stat, error) {
+func (c *fakeClient) getGlobalStats() ([]*Stat, error) {
 	return readFile("global_stats")
 }
 
@@ -48,7 +48,7 @@ func TestGlobalStats(t *testing.T) {
 	require.False(t, client.Closed())
 }
 
-func (c *fakeClient) getInnodbStats() ([]Stat, error) {
+func (c *fakeClient) getInnodbStats() ([]*Stat, error) {
 	return readFile("innodb_stats")
 }
 

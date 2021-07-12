@@ -3,14 +3,13 @@ package mysqlreceiver
 import (
 	"database/sql"
 	"fmt"
-	"log"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 type client interface {
-	getGlobalStats() ([]Stat, error)
-	getInnodbStats() ([]Stat, error)
+	getGlobalStats() ([]*Stat, error)
+	getInnodbStats() ([]*Stat, error)
 	Closed() bool
 	Close() error
 }
@@ -28,7 +27,7 @@ type mySQLConfig struct {
 	endpoint string
 }
 
-func newMySQLClient(conf mySQLConfig) (client, error) {
+func newMySQLClient(conf mySQLConfig) (*mySQLClient, error) {
 	connStr := fmt.Sprintf("%s:%s@tcp(%s)/", conf.user, conf.pass, conf.endpoint)
 
 	db, err := sql.Open("mysql", connStr)
@@ -41,20 +40,20 @@ func newMySQLClient(conf mySQLConfig) (client, error) {
 	}, nil
 }
 
-func (c *mySQLClient) getGlobalStats() ([]Stat, error) {
+func (c *mySQLClient) getGlobalStats() ([]*Stat, error) {
 	query := "SHOW GLOBAL STATUS"
-	result, err := execQuery(*c, query)
+	result, err := Query(*c, query)
 	if err != nil {
-		return []Stat{}, err
+		return nil, err
 	}
 	return result, err
 }
 
-func (c *mySQLClient) getInnodbStats() ([]Stat, error) {
+func (c *mySQLClient) getInnodbStats() ([]*Stat, error) {
 	query := "SELECT name, count FROM information_schema.innodb_metrics WHERE name LIKE '%buffer_pool_size%';"
-	result, err := execQuery(*c, query)
+	result, err := Query(*c, query)
 	if err != nil {
-		return []Stat{}, err
+		return nil, err
 	}
 	return result, err
 }
@@ -64,46 +63,19 @@ type Stat struct {
 	value string
 }
 
-func execQuery(c mySQLClient, query string) ([]Stat, error) {
+func Query(c mySQLClient, query string) ([]*Stat, error) {
 	rows, err := c.client.Query(query)
 	if err != nil {
-		log.Fatal(err)
-		return []Stat{}, err
+		return nil, err
 	}
-
-	cols, err := rows.Columns()
-	if err != nil {
-		return []Stat{}, err
-	}
-
-	if len(cols) != 2 { // expected columns are 2: key and value.
-		return []Stat{}, fmt.Errorf("expected 2 columns from query, got %d", len(cols))
-	}
-
-	rawResult := make([][]byte, len(cols))
-	stats := []Stat{}
-
-	dest := make([]interface{}, len(cols)) // A temporary interface{} slice
-	for i, _ := range rawResult {
-		dest[i] = &rawResult[i] // Put pointers to each string in the interface slice
-	}
-
+	defer rows.Close()
+	stats := make([]*Stat, 0)
 	for rows.Next() {
-		err = rows.Scan(dest...)
-		if err != nil {
-			return []Stat{}, err
+		var stat Stat
+		if err := rows.Scan(&stat.key, &stat.value); err != nil {
+			return nil, err
 		}
-
-		stat := Stat{}
-		for i, raw := range rawResult {
-			if i == 0 {
-				stat.key = string(raw)
-			}
-			if i == 1 {
-				stat.value = string(raw)
-			}
-		}
-		stats = append(stats, stat)
+		stats = append(stats, &stat)
 	}
 
 	return stats, nil
