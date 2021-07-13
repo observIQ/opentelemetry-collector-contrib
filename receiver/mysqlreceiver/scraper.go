@@ -30,6 +30,7 @@ func newMySQLScraper(
 	}
 }
 
+// start starts the scraper by initializing the db client connection.
 func (m *mySQLScraper) start(_ context.Context, host component.Host) error {
 	if m.config.User == "" || m.config.Password == "" || m.config.Endpoint == "" {
 		return errors.New("missing database configuration parameters")
@@ -47,6 +48,7 @@ func (m *mySQLScraper) start(_ context.Context, host component.Host) error {
 	return nil
 }
 
+// shutdown closes open connections.
 func (m *mySQLScraper) shutdown(context.Context) error {
 	if !m.client.Closed() {
 		m.logger.Info("gracefully shutdown")
@@ -55,6 +57,7 @@ func (m *mySQLScraper) shutdown(context.Context) error {
 	return nil
 }
 
+// scrape scrapes the mysql db metric stats, transforms them and labels them into a metric slices.
 func (m *mySQLScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, error) {
 
 	if m.client == nil {
@@ -66,8 +69,8 @@ func (m *mySQLScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, erro
 	ilm := metrics.ResourceMetrics().AppendEmpty().InstrumentationLibraryMetrics().AppendEmpty()
 	ilm.InstrumentationLibrary().SetName("otel/mysql")
 
+	// collect innodb metrics.
 	innodbStats, err := m.client.getInnodbStats()
-
 	for _, stat := range innodbStats {
 		labels := pdata.NewStringMap()
 		switch stat.key {
@@ -76,12 +79,12 @@ func (m *mySQLScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, erro
 			addDoubleGauge(ilm.Metrics(), metadata.M.MysqlBufferPoolSize.Name(), now, labels, parseFloat(stat.value))
 		}
 	}
-
 	if err != nil {
 		m.logger.Error("Failed to fetch InnoDB stats", zap.Error(err))
 		return pdata.ResourceMetricsSlice{}, err
 	}
 
+	// collect global status metrics.
 	globalStats, err := m.client.getGlobalStats()
 	if err != nil {
 		m.logger.Error("Failed to fetch global stats", zap.Error(err))
@@ -321,6 +324,7 @@ func parseInt(value string) int64 {
 	return i
 }
 
+// addDoubleGauge adds an double gauge with a label to the metric slice.
 func addDoubleGauge(ms pdata.MetricSlice, name string, now pdata.Timestamp, labels pdata.StringMap, value float64) {
 	m := ms.AppendEmpty()
 	m.SetName(name)
@@ -331,6 +335,7 @@ func addDoubleGauge(ms pdata.MetricSlice, name string, now pdata.Timestamp, labe
 	labels.CopyTo(dp.LabelsMap())
 }
 
+// addIntSum adds an integer sum with a label to the metric slice.
 func addIntSum(ms pdata.MetricSlice, name string, now pdata.Timestamp, labels pdata.StringMap, value int64) {
 	m := ms.AppendEmpty()
 	m.SetName(name)
