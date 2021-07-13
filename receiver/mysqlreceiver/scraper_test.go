@@ -2,13 +2,11 @@ package mysqlreceiver
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mysqlreceiver/internal/metadata"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
-	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
 )
 
@@ -20,9 +18,6 @@ func TestScraper(t *testing.T) {
 		Endpoint: "localhost:3306",
 	})
 	sc.client = &mysqlMock
-
-	// err := sc.start(context.Background(), componenttest.NewNopHost())
-	// require.NoError(t, err)
 
 	rms, err := sc.scrape(context.Background())
 	require.Nil(t, err)
@@ -39,94 +34,28 @@ func TestScraper(t *testing.T) {
 	require.Equal(t, 67, ms.Len())
 	require.Equal(t, 14, len(metadata.M.Names()))
 
-	floatMetrics := map[string]float64{}
-	intMetrics := map[string]int64{}
+	metricsCount := map[string]int{}
 
 	for i := 0; i < ms.Len(); i++ {
 		m := ms.At(i)
-
-		switch m.DataType() {
-		case pdata.MetricDataTypeDoubleGauge:
-			floatMetrics[m.Name()] = m.DoubleGauge().DataPoints().At(0).Value()
-		case pdata.MetricDataTypeIntSum:
-			intMetrics[m.Name()] = m.IntSum().DataPoints().At(0).Value()
-		default:
-			require.Nil(t, m.Name(), fmt.Sprintf("metrics %s not expected", m.Name()))
-		}
+		metricsCount[m.Name()] += 1
 	}
-
-	require.Equal(t, 13, len(floatMetrics))
-	require.Equal(t, map[string]float64{
-		"Innodb_buffer_pool_bytes_data":    1.6072704e+07,
-		"Innodb_buffer_pool_bytes_dirty":   0,
-		"Innodb_buffer_pool_pages_data":    981,
-		"Innodb_buffer_pool_pages_dirty":   0,
-		"Innodb_buffer_pool_pages_flushed": 168,
-		"Innodb_buffer_pool_pages_free":    7207,
-		"Innodb_buffer_pool_pages_misc":    4,
-		"Innodb_buffer_pool_pages_total":   8192,
-		"Threads_cached":                   0,
-		"Threads_connected":                1,
-		"Threads_created":                  1,
-		"Threads_running":                  2,
-		"buffer_pool_size":                 1.34217728e+08}, floatMetrics)
-
-	require.Equal(t, map[string]int64{
-		"Com_stmt_close":                        0,
-		"Com_stmt_execute":                      0,
-		"Com_stmt_fetch":                        0,
-		"Com_stmt_prepare":                      0,
-		"Com_stmt_reset":                        0,
-		"Com_stmt_send_long_data":               0,
-		"Handler_commit":                        564,
-		"Handler_delete":                        0,
-		"Handler_discover":                      0,
-		"Handler_external_lock":                 7127,
-		"Handler_mrr_init":                      0,
-		"Handler_prepare":                       0,
-		"Handler_read_first":                    52,
-		"Handler_read_key":                      1680,
-		"Handler_read_last":                     0,
-		"Handler_read_next":                     3960,
-		"Handler_read_prev":                     0,
-		"Handler_read_rnd":                      0,
-		"Handler_read_rnd_next":                 505063,
-		"Handler_rollback":                      0,
-		"Handler_savepoint":                     0,
-		"Handler_savepoint_rollback":            0,
-		"Handler_update":                        315,
-		"Handler_write":                         256734,
-		"Innodb_buffer_pool_read_ahead":         0,
-		"Innodb_buffer_pool_read_ahead_evicted": 0,
-		"Innodb_buffer_pool_read_ahead_rnd":     0,
-		"Innodb_buffer_pool_read_requests":      14837,
-		"Innodb_buffer_pool_reads":              838,
-		"Innodb_buffer_pool_wait_free":          0,
-		"Innodb_buffer_pool_write_requests":     1669,
-		"Innodb_data_fsyncs":                    46,
-		"Innodb_data_reads":                     860,
-		"Innodb_data_writes":                    215,
-		"Innodb_dblwr_pages_written":            27,
-		"Innodb_dblwr_writes":                   8,
-		"Innodb_log_waits":                      0,
-		"Innodb_log_write_requests":             646,
-		"Innodb_log_writes":                     14,
-		"Innodb_pages_created":                  144,
-		"Innodb_pages_read":                     837,
-		"Innodb_pages_written":                  168,
-		"Innodb_row_lock_time":                  0,
-		"Innodb_row_lock_waits":                 0,
-		"Innodb_rows_deleted":                   0,
-		"Innodb_rows_inserted":                  0,
-		"Innodb_rows_read":                      0,
-		"Innodb_rows_updated":                   0,
-		"Sort_merge_passes":                     0,
-		"Sort_range":                            0,
-		"Sort_rows":                             0,
-		"Sort_scan":                             0,
-		"Table_locks_immediate":                 521,
-		"Table_locks_waited":                    0,
-	}, intMetrics)
+	require.Equal(t, map[string]int{
+		"mysql.buffer_pool_operations": 7,
+		"mysql.buffer_pool_pages":      6,
+		"mysql.buffer_pool_size":       3,
+		"mysql.commands":               6,
+		"mysql.double_writes":          2,
+		"mysql.handlers":               18,
+		"mysql.locks":                  2,
+		"mysql.log_operations":         3,
+		"mysql.operations":             3,
+		"mysql.page_operations":        3,
+		"mysql.row_locks":              2,
+		"mysql.row_operations":         4,
+		"mysql.sorts":                  4,
+		"mysql.threads":                4,
+	}, metricsCount)
 }
 
 func TestScrapeErrorBadConfig(t *testing.T) {
