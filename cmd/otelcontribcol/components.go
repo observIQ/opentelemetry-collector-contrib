@@ -128,7 +128,7 @@ func components() (component.Factories, error) {
 		kafkametricsreceiver.NewFactory(),
 		k8sclusterreceiver.NewFactory(),
 		kubeletstatsreceiver.NewFactory(),
-		mysqlreceiver.NewFactory(),		
+		mysqlreceiver.NewFactory(),
 		prometheusexecreceiver.NewFactory(),
 		receivercreator.NewFactory(),
 		redisreceiver.NewFactory(),
