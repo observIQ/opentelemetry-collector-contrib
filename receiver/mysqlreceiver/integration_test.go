@@ -74,7 +74,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 	ilm := ilms.At(0)
 	ms := ilm.Metrics()
 
-	require.Equal(t, 66, ms.Len()) // TODO: should be 67, investigate why innodb stats are not being collected.
+	require.Equal(t, 67, ms.Len())
 	require.Equal(t, 14, len(metadata.M.Names()))
 
 	metricsCount := map[string]int{}
@@ -87,7 +87,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 	require.Equal(t, map[string]int{
 		"mysql.buffer_pool_operations": 7,
 		"mysql.buffer_pool_pages":      6,
-		"mysql.buffer_pool_size":       2,
+		"mysql.buffer_pool_size":       3,
 		"mysql.commands":               6,
 		"mysql.double_writes":          2,
 		"mysql.handlers":               18,
