@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	// registers the mysql driver
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -97,15 +98,15 @@ func Query(c mySQLClient, query string) ([]*Stat, error) {
 	return stats, nil
 }
 
-func (m *mySQLClient) Closed() bool {
-	return m.closed
+func (c *mySQLClient) Closed() bool {
+	return c.closed
 }
 
-func (m *mySQLClient) Close() error {
-	err := m.client.Close()
+func (c *mySQLClient) Close() error {
+	err := c.client.Close()
 	if err != nil {
 		return err
 	}
-	m.closed = true
+	c.closed = true
 	return nil
 }

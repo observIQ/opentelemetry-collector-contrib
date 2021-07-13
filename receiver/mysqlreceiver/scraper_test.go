@@ -53,7 +53,7 @@ func TestScraper(t *testing.T) {
 
 	for i := 0; i < ms.Len(); i++ {
 		m := ms.At(i)
-		metricsCount[m.Name()] += 1
+		metricsCount[m.Name()]++
 	}
 	require.Equal(t, map[string]int{
 		"mysql.buffer_pool_operations": 7,
