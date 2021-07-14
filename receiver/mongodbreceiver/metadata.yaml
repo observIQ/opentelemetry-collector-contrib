@@ -1,0 +1,97 @@
+name: mongodbreceiver
+
+labels:
+  database_name:
+    description: The name of a database
+  memory_type:
+    description: The type of memory used
+  operation:
+    description: The mongoDB operation being counted
+
+metrics:
+  mongodb.cache_hits:
+    description: The number of cache hits
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: []
+  mongodb.cache_misses:
+    description: The number of cache misses
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: []
+  mongodb.collections:
+    description: The number of collections
+    unit: 1
+    data:
+      type: int gauge
+    labels: [database_name]
+  mongodb.connections:
+    description: The number of active server connections
+    unit: 1
+    data:
+      type: int gauge
+    labels: [database_name]
+  mongodb.data_size:
+    description: The data size
+    unit: By
+    data:
+      type: double gauge
+    labels: [database_name]
+  mongodb.extents:
+    description: The number of extents
+    unit: 1
+    data:
+      type: int gauge
+    labels: [database_name]
+  mongodb.global_lock_hold_time:
+    description: The time the global lock has been held
+    unit: ms
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: []
+  mongodb.index_size:
+    description: The index size
+    unit: By
+    data:
+      type: double gauge
+    labels: [database_name]
+  mongodb.indexes:
+    description: The number of indexes
+    unit: 1
+    data:
+      type: int gauge
+    labels: [database_name]
+  mongodb.memory_usage:
+    description: The amount of memory used
+    unit: By
+    data:
+      type: double gauge
+    labels: [database_name, memory_type]
+  mongodb.objects:
+    description: The number of objects
+    unit: 1
+    data:
+      type: int gauge
+    labels: [database_name]
+  mongodb.operation_count:
+    description: The number of operations executed
+    unit: 1
+    data:
+      type: int sum
+      monotonic: true
+      aggregation: cumulative
+    labels: [operation]
+  mongodb.storage_size:
+    description: The storage size
+    unit: By
+    data:
+      type: double gauge
+    labels: [database_name]
