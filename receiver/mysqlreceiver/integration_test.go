@@ -16,13 +16,14 @@ package mysqlreceiver
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.uber.org/zap"
 
@@ -31,21 +32,14 @@ import (
 
 func mysqlContainer(t *testing.T) testcontainers.Container {
 	ctx := context.Background()
-	var env = map[string]string{
-		"MYSQL_DATABASE":      "otel",
-		"MYSQL_USER":          "otel",
-		"MYSQL_PASSWORD":      "otel",
-		"MYSQL_ROOT_PASSWORD": "otel",
-	}
 	req := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
 			Context:    path.Join(".", "testdata"),
 			Dockerfile: "Dockerfile.mysql",
 		},
-		ExposedPorts: []string{"3306"},
-		Env:          env,
+		ExposedPorts: []string{"3306:3306"},
+		WaitingFor:   wait.ForListeningPort("3306"),
 	}
-
 	require.NoError(t, req.Validate())
 
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -53,7 +47,11 @@ func mysqlContainer(t *testing.T) testcontainers.Container {
 		Started:          true,
 	})
 	require.NoError(t, err)
-	time.Sleep(time.Second * 6)
+
+	code, err := container.Exec(context.Background(), []string{"/setup.sh"})
+	require.NoError(t, err)
+	require.Equal(t, 0, code)
+
 	return container
 }
 
@@ -69,13 +67,15 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 	t := suite.T()
 	container := mysqlContainer(t)
 	defer container.Terminate(context.Background())
+	hostname, err := container.Host(context.Background())
+	require.NoError(t, err)
 
 	sc := newMySQLScraper(zap.NewNop(), &Config{
 		User:     "otel",
 		Password: "otel",
-		Endpoint: "127.0.0.1:3306",
+		Endpoint: fmt.Sprintf("%s:3306", hostname),
 	})
-	err := sc.start(context.Background(), componenttest.NewNopHost())
+	err = sc.start(context.Background(), componenttest.NewNopHost())
 	require.NoError(t, err)
 	rms, err := sc.scrape(context.Background())
 	require.Nil(t, err)
@@ -121,15 +121,17 @@ func (suite *MysqlIntegrationSuite) TestStartStop() {
 	t := suite.T()
 	container := mysqlContainer(t)
 	defer container.Terminate(context.Background())
+	hostname, err := container.Host(context.Background())
+	require.NoError(t, err)
 
 	sc := newMySQLScraper(zap.NewNop(), &Config{
 		User:     "otel",
 		Password: "otel",
-		Endpoint: "127.0.0.1:3306",
+		Endpoint: fmt.Sprintf("%s:3306", hostname),
 	})
 
 	// require scraper to connection to be open
-	err := sc.start(context.Background(), componenttest.NewNopHost())
+	err = sc.start(context.Background(), componenttest.NewNopHost())
 	require.NoError(t, err)
 	require.False(t, sc.client.Closed())
 
