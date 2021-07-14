@@ -46,7 +46,7 @@ func TestScraper(t *testing.T) {
 	ilm := ilms.At(0)
 	ms := ilm.Metrics()
 
-	require.Equal(t, 67, ms.Len())
+	require.Equal(t, 14, ms.Len())
 	require.Equal(t, 14, len(metadata.M.Names()))
 
 	metricsCount := map[string]int{}
