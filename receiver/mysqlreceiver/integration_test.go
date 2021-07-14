@@ -89,32 +89,263 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 	ilm := ilms.At(0)
 	ms := ilm.Metrics()
 
-	require.Equal(t, 67, ms.Len())
+	require.Equal(t, 14, ms.Len())
 	require.Equal(t, 14, len(metadata.M.Names()))
-
-	metricsCount := map[string]int{}
 
 	for i := 0; i < ms.Len(); i++ {
 		m := ms.At(i)
-		metricsCount[m.Name()]++
+		switch m.Name() {
+		case metadata.M.MysqlBufferPoolPages.Name():
+			dps := m.DoubleGauge().DataPoints()
+			require.Equal(t, 6, dps.Len())
+			bufferPoolPagesMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.BufferPoolPagesState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				bufferPoolPagesMetrics[label] = true
+			}
+			require.Equal(t, 6, len(bufferPoolPagesMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.buffer_pool_pages state:data":    true,
+				"mysql.buffer_pool_pages state:dirty":   true,
+				"mysql.buffer_pool_pages state:flushed": true,
+				"mysql.buffer_pool_pages state:free":    true,
+				"mysql.buffer_pool_pages state:misc":    true,
+				"mysql.buffer_pool_pages state:total":   true,
+			}, bufferPoolPagesMetrics)
+		case metadata.M.MysqlBufferPoolOperations.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 7, dps.Len())
+			bufferPoolOperationsMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.BufferPoolOperationsState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				bufferPoolOperationsMetrics[label] = true
+			}
+			require.Equal(t, 7, len(bufferPoolOperationsMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.buffer_pool_operations state:read_ahead":         true,
+				"mysql.buffer_pool_operations state:read_ahead_evicted": true,
+				"mysql.buffer_pool_operations state:read_ahead_rnd":     true,
+				"mysql.buffer_pool_operations state:read_requests":      true,
+				"mysql.buffer_pool_operations state:reads":              true,
+				"mysql.buffer_pool_operations state:wait_free":          true,
+				"mysql.buffer_pool_operations state:write_requests":     true,
+			}, bufferPoolOperationsMetrics)
+		case metadata.M.MysqlBufferPoolSize.Name():
+			dps := m.DoubleGauge().DataPoints()
+			require.Equal(t, 3, dps.Len())
+			bufferPoolSizeMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.BufferPoolSizeState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				bufferPoolSizeMetrics[label] = true
+			}
+			require.Equal(t, 3, len(bufferPoolSizeMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.buffer_pool_size state:data":  true,
+				"mysql.buffer_pool_size state:dirty": true,
+				"mysql.buffer_pool_size state:size":  true,
+			}, bufferPoolSizeMetrics)
+		case metadata.M.MysqlCommands.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 6, dps.Len())
+			commandsMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.CommandState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				commandsMetrics[label] = true
+			}
+			require.Equal(t, 6, len(commandsMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.commands state:close":          true,
+				"mysql.commands state:execute":        true,
+				"mysql.commands state:fetch":          true,
+				"mysql.commands state:prepare":        true,
+				"mysql.commands state:reset":          true,
+				"mysql.commands state:send_long_data": true,
+			}, commandsMetrics)
+		case metadata.M.MysqlHandlers.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 18, dps.Len())
+			handlersMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.HandlerState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				handlersMetrics[label] = true
+			}
+			require.Equal(t, 18, len(handlersMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.handlers state:commit":             true,
+				"mysql.handlers state:delete":             true,
+				"mysql.handlers state:discover":           true,
+				"mysql.handlers state:lock":               true,
+				"mysql.handlers state:mrr_init":           true,
+				"mysql.handlers state:prepare":            true,
+				"mysql.handlers state:read_first":         true,
+				"mysql.handlers state:read_key":           true,
+				"mysql.handlers state:read_last":          true,
+				"mysql.handlers state:read_next":          true,
+				"mysql.handlers state:read_prev":          true,
+				"mysql.handlers state:read_rnd":           true,
+				"mysql.handlers state:read_rnd_next":      true,
+				"mysql.handlers state:rollback":           true,
+				"mysql.handlers state:savepoint":          true,
+				"mysql.handlers state:savepoint_rollback": true,
+				"mysql.handlers state:update":             true,
+				"mysql.handlers state:write":              true,
+			}, handlersMetrics)
+		case metadata.M.MysqlDoubleWrites.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 2, dps.Len())
+			doubleWritesMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.DoubleWritesState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				doubleWritesMetrics[label] = true
+			}
+			require.Equal(t, 2, len(doubleWritesMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.double_writes state:writes":  true,
+				"mysql.double_writes state:written": true,
+			}, doubleWritesMetrics)
+		case metadata.M.MysqlLogOperations.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 3, dps.Len())
+			logOperationsMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.LogOperationsState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				logOperationsMetrics[label] = true
+			}
+			require.Equal(t, 3, len(logOperationsMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.log_operations state:requests": true,
+				"mysql.log_operations state:waits":    true,
+				"mysql.log_operations state:writes":   true,
+			}, logOperationsMetrics)
+		case metadata.M.MysqlOperations.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 3, dps.Len())
+			operationsMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.OperationsState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				operationsMetrics[label] = true
+			}
+			require.Equal(t, 3, len(operationsMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.operations state:fsyncs": true,
+				"mysql.operations state:reads":  true,
+				"mysql.operations state:writes": true,
+			}, operationsMetrics)
+		case metadata.M.MysqlPageOperations.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 3, dps.Len())
+			pageOperationsMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.PageOperationsState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				pageOperationsMetrics[label] = true
+			}
+			require.Equal(t, 3, len(pageOperationsMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.page_operations state:created": true,
+				"mysql.page_operations state:read":    true,
+				"mysql.page_operations state:written": true,
+			}, pageOperationsMetrics)
+		case metadata.M.MysqlRowLocks.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 2, dps.Len())
+			rowLocksMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.RowLocksState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				rowLocksMetrics[label] = true
+			}
+			require.Equal(t, 2, len(rowLocksMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.row_locks state:time":  true,
+				"mysql.row_locks state:waits": true,
+			}, rowLocksMetrics)
+		case metadata.M.MysqlRowOperations.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 4, dps.Len())
+			rowOperationsMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.RowOperationsState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				rowOperationsMetrics[label] = true
+			}
+			require.Equal(t, 4, len(rowOperationsMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.row_operations state:deleted":  true,
+				"mysql.row_operations state:inserted": true,
+				"mysql.row_operations state:read":     true,
+				"mysql.row_operations state:updated":  true,
+			}, rowOperationsMetrics)
+		case metadata.M.MysqlLocks.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 2, dps.Len())
+			locksMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.LocksState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				locksMetrics[label] = true
+			}
+			require.Equal(t, 2, len(locksMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.locks state:immediate": true,
+				"mysql.locks state:waited":    true,
+			}, locksMetrics)
+		case metadata.M.MysqlSorts.Name():
+			dps := m.IntSum().DataPoints()
+			require.Equal(t, 4, dps.Len())
+			sortsMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.SortsState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				sortsMetrics[label] = true
+			}
+			require.Equal(t, 4, len(sortsMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.sorts state:merge_passes": true,
+				"mysql.sorts state:range":        true,
+				"mysql.sorts state:rows":         true,
+				"mysql.sorts state:scan":         true,
+			}, sortsMetrics)
+		case metadata.M.MysqlThreads.Name():
+			dps := m.DoubleGauge().DataPoints()
+			require.Equal(t, 4, dps.Len())
+			threadsMetrics := map[string]bool{}
+			for j := 0; j < dps.Len(); j++ {
+				dp := dps.At(j)
+				state, _ := dp.LabelsMap().Get(metadata.L.ThreadsState)
+				label := fmt.Sprintf("%s state:%s", m.Name(), state)
+				threadsMetrics[label] = true
+			}
+			require.Equal(t, 4, len(threadsMetrics))
+			require.Equal(t, map[string]bool{
+				"mysql.threads state:cached":    true,
+				"mysql.threads state:connected": true,
+				"mysql.threads state:created":   true,
+				"mysql.threads state:running":   true,
+			}, threadsMetrics)
+		}
 	}
-
-	require.Equal(t, map[string]int{
-		"mysql.buffer_pool_operations": 7,
-		"mysql.buffer_pool_pages":      6,
-		"mysql.buffer_pool_size":       3,
-		"mysql.commands":               6,
-		"mysql.double_writes":          2,
-		"mysql.handlers":               18,
-		"mysql.locks":                  2,
-		"mysql.log_operations":         3,
-		"mysql.operations":             3,
-		"mysql.page_operations":        3,
-		"mysql.row_locks":              2,
-		"mysql.row_operations":         4,
-		"mysql.sorts":                  4,
-		"mysql.threads":                4,
-	}, metricsCount)
 }
 
 func (suite *MysqlIntegrationSuite) TestStartStop() {
