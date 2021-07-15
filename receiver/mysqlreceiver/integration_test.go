@@ -116,6 +116,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, bufferPoolPagesMetrics)
 		case metadata.M.MysqlBufferPoolOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 7, dps.Len())
 			bufferPoolOperationsMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -152,6 +153,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, bufferPoolSizeMetrics)
 		case metadata.M.MysqlCommands.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 6, dps.Len())
 			commandsMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -171,6 +173,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, commandsMetrics)
 		case metadata.M.MysqlHandlers.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 18, dps.Len())
 			handlersMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -202,6 +205,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, handlersMetrics)
 		case metadata.M.MysqlDoubleWrites.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 2, dps.Len())
 			doubleWritesMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -217,6 +221,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, doubleWritesMetrics)
 		case metadata.M.MysqlLogOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 3, dps.Len())
 			logOperationsMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -233,6 +238,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, logOperationsMetrics)
 		case metadata.M.MysqlOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 3, dps.Len())
 			operationsMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -249,6 +255,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, operationsMetrics)
 		case metadata.M.MysqlPageOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 3, dps.Len())
 			pageOperationsMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -265,6 +272,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, pageOperationsMetrics)
 		case metadata.M.MysqlRowLocks.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 2, dps.Len())
 			rowLocksMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -280,6 +288,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, rowLocksMetrics)
 		case metadata.M.MysqlRowOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 4, dps.Len())
 			rowOperationsMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -297,6 +306,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, rowOperationsMetrics)
 		case metadata.M.MysqlLocks.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 2, dps.Len())
 			locksMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {
@@ -312,6 +322,7 @@ func (suite *MysqlIntegrationSuite) TestHappyPath() {
 			}, locksMetrics)
 		case metadata.M.MysqlSorts.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 4, dps.Len())
 			sortsMetrics := map[string]bool{}
 			for j := 0; j < dps.Len(); j++ {

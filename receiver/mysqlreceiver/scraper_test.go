@@ -74,6 +74,7 @@ func TestScraper(t *testing.T) {
 			}, bufferPoolPagesMetrics)
 		case metadata.M.MysqlBufferPoolOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 7, dps.Len())
 			bufferPoolOperationsMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -110,6 +111,7 @@ func TestScraper(t *testing.T) {
 			}, bufferPoolSizeMetrics)
 		case metadata.M.MysqlCommands.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 6, dps.Len())
 			commandsMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -129,6 +131,7 @@ func TestScraper(t *testing.T) {
 			}, commandsMetrics)
 		case metadata.M.MysqlHandlers.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 18, dps.Len())
 			handlersMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -160,6 +163,7 @@ func TestScraper(t *testing.T) {
 			}, handlersMetrics)
 		case metadata.M.MysqlDoubleWrites.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 2, dps.Len())
 			doubleWritesMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -175,6 +179,7 @@ func TestScraper(t *testing.T) {
 			}, doubleWritesMetrics)
 		case metadata.M.MysqlLogOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 3, dps.Len())
 			logOperationsMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -191,6 +196,7 @@ func TestScraper(t *testing.T) {
 			}, logOperationsMetrics)
 		case metadata.M.MysqlOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 3, dps.Len())
 			operationsMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -207,6 +213,7 @@ func TestScraper(t *testing.T) {
 			}, operationsMetrics)
 		case metadata.M.MysqlPageOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 3, dps.Len())
 			pageOperationsMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -223,6 +230,7 @@ func TestScraper(t *testing.T) {
 			}, pageOperationsMetrics)
 		case metadata.M.MysqlRowLocks.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 2, dps.Len())
 			rowLocksMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -238,6 +246,7 @@ func TestScraper(t *testing.T) {
 			}, rowLocksMetrics)
 		case metadata.M.MysqlRowOperations.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 4, dps.Len())
 			rowOperationsMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -255,6 +264,7 @@ func TestScraper(t *testing.T) {
 			}, rowOperationsMetrics)
 		case metadata.M.MysqlLocks.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 2, dps.Len())
 			locksMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {
@@ -270,6 +280,7 @@ func TestScraper(t *testing.T) {
 			}, locksMetrics)
 		case metadata.M.MysqlSorts.Name():
 			dps := m.IntSum().DataPoints()
+			require.True(t, m.IntSum().IsMonotonic())
 			require.Equal(t, 4, dps.Len())
 			sortsMetrics := map[string]int64{}
 			for j := 0; j < dps.Len(); j++ {

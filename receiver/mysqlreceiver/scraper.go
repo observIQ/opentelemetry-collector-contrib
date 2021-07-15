@@ -71,6 +71,29 @@ func (m *mySQLScraper) shutdown(context.Context) error {
 	return nil
 }
 
+// initMetric initializes a metric with a metadata label.
+func initMetric(ms pdata.MetricSlice, mi metadata.MetricIntf) pdata.Metric {
+	m := ms.AppendEmpty()
+	mi.Init(m)
+	return m
+}
+
+// addToDoubleLabeledMetric adds and labels a double gauge datapoint to a metricslice.
+func addToDoubleLabeledMetric(metric pdata.DoubleDataPointSlice, now pdata.Timestamp, labels pdata.StringMap, value float64) {
+	dataPoint := metric.AppendEmpty()
+	dataPoint.SetTimestamp(now)
+	dataPoint.SetValue(value)
+	labels.CopyTo(dataPoint.LabelsMap())
+}
+
+// addToIntLabeledMetric adds and labels a int sum datapoint to metricslice.
+func addToIntLabeledMetric(metric pdata.IntDataPointSlice, now pdata.Timestamp, labels pdata.StringMap, value int64) {
+	dataPoint := metric.AppendEmpty()
+	dataPoint.SetTimestamp(now)
+	dataPoint.SetValue(value)
+	labels.CopyTo(dataPoint.LabelsMap())
+}
+
 // scrape scrapes the mysql db metric stats, transforms them and labels them into a metric slices.
 func (m *mySQLScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, error) {
 
@@ -84,20 +107,20 @@ func (m *mySQLScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, erro
 	ilm.InstrumentationLibrary().SetName("otel/mysql")
 	now := pdata.TimestampFromTime(time.Now())
 
-	bufferPoolPages := initLabeledDoubleGauge(ilm.Metrics(), metadata.M.MysqlBufferPoolPages.Name())
-	bufferPoolOperations := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlBufferPoolOperations.Name())
-	bufferPoolSize := initLabeledDoubleGauge(ilm.Metrics(), metadata.M.MysqlBufferPoolSize.Name())
-	commands := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlCommands.Name())
-	handlers := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlHandlers.Name())
-	doubleWrites := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlDoubleWrites.Name())
-	logOperations := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlLogOperations.Name())
-	operations := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlOperations.Name())
-	pageOperations := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlPageOperations.Name())
-	rowLocks := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlRowLocks.Name())
-	rowOperations := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlRowOperations.Name())
-	locks := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlLocks.Name())
-	sorts := initLabeledIntSum(ilm.Metrics(), metadata.M.MysqlSorts.Name())
-	threads := initLabeledDoubleGauge(ilm.Metrics(), metadata.M.MysqlThreads.Name())
+	bufferPoolPages := initMetric(ilm.Metrics(), metadata.M.MysqlBufferPoolPages).DoubleGauge().DataPoints()
+	bufferPoolOperations := initMetric(ilm.Metrics(), metadata.M.MysqlBufferPoolOperations).IntSum().DataPoints()
+	bufferPoolSize := initMetric(ilm.Metrics(), metadata.M.MysqlBufferPoolSize).DoubleGauge().DataPoints()
+	commands := initMetric(ilm.Metrics(), metadata.M.MysqlCommands).IntSum().DataPoints()
+	handlers := initMetric(ilm.Metrics(), metadata.M.MysqlHandlers).IntSum().DataPoints()
+	doubleWrites := initMetric(ilm.Metrics(), metadata.M.MysqlDoubleWrites).IntSum().DataPoints()
+	logOperations := initMetric(ilm.Metrics(), metadata.M.MysqlLogOperations).IntSum().DataPoints()
+	operations := initMetric(ilm.Metrics(), metadata.M.MysqlOperations).IntSum().DataPoints()
+	pageOperations := initMetric(ilm.Metrics(), metadata.M.MysqlPageOperations).IntSum().DataPoints()
+	rowLocks := initMetric(ilm.Metrics(), metadata.M.MysqlRowLocks).IntSum().DataPoints()
+	rowOperations := initMetric(ilm.Metrics(), metadata.M.MysqlRowOperations).IntSum().DataPoints()
+	locks := initMetric(ilm.Metrics(), metadata.M.MysqlLocks).IntSum().DataPoints()
+	sorts := initMetric(ilm.Metrics(), metadata.M.MysqlSorts).IntSum().DataPoints()
+	threads := initMetric(ilm.Metrics(), metadata.M.MysqlThreads).DoubleGauge().DataPoints()
 
 	// collect innodb metrics.
 	innodbStats, err := m.client.getInnodbStats()
@@ -147,7 +170,6 @@ func (m *mySQLScraper) scrape(context.Context) (pdata.ResourceMetricsSlice, erro
 		case "Innodb_buffer_pool_read_ahead_rnd":
 			labels.Insert(metadata.L.BufferPoolOperationsState, "read_ahead_rnd")
 			addToIntLabeledMetric(bufferPoolOperations, now, labels, parseInt(stat.value))
-
 		case "Innodb_buffer_pool_read_ahead":
 			labels.Insert(metadata.L.BufferPoolOperationsState, "read_ahead")
 			addToIntLabeledMetric(bufferPoolOperations, now, labels, parseInt(stat.value))
@@ -352,32 +374,4 @@ func parseFloat(value string) float64 {
 func parseInt(value string) int64 {
 	i, _ := strconv.ParseInt(value, 10, 64)
 	return i
-}
-
-func initLabeledIntSum(ms pdata.MetricSlice, name string) pdata.IntDataPointSlice {
-	m := ms.AppendEmpty()
-	m.SetName(name)
-	m.SetDataType(pdata.MetricDataTypeIntSum)
-	return m.IntSum().DataPoints()
-}
-
-func initLabeledDoubleGauge(ms pdata.MetricSlice, name string) pdata.DoubleDataPointSlice {
-	m := ms.AppendEmpty()
-	m.SetName(name)
-	m.SetDataType(pdata.MetricDataTypeDoubleGauge)
-	return m.DoubleGauge().DataPoints()
-}
-
-func addToDoubleLabeledMetric(metric pdata.DoubleDataPointSlice, now pdata.Timestamp, labels pdata.StringMap, value float64) {
-	dataPoint := metric.AppendEmpty()
-	dataPoint.SetTimestamp(now)
-	dataPoint.SetValue(value)
-	labels.CopyTo(dataPoint.LabelsMap())
-}
-
-func addToIntLabeledMetric(metric pdata.IntDataPointSlice, now pdata.Timestamp, labels pdata.StringMap, value int64) {
-	dataPoint := metric.AppendEmpty()
-	dataPoint.SetTimestamp(now)
-	dataPoint.SetValue(value)
-	labels.CopyTo(dataPoint.LabelsMap())
 }
