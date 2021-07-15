@@ -1,0 +1,20 @@
+receivers:
+  mysql:
+    collection_interval: 10s
+    user: otel
+    password: otel
+    endpoint: "localhost:3306"
+
+processors:
+
+
+exporters:
+  logging:   
+    loglevel: debug
+
+service:
+  pipelines:
+    metrics:
+     receivers: [mysql]
+     processors: []
+     exporters: [logging]
