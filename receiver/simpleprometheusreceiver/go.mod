@@ -10,7 +10,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	go.opentelemetry.io/collector v0.29.1-0.20210708235311-fb95c88e72fa
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
-	k8s.io/client-go v0.21.2
+	k8s.io/client-go v0.21.3
 )
 
 replace go.opentelemetry.io/collector/model => go.opentelemetry.io/collector/model v0.0.0-20210708235311-fb95c88e72fa
