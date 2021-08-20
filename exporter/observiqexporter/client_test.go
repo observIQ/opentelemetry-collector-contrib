@@ -100,8 +100,6 @@ func createLogData() pdata.Logs {
 	logRecord.SetTimestamp(pdata.Timestamp(now.UnixNano()))
 	logRecord.Body().SetStringVal("message")
 	logRecord.Attributes().InsertString(conventions.AttributeNetHostIP, "1.1.1.1")
-	logRecord.Attributes().InsertInt(conventions.AttributeNetHostPort, 4000)
-	logRecord.Attributes().InsertInt("recordNum", 0)
 
 	return logs
 }
@@ -150,10 +148,8 @@ func TestClientSendLogs(t *testing.T) {
 
 	defaultLogEntry := observIQLogEntry{
 		Timestamp: "1970-01-01T00:00:00.000Z",
-		Data: map[string]interface{}{
-			strings.ReplaceAll(conventions.AttributeNetHostIP, ".", "_"):   "1.1.1.1",
-			strings.ReplaceAll(conventions.AttributeNetHostPort, ".", "_"): float64(4000),
-			"recordNum": float64(0),
+		Labels: map[string]string{
+			strings.ReplaceAll(conventions.AttributeNetHostIP, ".", "_"): "1.1.1.1",
 		},
 		Message:  "message",
 		Severity: "default",

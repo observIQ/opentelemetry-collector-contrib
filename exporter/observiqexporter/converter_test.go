@@ -20,10 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/observiqexporter/conventions"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/model/pdata"
-	conventions "go.opentelemetry.io/collector/translator/conventions/v1.5.0"
+	otel_conventions "go.opentelemetry.io/collector/translator/conventions/v1.5.0"
 )
 
 func resourceAndLogRecordsToLogs(r pdata.Resource, lrs []pdata.LogRecord) pdata.Logs {
@@ -69,8 +70,8 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 			func() pdata.LogRecord {
 				logRecord := pdata.NewLogRecord()
 				logRecord.Body().SetStringVal("Message")
-				logRecord.Attributes().InsertString(conventions.AttributeServiceName, "myapp")
-				logRecord.Attributes().InsertString(conventions.AttributeHostName, "myhost")
+				logRecord.Attributes().InsertString(otel_conventions.AttributeServiceName, "myapp")
+				logRecord.Attributes().InsertString(otel_conventions.AttributeHostName, "myhost")
 				logRecord.Attributes().InsertString("custom", "custom")
 				logRecord.SetTimestamp(nanoTs)
 				return logRecord
@@ -83,9 +84,9 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 				Message:   "Message",
 				Severity:  "default",
 				Resource:  map[string]interface{}{},
-				Data: map[string]interface{}{
-					strings.ReplaceAll(conventions.AttributeServiceName, ".", "_"): "myapp",
-					strings.ReplaceAll(conventions.AttributeHostName, ".", "_"):    "myhost",
+				Labels: map[string]string{
+					strings.ReplaceAll(otel_conventions.AttributeServiceName, ".", "_"): "myapp",
+					strings.ReplaceAll(otel_conventions.AttributeHostName, ".", "_"):    "myhost",
 					"custom": "custom",
 				},
 				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
@@ -93,11 +94,11 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 			false,
 		},
 		{
-			"works with attributes of all types",
+			"works only with string attributes",
 			func() pdata.LogRecord {
 				logRecord := pdata.NewLogRecord()
 				logRecord.Body().SetStringVal("Message")
-				logRecord.Attributes().InsertString(conventions.AttributeServiceName, "myapp")
+				logRecord.Attributes().InsertString(otel_conventions.AttributeServiceName, "myapp")
 				logRecord.Attributes().InsertBool("bool", true)
 				logRecord.Attributes().InsertDouble("double", 1.0)
 				logRecord.Attributes().InsertInt("int", 3)
@@ -156,15 +157,9 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 					},
 					"array": []interface{}{float64(1), float64(2.0)},
 				},
-				Data: map[string]interface{}{
-					strings.ReplaceAll(conventions.AttributeServiceName, ".", "_"): "myapp",
-					"bool":   true,
-					"double": float64(1.0),
-					"int":    float64(3),
-					"map": map[string]interface{}{
-						"mapKey": "value",
-					},
-					"array": []interface{}{float64(1), float64(2)},
+				Labels: map[string]string{
+					strings.ReplaceAll(otel_conventions.AttributeServiceName, ".", "_"): "myapp",
+					"map_mapKey": "value",
 				},
 				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
 			},
@@ -209,11 +204,10 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 				Timestamp: stringTs,
 				Severity:  "default",
 				Resource:  map[string]interface{}{},
-				Data:      nil,
-				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
-				Body: map[string]interface{}{
+				Data: map[string]interface{}{
 					"mapKey": "value",
 				},
+				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
 			},
 			false,
 		},
@@ -239,10 +233,6 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 				Resource:  map[string]interface{}{},
 				Data:      nil,
 				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
-				Body: []interface{}{
-					"string",
-					float64(1.0),
-				},
 			},
 			false,
 		},
@@ -265,7 +255,6 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 				Resource:  map[string]interface{}{},
 				Data:      nil,
 				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
-				Body:      float64(1.0),
 			},
 			false,
 		},
@@ -290,13 +279,13 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 				Timestamp: stringTs,
 				Severity:  "default",
 				Resource:  map[string]interface{}{},
-				Data: map[string]interface{}{
+				Labels: map[string]string{
 					"attrib": "logAttrib",
 				},
-				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
-				Body: map[string]interface{}{
+				Data: map[string]interface{}{
 					"mapKey": "body",
 				},
+				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
 			},
 			false,
 		},
@@ -317,6 +306,162 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 				Resource:  map[string]interface{}{},
 				Data:      nil,
 				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
+			},
+			false,
+		},
+		{
+			"Plugin information is available",
+			func() pdata.LogRecord {
+				logRecord := pdata.NewLogRecord()
+
+				bodyMapVal := pdata.NewAttributeValueMap()
+				bodyMapVal.MapVal().Insert(conventions.PluginIDField, pdata.NewAttributeValueString("plugin id"))
+				bodyMapVal.MapVal().Insert(conventions.PluginNameField, pdata.NewAttributeValueString("plugin name"))
+				bodyMapVal.MapVal().Insert(conventions.PluginVersionField, pdata.NewAttributeValueString("0.0.2"))
+				bodyMapVal.MapVal().Insert(conventions.PluginTypeField, pdata.NewAttributeValueString("file"))
+				bodyMapVal.MapVal().CopyTo(logRecord.Attributes())
+
+				logRecord.SetTimestamp(nanoTs)
+				return logRecord
+			},
+			pdata.NewResource,
+			"agent",
+			"agentID",
+			observIQLogEntry{
+				Timestamp: stringTs,
+				Severity:  "default",
+				Resource:  map[string]interface{}{},
+				SourceInfo: &observIQLogEntrySource{
+					ID:         "plugin id",
+					Name:       "plugin name",
+					Version:    "0.0.2",
+					SourceType: "file",
+				},
+				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
+			},
+			false,
+		},
+		{
+			"Message exists on body",
+			func() pdata.LogRecord {
+				logRecord := pdata.NewLogRecord()
+
+				bodyMapVal := pdata.NewAttributeValueMap()
+				bodyMapVal.MapVal().Insert(conventions.MessageField, pdata.NewAttributeValueString("this is a message"))
+				bodyMapVal.MapVal().Insert(conventions.MessageShortField, pdata.NewAttributeValueString("this is an alt message"))
+				bodyMapVal.CopyTo(logRecord.Body())
+
+				logRecord.SetTimestamp(nanoTs)
+				return logRecord
+			},
+			pdata.NewResource,
+			"agent",
+			"agentID",
+			observIQLogEntry{
+				Timestamp: stringTs,
+				Message:   "this is a message",
+				Severity:  "default",
+				Resource:  map[string]interface{}{},
+				Data: map[string]interface{}{
+					conventions.MessageShortField: "this is an alt message",
+				},
+				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
+			},
+			false,
+		},
+		{
+			"Only alt message exists on body",
+			func() pdata.LogRecord {
+				logRecord := pdata.NewLogRecord()
+
+				bodyMapVal := pdata.NewAttributeValueMap()
+				bodyMapVal.MapVal().Insert(conventions.MessageShortField, pdata.NewAttributeValueString("this is an alt message"))
+				bodyMapVal.CopyTo(logRecord.Body())
+
+				logRecord.SetTimestamp(nanoTs)
+				return logRecord
+			},
+			pdata.NewResource,
+			"agent",
+			"agentID",
+			observIQLogEntry{
+				Timestamp: stringTs,
+				Message:   "this is an alt message",
+				Severity:  "default",
+				Resource:  map[string]interface{}{},
+				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
+			},
+			false,
+		},
+		{
+			"Entry type is on record",
+			func() pdata.LogRecord {
+				logRecord := pdata.NewLogRecord()
+
+				logRecord.Attributes().InsertString(conventions.EntryTypeField, "file_input")
+
+				logRecord.SetTimestamp(nanoTs)
+				return logRecord
+			},
+			pdata.NewResource,
+			"agent",
+			"agentID",
+			observIQLogEntry{
+				Timestamp: stringTs,
+				EntryType: "file",
+				Severity:  "default",
+				Resource:  map[string]interface{}{},
+				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
+			},
+			false,
+		},
+		{
+			"AltEntry type is on record",
+			func() pdata.LogRecord {
+				logRecord := pdata.NewLogRecord()
+
+				bodyMapVal := pdata.NewAttributeValueMap()
+				bodyMapVal.MapVal().InsertString(conventions.EntryTypeAltField, "file_input")
+				bodyMapVal.CopyTo(logRecord.Body())
+
+				logRecord.SetTimestamp(nanoTs)
+				return logRecord
+			},
+			pdata.NewResource,
+			"agent",
+			"agentID",
+			observIQLogEntry{
+				Timestamp: stringTs,
+				EntryType: "file_input",
+				Severity:  "default",
+				Resource:  map[string]interface{}{},
+				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
+			},
+			false,
+		},
+		{
+			"Log info is present on record",
+			func() pdata.LogRecord {
+				logRecord := pdata.NewLogRecord()
+
+				logRecord.Attributes().InsertString(conventions.FileNameField, "example.log")
+				logRecord.Attributes().InsertString(conventions.FilePathField, "/home/user")
+
+				logRecord.SetTimestamp(nanoTs)
+				return logRecord
+			},
+			pdata.NewResource,
+			"agent",
+			"agentID",
+			observIQLogEntry{
+				Timestamp: stringTs,
+				Severity:  "default",
+				LogInfo: &observIQLogInfo{
+					Name: "example.log",
+					Path: "/home/user",
+				},
+				Resource: map[string]interface{}{},
+				Agent:    &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
 			},
 			false,
 		},

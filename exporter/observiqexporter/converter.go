@@ -18,15 +18,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"hash/fnv"
-	"strings"
 
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/model/pdata"
 )
-
-// Type preEncodedJSON aliases []byte, represents JSON that has already been encoded
-// Does not support unmarshalling
-type preEncodedJSON []byte
 
 type observIQLogBatch struct {
 	Logs []*observIQLog `json:"logs"`
@@ -43,15 +38,30 @@ type observIQAgentInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 }
+
+type observIQLogInfo struct {
+	Name string `json:"name,omitempty"`
+	Path string `json:"path,omitempty"`
+}
+
+type observIQLogEntrySource struct {
+	ID         string `json:"id"`
+	SourceType string `json:"type,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Version    string `json:"version,omitempty"`
+}
+
 type observIQLogEntry struct {
-	Timestamp string                 `json:"@timestamp"`
-	Severity  string                 `json:"severity,omitempty"`
-	EntryType string                 `json:"type,omitempty"`
-	Message   string                 `json:"message,omitempty"`
-	Resource  interface{}            `json:"resource,omitempty"`
-	Agent     *observIQAgentInfo     `json:"agent,omitempty"`
-	Data      map[string]interface{} `json:"data,omitempty"`
-	Body      interface{}            `json:"body,omitempty"`
+	Timestamp  string                  `json:"@timestamp"`
+	Severity   string                  `json:"severity,omitempty"`
+	EntryType  string                  `json:"type,omitempty"`
+	LogInfo    *observIQLogInfo        `json:"log,omitempty"`
+	SourceInfo *observIQLogEntrySource `json:"source,omitempty"`
+	Message    string                  `json:"message,omitempty"`
+	Resource   interface{}             `json:"resource,omitempty"`
+	Agent      *observIQAgentInfo      `json:"agent,omitempty"`
+	Data       map[string]interface{}  `json:"data,omitempty"`
+	Labels     map[string]string       `json:"labels,omitempty"`
 }
 
 // Hash related variables, re-used to avoid multiple allocations
@@ -112,15 +122,17 @@ func logdataToObservIQFormat(ld pdata.Logs, agentID string, agentName string, bu
 const timestampFieldOutputLayout = "2006-01-02T15:04:05.000Z07:00"
 
 func resourceAndInstrumentationLogToEntry(resMap interface{}, log pdata.LogRecord, agentID string, agentName string, buildVersion string) *observIQLogEntry {
-	return &observIQLogEntry{
+	ent := &observIQLogEntry{
 		Timestamp: timestampFromRecord(log),
 		Severity:  severityFromRecord(log),
+		Labels:    flattenStringMap(attributeMapToBaseType(log.Attributes())),
 		Resource:  resMap,
 		Message:   messageFromRecord(log),
-		Data:      attributeMapToBaseType(log.Attributes()),
-		Body:      bodyFromRecord(log),
+		Data:      dataFromLogRecord(log),
 		Agent:     &observIQAgentInfo{Name: agentName, ID: agentID, Version: buildVersion},
 	}
+	doExtraTransforms(ent)
+	return ent
 }
 
 func timestampFromRecord(log pdata.LogRecord) string {
@@ -138,10 +150,10 @@ func messageFromRecord(log pdata.LogRecord) string {
 	return ""
 }
 
-// If Body is not a string, it is suitable to be used on the observIQ log entry as "body"
-func bodyFromRecord(log pdata.LogRecord) interface{} {
-	if log.Body().Type() != pdata.AttributeValueTypeString {
-		return attributeValueToBaseType(log.Body())
+func dataFromLogRecord(log pdata.LogRecord) map[string]interface{} {
+	if log.Body().Type() == pdata.AttributeValueTypeMap {
+		bodyMap := log.Body().MapVal()
+		return attributeMapToBaseType(bodyMap)
 	}
 	return nil
 }
@@ -187,57 +199,4 @@ func severityFromRecord(log pdata.LogRecord) string {
 		return severityNumberToObservIQName[sevAsInt32]
 	}
 	return "default"
-}
-
-/*
-	Transform AttributeMap to native Go map, skipping keys with nil values, and replacing dots in keys with _
-*/
-func attributeMapToBaseType(m pdata.AttributeMap) map[string]interface{} {
-	mapOut := make(map[string]interface{}, m.Len())
-	m.Range(func(k string, v pdata.AttributeValue) bool {
-		val := attributeValueToBaseType(v)
-		if val != nil {
-			dedotedKey := strings.ReplaceAll(k, ".", "_")
-			mapOut[dedotedKey] = val
-		}
-		return true
-	})
-	return mapOut
-}
-
-/*
-	attrib is the attribute value to convert to it's native Go type - skips nils in arrays/maps
-*/
-func attributeValueToBaseType(attrib pdata.AttributeValue) interface{} {
-	switch attrib.Type() {
-	case pdata.AttributeValueTypeString:
-		return attrib.StringVal()
-	case pdata.AttributeValueTypeBool:
-		return attrib.BoolVal()
-	case pdata.AttributeValueTypeInt:
-		return attrib.IntVal()
-	case pdata.AttributeValueTypeDouble:
-		return attrib.DoubleVal()
-	case pdata.AttributeValueTypeMap:
-		attribMap := attrib.MapVal()
-		return attributeMapToBaseType(attribMap)
-	case pdata.AttributeValueTypeArray:
-		arrayVal := attrib.ArrayVal()
-		slice := make([]interface{}, 0, arrayVal.Len())
-		for i := 0; i < arrayVal.Len(); i++ {
-			val := attributeValueToBaseType(arrayVal.At(i))
-			if val != nil {
-				slice = append(slice, val)
-			}
-		}
-		return slice
-	case pdata.AttributeValueTypeNull:
-		return nil
-	}
-	return nil
-}
-
-// The marshaled JSON is just the []byte that this type aliases.
-func (p preEncodedJSON) MarshalJSON() ([]byte, error) {
-	return p, nil
 }
