@@ -114,7 +114,7 @@ loop:
 		select {
 		case <-timer:
 			break loop
-		case out := <-subprocess.Stdout:
+		case out := <-subprocess.Stdout():
 			if out == desired {
 				return
 			}
@@ -175,7 +175,7 @@ func (suite *SubprocessIntegrationSuite) TestWithEnvVars() {
 	require.Eventually(t, findProcessInfo, 5*time.Second, 10*time.Millisecond)
 	require.NotNil(t, *procInfo)
 
-	stdout := <-subprocess.Stdout
+	stdout := <-subprocess.Stdout()
 	require.NotEmpty(t, stdout)
 	require.Contains(t, stdout, "MyEnv1=MyVal1")
 	require.Contains(t, stdout, "MyEnv2=MyVal2")
