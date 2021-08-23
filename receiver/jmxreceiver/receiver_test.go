@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/subprocess"
-	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
@@ -29,6 +27,9 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc/codes"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/subprocess"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReceiver(t *testing.T) {
@@ -262,8 +263,11 @@ otel.exporter.otlp.headers = one=two,three=four
 		t.Run(test.name, func(tt *testing.T) {
 			params := componenttest.NewNopReceiverCreateSettings()
 			receiver, err := newJMXMetricReceiver(params, &test.config, consumertest.NewNop())
-			if err != nil {
+			if test.expectedError == "" {
 				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.EqualError(t, err, test.expectedError)
 			}
 			jmxConfig, err := receiver.buildJMXMetricGathererConfig()
 			if test.expectedError == "" {
@@ -286,12 +290,12 @@ func TestBuildOTLPReceiverInvalidEndpoints(t *testing.T) {
 		{
 			"missing OTLPExporterConfig.Endpoint",
 			Config{},
-			"failed to parse Endpoint \"\": missing port in address",
+			"failed to parse OTLPExporterConfig.Endpoint : missing port in address",
 		},
 		{
 			"invalid OTLPExporterConfig.Endpoint host with 0 port",
 			Config{OTLPExporterConfig: otlpExporterConfig{Endpoint: ".:0"}},
-			"failed to parse Endpoint \"\": missing port in address",
+			"failed determining desired port from OTLPExporterConfig.Endpoint .:0: listen tcp: lookup .: no such host",
 		},
 	}
 	for _, test := range tests {
