@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build integration
-
 package jmxreceiver
 
 import (
@@ -101,7 +99,7 @@ LOOP:
 	for i := 0; i < 70; i++ {
 		t := time.NewTimer(5 * time.Second)
 		select {
-		case m, ok := <-receiver.subprocess.Stdout:
+		case m, ok := <-receiver.subprocess.Stdout():
 			if ok {
 				msg = msg + m + "\n"
 			} else {
@@ -165,7 +163,8 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 	consumer := new(consumertest.MetricsSink)
 	require.NotNil(t, consumer)
 
-	receiver := newJMXMetricReceiver(params, cfg, consumer)
+	receiver, err := newJMXMetricReceiver(params, cfg, consumer)
+	require.NoError(t, err)
 	require.NotNil(t, receiver)
 	defer func() {
 		require.Nil(t, receiver.Shutdown(context.Background()))
@@ -248,12 +247,13 @@ func TestJMXReceiverInvalidOTLPEndpointIntegration(t *testing.T) {
 			},
 		},
 	}
-	receiver := newJMXMetricReceiver(params, cfg, consumertest.NewNop())
+	receiver, err := newJMXMetricReceiver(params, cfg, consumertest.NewNop())
+	require.NoError(t, err)
 	require.NotNil(t, receiver)
 	defer func() {
 		require.EqualError(t, receiver.Shutdown(context.Background()), "no subprocess.cancel().  Has it been started properly?")
 	}()
 
-	err := receiver.Start(context.Background(), componenttest.NewNopHost())
+	err = receiver.Start(context.Background(), componenttest.NewNopHost())
 	require.Contains(t, err.Error(), "listen tcp: lookup <invalid>:")
 }

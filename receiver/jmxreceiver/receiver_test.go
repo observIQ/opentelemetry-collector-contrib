@@ -286,23 +286,20 @@ func TestBuildOTLPReceiverInvalidEndpoints(t *testing.T) {
 		{
 			"missing OTLPExporterConfig.Endpoint",
 			Config{},
-			"failed to parse OTLPExporterConfig.Endpoint : missing port in address",
+			"failed to parse Endpoint \"\": missing port in address",
 		},
 		{
 			"invalid OTLPExporterConfig.Endpoint host with 0 port",
 			Config{OTLPExporterConfig: otlpExporterConfig{Endpoint: ".:0"}},
-			"failed determining desired port from OTLPExporterConfig.Endpoint .:0: listen tcp: lookup .:",
+			"failed to parse Endpoint \"\": missing port in address",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
 			params := componenttest.NewNopReceiverCreateSettings()
-			jmxReceiver, err := newJMXMetricReceiver(params, &test.config, consumertest.NewNop())
-			require.NoError(t, err)
-			otlpReceiver, err := jmxReceiver.buildOTLPReceiver()
+			_, err := newJMXMetricReceiver(params, &test.config, consumertest.NewNop())
 			require.Error(t, err)
 			require.Contains(t, err.Error(), test.expectedErr)
-			require.Nil(t, otlpReceiver)
 		})
 	}
 }

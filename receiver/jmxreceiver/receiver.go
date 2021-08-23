@@ -40,7 +40,7 @@ type SubprocessInt interface {
 }
 
 var _ SubprocessInt = (*subprocess.Subprocess)(nil)
-var _ SubprocessInt = (*subprocess.SubprocessMock)(nil)
+var _ SubprocessInt = (*subprocess.Mock)(nil)
 
 type jmxMetricReceiver struct {
 	logger       *zap.Logger
