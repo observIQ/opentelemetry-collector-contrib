@@ -62,6 +62,12 @@ func newJMXMetricReceiver(
 		config:       config,
 		nextConsumer: nextConsumer,
 	}
+	var err error
+	jmx.otlpReceiver, err = jmx.buildOTLPReceiver()
+	if err != nil {
+		return nil, err
+	}
+
 	javaConfig, err := jmx.buildJMXMetricGathererConfig()
 	if err != nil {
 		return nil, err
@@ -78,11 +84,6 @@ func newJMXMetricReceiver(
 
 func (jmx *jmxMetricReceiver) Start(ctx context.Context, host component.Host) (err error) {
 	jmx.logger.Debug("starting JMX Receiver")
-
-	jmx.otlpReceiver, err = jmx.buildOTLPReceiver()
-	if err != nil {
-		return err
-	}
 
 	err = jmx.otlpReceiver.Start(ctx, host)
 	if err != nil {
