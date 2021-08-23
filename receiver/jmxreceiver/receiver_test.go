@@ -20,11 +20,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/subprocess"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/testutil"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+	"google.golang.org/grpc/codes"
 )
 
 func TestReceiver(t *testing.T) {
@@ -36,13 +40,50 @@ func TestReceiver(t *testing.T) {
 		},
 	}
 
-	receiver := newJMXMetricReceiver(params, config, consumertest.NewNop())
+	receiver, err := newJMXMetricReceiver(params, config, consumertest.NewNop())
+	require.NoError(t, err)
+
 	require.NotNil(t, receiver)
 	require.Same(t, params.Logger, receiver.logger)
 	require.Same(t, config, receiver.config)
 
-	require.Nil(t, receiver.Start(context.Background(), componenttest.NewNopHost()))
-	require.Nil(t, receiver.Shutdown(context.Background()))
+	require.NoError(t, receiver.Start(context.Background(), componenttest.NewNopHost()))
+	require.NoError(t, receiver.Shutdown(context.Background()))
+}
+
+func TestReceiverStatusCodes(t *testing.T) {
+	params := componenttest.NewNopReceiverCreateSettings()
+	config := &Config{
+		Endpoint: "service:jmx:protocol:sap",
+		OTLPExporterConfig: otlpExporterConfig{
+			Endpoint: fmt.Sprintf("localhost:%d", testutil.GetAvailablePort(t)),
+		},
+	}
+
+	tcs := []struct {
+		name       string
+		statusCode string
+		errorStr   string
+	}{
+		{
+			name:       "positive interval",
+			statusCode: codes.InvalidArgument.String(),
+			errorStr:   "`interval` must be positive:",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			receiver, err := newJMXMetricReceiver(params, config, consumertest.NewNop())
+			require.NoError(t, err)
+			receiver.subprocess = subprocess.NewMockSubprocess(receiver.logger, tc.errorStr)
+			require.NotNil(t, receiver)
+
+			obs, logs := observer.New(zap.ErrorLevel)
+
+			require.NoError(t, receiver.Start(context.Background(), componenttest.NewNopHost()))
+			require.NoError(t, receiver.Shutdown(context.Background()))
+		})
+	}
 }
 
 func TestBuildJMXMetricGathererConfig(t *testing.T) {
@@ -175,7 +216,10 @@ otel.exporter.otlp.headers = one=two,three=four
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
 			params := componenttest.NewNopReceiverCreateSettings()
-			receiver := newJMXMetricReceiver(params, &test.config, consumertest.NewNop())
+			receiver, err := newJMXMetricReceiver(params, &test.config, consumertest.NewNop())
+			if err != nil {
+				require.NoError(t, err)
+			}
 			jmxConfig, err := receiver.buildJMXMetricGathererConfig()
 			if test.expectedError == "" {
 				require.NoError(t, err)
@@ -208,7 +252,8 @@ func TestBuildOTLPReceiverInvalidEndpoints(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
 			params := componenttest.NewNopReceiverCreateSettings()
-			jmxReceiver := newJMXMetricReceiver(params, &test.config, consumertest.NewNop())
+			jmxReceiver, err := newJMXMetricReceiver(params, &test.config, consumertest.NewNop())
+			require.NoError(t, err)
 			otlpReceiver, err := jmxReceiver.buildOTLPReceiver()
 			require.Error(t, err)
 			require.Contains(t, err.Error(), test.expectedErr)
