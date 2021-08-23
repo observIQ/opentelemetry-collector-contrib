@@ -3,7 +3,8 @@ package subprocess
 import (
 	"bufio"
 	"context"
-	"os"
+	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -27,12 +28,12 @@ func (subprocess *SubprocessMock) Stdout() chan string {
 }
 
 func (subprocess *SubprocessMock) Shutdown(context.Context) error {
+	time.Sleep(time.Second)
+	close(subprocess.stdout)
 	return nil
 }
 
 func (subprocess *SubprocessMock) Start(context.Context) error {
-	reader, writer, _ := os.Pipe()
-	writer.Write([]byte(subprocess.errorStr))
-	collectStdout(bufio.NewScanner(reader), subprocess.Stdout(), subprocess.logger)
+	go collectStdout(bufio.NewScanner(strings.NewReader(subprocess.errorStr)), subprocess.Stdout(), subprocess.logger)
 	return nil
 }

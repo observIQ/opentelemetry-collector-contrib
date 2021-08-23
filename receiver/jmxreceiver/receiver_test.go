@@ -70,18 +70,63 @@ func TestReceiverStatusCodes(t *testing.T) {
 			statusCode: codes.InvalidArgument.String(),
 			errorStr:   "`interval` must be positive:",
 		},
+		{
+			name:       "positive timeout",
+			statusCode: codes.InvalidArgument.String(),
+			errorStr:   "`otlp.timeout` must be positive:",
+		},
+		{
+			name:       "jmx required fields",
+			statusCode: codes.InvalidArgument.String(),
+			errorStr:   "jmx missing required fields:",
+		},
+		{
+			name:       "endpoint parsing",
+			statusCode: codes.FailedPrecondition.String(),
+			errorStr:   "failed to parse OTLPExporterConfig.Endpoint",
+		},
+		{
+			name:       "missing cancel",
+			statusCode: codes.FailedPrecondition.String(),
+			errorStr:   "no subprocess.cancel().",
+		},
+		{
+			name:       "passed timeout",
+			statusCode: codes.OutOfRange.String(),
+			errorStr:   "subprocess hasn't returned within shutdown timeout.",
+		},
+		{
+			name:       "unexpected shutdown",
+			statusCode: codes.Aborted.String(),
+			errorStr:   "unexpected shutdown:",
+		},
+		{
+			name:       "can't create subprocess input pipe",
+			statusCode: codes.FailedPrecondition.String(),
+			errorStr:   "Input pipe could not be created for subprocess",
+		},
+		{
+			name:       "can't create subprocess output pipe",
+			statusCode: codes.FailedPrecondition.String(),
+			errorStr:   "Output pipe could not be created for subprocess",
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			obs, logs := observer.New(zap.ErrorLevel)
+			params.Logger = zap.New(obs)
 			receiver, err := newJMXMetricReceiver(params, config, consumertest.NewNop())
 			require.NoError(t, err)
 			receiver.subprocess = subprocess.NewMockSubprocess(receiver.logger, tc.errorStr)
 			require.NotNil(t, receiver)
 
-			obs, logs := observer.New(zap.ErrorLevel)
-
 			require.NoError(t, receiver.Start(context.Background(), componenttest.NewNopHost()))
 			require.NoError(t, receiver.Shutdown(context.Background()))
+
+			require.NotEqual(t, 0, len(logs.AllUntimed()))
+			logMap := logs.AllUntimed()[0].ContextMap()
+			require.Contains(t, tc.errorStr, logs.AllUntimed()[0].Message)
+			require.Equal(t, tc.statusCode, logMap["status_code"])
 		})
 	}
 }
