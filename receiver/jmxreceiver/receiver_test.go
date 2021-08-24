@@ -28,8 +28,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc/codes"
-
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/subprocess"
 )
 
 func TestReceiver(t *testing.T) {
@@ -83,12 +81,12 @@ func TestReceiverStatusCodes(t *testing.T) {
 		},
 		{
 			name:       "endpoint parsing",
-			statusCode: codes.FailedPrecondition.String(),
+			statusCode: codes.InvalidArgument.String(),
 			errorStr:   "failed to parse OTLPExporterConfig.Endpoint",
 		},
 		{
 			name:       "missing cancel",
-			statusCode: codes.FailedPrecondition.String(),
+			statusCode: codes.Internal.String(),
 			errorStr:   "no subprocess.cancel().",
 		},
 		{
@@ -103,12 +101,12 @@ func TestReceiverStatusCodes(t *testing.T) {
 		},
 		{
 			name:       "can't create subprocess input pipe",
-			statusCode: codes.FailedPrecondition.String(),
+			statusCode: codes.Internal.String(),
 			errorStr:   "Input pipe could not be created for subprocess",
 		},
 		{
 			name:       "can't create subprocess output pipe",
-			statusCode: codes.FailedPrecondition.String(),
+			statusCode: codes.Internal.String(),
 			errorStr:   "Output pipe could not be created for subprocess",
 		},
 	}
@@ -118,7 +116,7 @@ func TestReceiverStatusCodes(t *testing.T) {
 			params.Logger = zap.New(obs)
 			receiver, err := newJMXMetricReceiver(params, config, consumertest.NewNop())
 			require.NoError(t, err)
-			receiver.subprocess = subprocess.NewMockSubprocess(receiver.logger, tc.errorStr)
+			receiver.subprocess = NewMockSubprocess(receiver.logger, tc.errorStr)
 			require.NotNil(t, receiver)
 
 			require.NoError(t, receiver.Start(context.Background(), componenttest.NewNopHost()))

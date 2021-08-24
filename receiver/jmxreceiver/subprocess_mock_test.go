@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package subprocess
+package jmxreceiver
 
 import (
 	"bufio"
@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/subprocess"
 	"go.uber.org/zap"
 )
 
@@ -28,6 +29,8 @@ type Mock struct {
 	logger   *zap.Logger
 	errorStr string
 }
+
+var _ SubprocessInt = (*Mock)(nil)
 
 func NewMockSubprocess(logger *zap.Logger, errorStr string) *Mock {
 	return &Mock{
@@ -52,6 +55,6 @@ func (subprocess *Mock) Start(context.Context) error {
 }
 
 func run(stdoutScanner *bufio.Scanner, stdoutChan chan<- string, logger *zap.Logger) {
-	collectStdout(stdoutScanner, stdoutChan, logger)
+	subprocess.CollectStdout(stdoutScanner, stdoutChan, logger)
 	close(stdoutChan)
 }

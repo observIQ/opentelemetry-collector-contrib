@@ -216,7 +216,7 @@ func (subprocess *Subprocess) run(ctx context.Context) {
 				subprocess.envVars,
 			)
 
-			go collectStdout(bufio.NewScanner(stdout), subprocess.Stdout(), subprocess.logger)
+			go CollectStdout(bufio.NewScanner(stdout), subprocess.Stdout(), subprocess.logger)
 
 			subprocess.logger.Debug("starting subprocess", zap.String("command", cmd.String()))
 			err = cmd.Start()
@@ -285,7 +285,7 @@ func signalWhenProcessReturned(cmd *exec.Cmd, pr *processReturned) {
 	pr.signal(err)
 }
 
-func collectStdout(stdoutScanner *bufio.Scanner, stdoutChan chan<- string, logger *zap.Logger) {
+func CollectStdout(stdoutScanner *bufio.Scanner, stdoutChan chan<- string, logger *zap.Logger) {
 	for stdoutScanner.Scan() {
 		text := stdoutScanner.Text()
 		if text != "" {
@@ -310,19 +310,19 @@ func checkForStatusCode(text string) string {
 	} else if strings.Contains(text, "jmx missing required fields:") {
 		return codes.InvalidArgument.String()
 	} else if strings.Contains(text, "failed to parse OTLPExporterConfig.Endpoint") {
-		return codes.FailedPrecondition.String()
+		return codes.InvalidArgument.String()
 	} else if strings.Contains(text, "failed to parse Endpoint") {
-		return codes.FailedPrecondition.String()
+		return codes.InvalidArgument.String()
 	} else if strings.Contains(text, "no subprocess.cancel().") {
-		return codes.FailedPrecondition.String()
+		return codes.Internal.String()
 	} else if strings.Contains(text, "subprocess hasn't returned within shutdown timeout.") {
 		return codes.OutOfRange.String()
 	} else if strings.Contains(text, "unexpected shutdown:") {
 		return codes.Aborted.String()
 	} else if strings.Contains(text, "Input pipe could not be created for subprocess") {
-		return codes.FailedPrecondition.String()
+		return codes.Internal.String()
 	} else if strings.Contains(text, "Output pipe could not be created for subprocess") {
-		return codes.FailedPrecondition.String()
+		return codes.Internal.String()
 	}
 	return ""
 }

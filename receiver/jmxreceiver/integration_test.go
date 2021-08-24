@@ -166,7 +166,8 @@ func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
 	consumer := new(consumertest.MetricsSink)
 	require.NotNil(t, consumer)
 
-	receiver, _ := newJMXMetricReceiver(params, cfg, consumer)
+	receiver, err := newJMXMetricReceiver(params, cfg, consumer)
+	require.NoError(t, err)
 	require.NotNil(t, receiver)
 	defer func() {
 		require.Nil(t, receiver.Shutdown(context.Background()))
@@ -249,12 +250,13 @@ func TestJMXReceiverInvalidOTLPEndpointIntegration(t *testing.T) {
 			},
 		},
 	}
-	receiver, _ := newJMXMetricReceiver(params, cfg, consumertest.NewNop())
+	receiver, err := newJMXMetricReceiver(params, cfg, consumertest.NewNop())
+	require.NoError(t, err)
 	require.NotNil(t, receiver)
 	defer func() {
 		require.EqualError(t, receiver.Shutdown(context.Background()), "no subprocess.cancel().  Has it been started properly?")
 	}()
 
-	err := receiver.Start(context.Background(), componenttest.NewNopHost())
+	err = receiver.Start(context.Background(), componenttest.NewNopHost())
 	require.Contains(t, err.Error(), "listen tcp: lookup <invalid>:")
 }
