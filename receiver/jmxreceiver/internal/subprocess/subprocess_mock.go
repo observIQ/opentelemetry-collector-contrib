@@ -29,11 +29,15 @@ func (subprocess *Mock) Stdout() chan string {
 
 func (subprocess *Mock) Shutdown(context.Context) error {
 	time.Sleep(time.Second)
-	close(subprocess.stdout)
 	return nil
 }
 
 func (subprocess *Mock) Start(context.Context) error {
-	go collectStdout(bufio.NewScanner(strings.NewReader(subprocess.errorStr)), subprocess.Stdout(), subprocess.logger)
+	go run(bufio.NewScanner(strings.NewReader(subprocess.errorStr)), subprocess.Stdout(), subprocess.logger)
 	return nil
+}
+
+func run(stdoutScanner *bufio.Scanner, stdoutChan chan<- string, logger *zap.Logger) {
+	collectStdout(stdoutScanner, stdoutChan, logger)
+	close(stdoutChan)
 }

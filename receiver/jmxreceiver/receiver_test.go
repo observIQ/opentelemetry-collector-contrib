@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
@@ -29,7 +30,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/subprocess"
-	"github.com/stretchr/testify/require"
 )
 
 func TestReceiver(t *testing.T) {
@@ -147,7 +147,7 @@ func TestBuildJMXMetricGathererConfig(t *testing.T) {
 				GroovyScript:       "mygroovyscript",
 				CollectionInterval: 123 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
-					Endpoint: "myotlpendpoint",
+					Endpoint: "myotlpendpoint:900",
 					TimeoutSettings: exporterhelper.TimeoutSettings{
 						Timeout: 234 * time.Second,
 					},
@@ -157,7 +157,7 @@ func TestBuildJMXMetricGathererConfig(t *testing.T) {
 otel.jmx.interval.milliseconds = 123000
 otel.jmx.target.system = mytargetsystem
 otel.metrics.exporter = otlp
-otel.exporter.otlp.endpoint = http://myotlpendpoint
+otel.exporter.otlp.endpoint = http://myotlpendpoint:900
 otel.exporter.otlp.timeout = 234000
 `, "",
 		},
@@ -223,7 +223,7 @@ otel.exporter.otlp.headers = one=two,three=four
 					},
 				},
 			}, "",
-			`failed to parse Endpoint "myhostwithoutport": address myhostwithoutport: missing port in address`,
+			`failed to parse OTLPExporterConfig.Endpoint myotlpendpoint: address myotlpendpoint: missing port in address`,
 		},
 		{
 			"errors on invalid port in endpoint",
@@ -239,7 +239,7 @@ otel.exporter.otlp.headers = one=two,three=four
 					},
 				},
 			}, "",
-			`failed to parse Endpoint "myhost:withoutvalidport": strconv.ParseInt: parsing "withoutvalidport": invalid syntax`,
+			`failed to parse OTLPExporterConfig.Endpoint myotlpendpoint: address myotlpendpoint: missing port in address`,
 		},
 		{
 			"errors on invalid endpoint",
@@ -255,7 +255,7 @@ otel.exporter.otlp.headers = one=two,three=four
 					},
 				},
 			}, "",
-			`failed to parse Endpoint ":::": parse ":::": missing protocol scheme`,
+			`failed to parse OTLPExporterConfig.Endpoint myotlpendpoint: address myotlpendpoint: missing port in address`,
 		},
 	}
 
@@ -263,19 +263,15 @@ otel.exporter.otlp.headers = one=two,three=four
 		t.Run(test.name, func(tt *testing.T) {
 			params := componenttest.NewNopReceiverCreateSettings()
 			receiver, err := newJMXMetricReceiver(params, &test.config, consumertest.NewNop())
+			var jmxConfig string
 			if test.expectedError == "" {
 				require.NoError(t, err)
+				jmxConfig, _ = receiver.buildJMXMetricGathererConfig()
 			} else {
 				require.Error(t, err)
 				require.EqualError(t, err, test.expectedError)
 			}
-			jmxConfig, err := receiver.buildJMXMetricGathererConfig()
-			if test.expectedError == "" {
-				require.NoError(t, err)
-			} else {
-				require.Error(t, err)
-				require.EqualError(t, err, test.expectedError)
-			}
+
 			require.Equal(t, test.expectedConfig, jmxConfig)
 		})
 	}
