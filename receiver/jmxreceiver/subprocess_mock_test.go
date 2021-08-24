@@ -20,8 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/subprocess"
 	"go.uber.org/zap"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/subprocess"
 )
 
 type Mock struct {
