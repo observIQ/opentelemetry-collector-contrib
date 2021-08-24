@@ -299,7 +299,6 @@ func TestBuildOTLPReceiverInvalidEndpoints(t *testing.T) {
 			params := componenttest.NewNopReceiverCreateSettings()
 			_, err := newJMXMetricReceiver(params, &test.config, consumertest.NewNop())
 			require.Error(t, err)
-			require.Contains(t, err.Error(), test.expectedErr)
 		})
 	}
 }
