@@ -26,7 +26,7 @@ import (
 
 const (
 	typeStr            = "observiq"
-	defaultHTTPTimeout = 10 * time.Second
+	defaultHTTPTimeout = 20 * time.Second
 	defaultEndpoint    = "https://nozzle.app.observiq.com/v1/add"
 )
 
