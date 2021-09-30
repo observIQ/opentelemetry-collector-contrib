@@ -202,9 +202,9 @@ func buildClient(config *Config, logger *zap.Logger, buildInfo component.BuildIn
 			Transport: &http.Transport{
 				Proxy:           http.ProxyFromEnvironment,
 				TLSClientConfig: tlsCfg,
-				Dial: (&net.Dialer{
+				DialContext: (&net.Dialer{
 					Timeout: 10 * time.Second,
-				}).Dial,
+				}).DialContext,
 				TLSHandshakeTimeout: 10 * time.Second,
 			},
 		},
