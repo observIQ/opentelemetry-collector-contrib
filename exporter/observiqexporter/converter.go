@@ -43,15 +43,29 @@ type observIQAgentInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 }
+
+type observIQLogInfo struct {
+	Name string `json:"name,omitempty"`
+	Path string `json:"path,omitempty"`
+}
+
+type observIQLogEntrySource struct {
+	ID         string `json:"id"`
+	SourceType string `json:"type,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Version    string `json:"version,omitempty"`
+}
 type observIQLogEntry struct {
-	Timestamp string                 `json:"@timestamp"`
-	Severity  string                 `json:"severity,omitempty"`
-	EntryType string                 `json:"type,omitempty"`
-	Message   string                 `json:"message,omitempty"`
-	Resource  map[string]interface{} `json:"resource,omitempty"`
-	Agent     *observIQAgentInfo     `json:"agent,omitempty"`
-	Data      map[string]interface{} `json:"data,omitempty"`
-	Body      interface{}            `json:"body,omitempty"`
+	Timestamp  string                  `json:"@timestamp"`
+	Severity   string                  `json:"severity,omitempty"`
+	EntryType  string                  `json:"type,omitempty"`
+	LogInfo    *observIQLogInfo        `json:"log,omitempty"`
+	SourceInfo *observIQLogEntrySource `json:"source,omitempty"`
+	Message    string                  `json:"message,omitempty"`
+	Resource   interface{}             `json:"resource,omitempty"`
+	Agent      *observIQAgentInfo      `json:"agent,omitempty"`
+	Data       map[string]interface{}  `json:"data,omitempty"`
+	Labels     map[string]string       `json:"labels,omitempty"`
 }
 
 // Hash related variables, re-used to avoid multiple allocations
@@ -112,15 +126,17 @@ func logdataToObservIQFormat(ld pdata.Logs, agentID string, agentName string, bu
 const timestampFieldOutputLayout = "2006-01-02T15:04:05.000Z07:00"
 
 func resourceAndInstrumentationLogToEntry(resMap map[string]interface{}, log pdata.LogRecord, agentID string, agentName string, buildVersion string) *observIQLogEntry {
-	return &observIQLogEntry{
+	ent := &observIQLogEntry{
 		Timestamp: timestampFromRecord(log),
 		Severity:  severityFromRecord(log),
+		Labels:    flattenStringMap(attributeMapToBaseType(log.Attributes())),
 		Resource:  resMap,
 		Message:   messageFromRecord(log),
-		Data:      attributeMapToBaseType(log.Attributes()),
-		Body:      bodyFromRecord(log),
+		Data:      dataFromLogRecord(log),
 		Agent:     &observIQAgentInfo{Name: agentName, ID: agentID, Version: buildVersion},
 	}
+	doExtraTransforms(ent)
+	return ent
 }
 
 func timestampFromRecord(log pdata.LogRecord) string {
@@ -138,10 +154,12 @@ func messageFromRecord(log pdata.LogRecord) string {
 	return ""
 }
 
-// bodyFromRecord returns what the "body" field should be on the observiq entry from the given LogRecord.
-func bodyFromRecord(log pdata.LogRecord) interface{} {
-	if log.Body().Type() != pdata.AttributeValueTypeString {
-		return attributeValueToBaseType(log.Body())
+// dataFromLogRecord returns the Body field as a go map, if it is a map/
+// otherwise, it returns nil
+func dataFromLogRecord(log pdata.LogRecord) map[string]interface{} {
+	if log.Body().Type() == pdata.AttributeValueTypeMap {
+		bodyMap := log.Body().MapVal()
+		return attributeMapToBaseType(bodyMap)
 	}
 	return nil
 }
@@ -240,4 +258,29 @@ func attributeValueToBaseType(attrib pdata.AttributeValue) interface{} {
 // The marshaled JSON is just the []byte that this type aliases.
 func (p preEncodedJSON) MarshalJSON() ([]byte, error) {
 	return p, nil
+}
+
+// flattenStringMap "flattens" the input map into a map of string -> string, de-dotting keys and merging sub-maps
+//   in order to create the flattened map.
+func flattenStringMap(m map[string]interface{}) map[string]string {
+	mOut := make(map[string]string)
+	flattenStringMapInternal("", mOut, m)
+	return mOut
+}
+
+const dotReplacement = "_"
+
+// flattenStringMapInternal recursively flattens mIn into mOut, appending keyPrefix to all keys in mIn.
+func flattenStringMapInternal(keyPrefix string, mOut map[string]string, mIn map[string]interface{}) {
+	if keyPrefix != "" {
+		keyPrefix += dotReplacement
+	}
+	for k, v := range mIn {
+		switch vTyped := v.(type) {
+		case string:
+			mOut[keyPrefix+k] = vTyped
+		case map[string]interface{}:
+			flattenStringMapInternal(keyPrefix+k, mOut, vTyped)
+		}
+	}
 }

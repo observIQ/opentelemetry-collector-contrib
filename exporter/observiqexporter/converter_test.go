@@ -82,7 +82,8 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 				Timestamp: stringTs,
 				Message:   "Message",
 				Severity:  "default",
-				Data: map[string]interface{}{
+				Resource:  map[string]interface{}{},
+				Labels: map[string]string{
 					strings.ReplaceAll(conventions.AttributeServiceName, ".", "_"): "myapp",
 					strings.ReplaceAll(conventions.AttributeHostName, ".", "_"):    "myhost",
 					"custom": "custom",
@@ -92,7 +93,7 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 			false,
 		},
 		{
-			"works with attributes of all types",
+			"attributes of all types",
 			func() pdata.LogRecord {
 				logRecord := pdata.NewLogRecord()
 				logRecord.Body().SetStringVal("Message")
@@ -155,15 +156,9 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 					},
 					"array": []interface{}{float64(1), float64(2.0)},
 				},
-				Data: map[string]interface{}{
+				Labels: map[string]string{
 					strings.ReplaceAll(conventions.AttributeServiceName, ".", "_"): "myapp",
-					"bool":   true,
-					"double": float64(1.0),
-					"int":    float64(3),
-					"map": map[string]interface{}{
-						"mapKey": "value",
-					},
-					"array": []interface{}{float64(1), float64(2)},
+					"map_mapKey": "value",
 				},
 				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
 			},
@@ -182,6 +177,7 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 			observIQLogEntry{
 				Timestamp: stringTs,
 				Message:   "",
+				Resource:  map[string]interface{}{},
 				Severity:  "default",
 				Data:      nil,
 				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
@@ -206,11 +202,11 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 			observIQLogEntry{
 				Timestamp: stringTs,
 				Severity:  "default",
-				Data:      nil,
-				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
-				Body: map[string]interface{}{
+				Resource:  map[string]interface{}{},
+				Data: map[string]interface{}{
 					"mapKey": "value",
 				},
+				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
 			},
 			false,
 		},
@@ -233,12 +229,9 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 			observIQLogEntry{
 				Timestamp: stringTs,
 				Severity:  "default",
+				Resource:  map[string]interface{}{},
 				Data:      nil,
 				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
-				Body: []interface{}{
-					"string",
-					float64(1.0),
-				},
 			},
 			false,
 		},
@@ -258,9 +251,9 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 			observIQLogEntry{
 				Timestamp: stringTs,
 				Severity:  "default",
+				Resource:  map[string]interface{}{},
 				Data:      nil,
 				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
-				Body:      float64(1.0),
 			},
 			false,
 		},
@@ -284,11 +277,12 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 			observIQLogEntry{
 				Timestamp: stringTs,
 				Severity:  "default",
-				Data: map[string]interface{}{
+				Resource:  map[string]interface{}{},
+				Labels: map[string]string{
 					"attrib": "logAttrib",
 				},
 				Agent: &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
-				Body: map[string]interface{}{
+				Data: map[string]interface{}{
 					"mapKey": "body",
 				},
 			},
@@ -308,7 +302,7 @@ func TestLogdataToObservIQFormat(t *testing.T) {
 				Timestamp: stringTs,
 				Message:   "Message",
 				Severity:  "default",
-				Data:      nil,
+				Resource:  map[string]interface{}{},
 				Agent:     &observIQAgentInfo{Name: "agent", ID: "agentID", Version: "latest"},
 			},
 			false,
