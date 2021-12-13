@@ -117,7 +117,7 @@ require (
 	bitbucket.org/atlassian/go-asap/v2 v2.6.0 // indirect
 	cloud.google.com/go v0.99.0 // indirect
 	cloud.google.com/go/monitoring v1.1.0 // indirect
-	cloud.google.com/go/spanner v1.27.0 // indirect
+	cloud.google.com/go/spanner v1.28.0 // indirect
 	cloud.google.com/go/trace v1.0.0 // indirect
 	code.cloudfoundry.org/clock v1.0.0 // indirect
 	contrib.go.opencensus.io/exporter/prometheus v0.4.0 // indirect
