@@ -11,7 +11,7 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go v1.42.21 // indirect
+	github.com/aws/aws-sdk-go v1.42.22 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
@@ -21,7 +21,6 @@ require (
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/spf13/cast v1.4.1 // indirect
 	go.opentelemetry.io/collector/model v0.41.1-0.20211210184707-4dcb3388a168 // indirect
 	go.opentelemetry.io/otel v1.2.0 // indirect
