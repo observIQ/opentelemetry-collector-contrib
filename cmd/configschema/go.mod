@@ -377,7 +377,7 @@ require (
 	github.com/xdg-go/scram v1.0.2 // indirect
 	github.com/xdg-go/stringprep v1.0.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
-	go.elastic.co/apm v1.14.0 // indirect
+	go.elastic.co/apm v1.15.0 // indirect
 	go.elastic.co/fastjson v1.1.0 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.mongodb.org/atlas v0.14.0 // indirect
