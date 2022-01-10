@@ -9,12 +9,13 @@ require (
 	github.com/stretchr/testify v1.7.0
 	go.opentelemetry.io/collector v0.41.1-0.20211210184707-4dcb3388a168
 	go.opentelemetry.io/collector/model v0.41.1-0.20211210184707-4dcb3388a168
-	go.uber.org/zap v1.19.1
+	go.uber.org/zap v1.20.0
 	google.golang.org/grpc v1.42.0
 )
 
 require (
 	github.com/apache/thrift v0.15.0 // indirect
+	github.com/benbjohnson/clock v1.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
