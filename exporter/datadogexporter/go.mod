@@ -6,7 +6,6 @@ require (
 	github.com/DataDog/agent-payload/v5 v5.0.4
 	github.com/DataDog/datadog-agent/pkg/quantile v0.32.1
 	github.com/DataDog/datadog-agent/pkg/trace/exportable v0.0.0-20201016145401-4646cf596b02
-	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/aws/aws-sdk-go v1.42.21
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2
@@ -32,6 +31,7 @@ require (
 require (
 	github.com/DataDog/datadog-agent/pkg/util/log v0.0.0-20201009092105-58e18918b2db // indirect
 	github.com/DataDog/datadog-go v4.8.2+incompatible // indirect
+	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect
