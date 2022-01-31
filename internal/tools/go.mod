@@ -16,7 +16,7 @@ require (
 	go.opentelemetry.io/build-tools/issuegenerator v0.0.0-20210920164323-2ceabab23375
 	go.opentelemetry.io/build-tools/multimod v0.0.0-20210920164323-2ceabab23375
 	go.uber.org/atomic v1.8.0 // indirect
-	golang.org/x/tools v0.1.8
+	golang.org/x/tools v0.1.9
 )
 
 require (
