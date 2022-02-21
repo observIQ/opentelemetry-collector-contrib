@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/Shopify/sarama v1.30.1
-	github.com/apache/thrift v0.15.0
+	github.com/apache/thrift v0.16.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/jaegertracing/jaeger v1.29.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/kafkaexporter v0.41.0
