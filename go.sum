@@ -1204,10 +1204,11 @@ github.com/influxdata/flux v0.113.0/go.mod h1:3TJtvbm/Kwuo5/PEo5P6HUzwVg4bXWkb2w
 github.com/influxdata/httprouter v1.3.1-0.20191122104820-ee83e2772f69/go.mod h1:pwymjR6SrP3gD3pRj9RJwdl1j5s3doEEV8gS4X9qSzA=
 github.com/influxdata/influxdb v1.8.0/go.mod h1:SIzcnsjaHRFpmlxpJ4S3NT64qtEKYweNTUMb/vh0OMQ=
 github.com/influxdata/influxdb v1.9.2/go.mod h1:UEe3MeD9AaP5rlPIes102IhYua3FhIWZuOXNHxDjSrI=
-github.com/influxdata/influxdb-observability/common v0.2.10 h1:5sQwU7KQYWSB7ZuPZXO39yQJ2nw2FPoxWeLoNK2jKRE=
 github.com/influxdata/influxdb-observability/common v0.2.10/go.mod h1:bl0YEzAg4yAoH8a2C4hz6CS/+OpNM9YyVjd5pkaAbZs=
-github.com/influxdata/influxdb-observability/influx2otel v0.2.10 h1:YZbHxhGBfOmfXFe6Odovq7eALriDnfQwtRFoT2JypHk=
-github.com/influxdata/influxdb-observability/influx2otel v0.2.10/go.mod h1:y/9uuUKTjqXcHE4XtJYxWxxl5DSw9RIvjl049m6C6co=
+github.com/influxdata/influxdb-observability/common v0.2.11 h1:96LhcJzcpzGXmUHz4wuneBciwgyGyQbjAaHNyAjKj90=
+github.com/influxdata/influxdb-observability/common v0.2.11/go.mod h1:3p02X0t4Jh0cIL1afoQpWwZK6Bz5JQz0z7/jDK4Y7OE=
+github.com/influxdata/influxdb-observability/influx2otel v0.2.14 h1:GaEQ+ORzTQJ6qZAX43NWyXEKIC6Ye28R8CrHcCY3JBE=
+github.com/influxdata/influxdb-observability/influx2otel v0.2.14/go.mod h1:mjFkn4G5htMIRuxaoed9YdyPm6HqNVxs4s0bBl74dmA=
 github.com/influxdata/influxdb-observability/otel2influx v0.2.10 h1:sNZCYUExwCWsNHWpNlu2gZZZav6H0rjK/DcaXEVN29E=
 github.com/influxdata/influxdb-observability/otel2influx v0.2.10/go.mod h1:UOa19v6sU7EpL1dPK79Yt+mZ+1/iOwvMqcFu9yVXenw=
 github.com/influxdata/influxdb1-client v0.0.0-20191209144304-8bf82d3c094d/go.mod h1:qj24IKcXYK6Iy9ceXlo3Tc+vtHo9lIhSX5JddghvEPo=
@@ -2163,8 +2164,9 @@ go.opentelemetry.io/collector/model v0.30.2-0.20210723184018-3b7d6ce4830c/go.mod
 go.opentelemetry.io/collector/model v0.36.1-0.20211004155959-190f8fbb2b9a/go.mod h1:ESh1oWDNdS4fTg9sTFoYuiuvs8QuaX8yNGTPix3JZc8=
 go.opentelemetry.io/collector/model v0.39.0/go.mod h1:gS8A27wi+8gM3hrXL+dEjTbrbLxktjHjAwwqI31ELgQ=
 go.opentelemetry.io/collector/model v0.41.0/go.mod h1:dXqjAeml+cB+YzJ3kUnd3v5/JvGAKl3MqHXfgSWRIo8=
-go.opentelemetry.io/collector/model v0.41.1-0.20211210184707-4dcb3388a168 h1:Mxbgv1PG8fYCOu19m59IRSl4f2pohgNL9t3YwVrIgok=
 go.opentelemetry.io/collector/model v0.41.1-0.20211210184707-4dcb3388a168/go.mod h1:dXqjAeml+cB+YzJ3kUnd3v5/JvGAKl3MqHXfgSWRIo8=
+go.opentelemetry.io/collector/model v0.45.0 h1:GEq/lk8uWKspFLiBoA7SoDj2rZJ/HJUGfZpAD9tgzJQ=
+go.opentelemetry.io/collector/model v0.45.0/go.mod h1:uyiyyq8lV45zrJ94MnLip26sorfNLP6J9XmOvaEmy7w=
 go.opentelemetry.io/contrib v0.20.0 h1:ubFQUn0VCZ0gPwIoJfBJVpeBlyRMxu8Mm/huKWYd9p0=
 go.opentelemetry.io/contrib v0.20.0/go.mod h1:G/EtFaa6qaN7+LxqfIAT3GiZa7Wv5DTBUzl5H4LY0Kc=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.26.1/go.mod h1:4wsfAAW5N9wUHM0QTmZS8z7fvYZ1rv3m+sVeSpf8NhU=
@@ -2922,8 +2924,9 @@ google.golang.org/grpc v1.39.0/go.mod h1:PImNr+rS9TWYb2O4/emRugxiyHZ5JyHW5F+RPnD
 google.golang.org/grpc v1.39.1/go.mod h1:PImNr+rS9TWYb2O4/emRugxiyHZ5JyHW5F+RPnDzfrE=
 google.golang.org/grpc v1.40.0/go.mod h1:ogyxbiOoUXAkP+4+xa6PZSE9DZgIHtSpzjDTB9KAK34=
 google.golang.org/grpc v1.41.0/go.mod h1:U3l9uK9J0sini8mHphKoXyaqDA/8VyGnDee1zzIUK6k=
-google.golang.org/grpc v1.42.0 h1:XT2/MFpuPFsEX2fWh3YQtHkZ+WYZFQRfaUgLZYj/p6A=
 google.golang.org/grpc v1.42.0/go.mod h1:k+4IHHFw41K8+bbowsex27ge2rCb65oeWqe4jJ590SU=
+google.golang.org/grpc v1.44.0 h1:weqSxi/TMs1SqFRMHCtBgXRs8k3X39QIDEZ0pRcttUg=
+google.golang.org/grpc v1.44.0/go.mod h1:k+4IHHFw41K8+bbowsex27ge2rCb65oeWqe4jJ590SU=
 google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0/go.mod h1:6Kw0yEErY5E/yWrBtf03jp27GLLJujG4z/JK95pnjjw=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
