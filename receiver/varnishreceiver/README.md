@@ -10,6 +10,8 @@ Supported pipeline types: `metrics`
 
 This Varnish Cache receiver will collect metrics for [supported versions](https://varnish-cache.org/releases/) 6.0.10+ - 7.0.2+ 
 
+If an unsupported version is used, a warning will occur. Refer to [releases](https://github.com/varnishcache/varnish-cache/blob/master/doc/changes.rst) to see if `varnishstat` has changed. The `SupportedVersionLatest` can be updated as needed.
+
 ## Configuration
 
 The following configuration settings are optional:

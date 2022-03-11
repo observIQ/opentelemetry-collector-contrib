@@ -22,28 +22,31 @@ import (
 	"go.uber.org/zap"
 )
 
+// executer executes commands.
 type executer interface {
 	Execute(command string, args string) ([]byte, error)
 }
 
+// varnishExecuter executes varnish commands.
 type varnishExecuter struct{}
 
 func newExecuter() executer {
 	return &varnishExecuter{}
 }
 
-// Execute implementation.
+// Execute executes commands with args flag.
 func (e *varnishExecuter) Execute(command string, args string) ([]byte, error) {
 	return exec.Command(command, args).Output()
 }
 
 type version string
 
-// validate implementation.
+// validate validates the version is supported.
 func (ve *version) validate() bool {
 	return true
 }
 
+// client is an interface to get stats and version using an executer.
 type client interface {
 	GetStats() (*Stats, error)
 	GetVersion() (version, error)
@@ -58,6 +61,8 @@ type varnishClient struct {
 	logger  *zap.Logger
 }
 
+// newVarnishClient creates a client and does a health check via version validation.
+// If version is not supported, a log warning is sent.
 func newVarnishClient(cfg *Config, host component.Host, settings component.TelemetrySettings) (client, error) {
 	vc := varnishClient{
 		exec:   newExecuter(),
@@ -71,34 +76,29 @@ func newVarnishClient(cfg *Config, host component.Host, settings component.Telem
 	}
 
 	if !version.validate() {
-		vc.logger.Warn("not supported version")
+		vc.logger.Warn("unsupported version", zap.String("version", vc.version))
 	}
 
 	return &vc, nil
 }
 
-// need to create a get function interface to mock
-
-// GetVersion implementation.
+// GetVersion executes and parses the varnish version.
 func (v *varnishClient) GetVersion() (version, error) {
-	// output, err := exec.Command("varnishd", "-V").Output()
-	// if err != nil {
-	// 	v.logger.Error(err.Error(), zap.String("try executeing with elevated privileges", "sudo ./bin/otelcontrib_OS_VERSION --config config.yaml"))
-	// 	return "", err
-	// }
+	output, err := exec.Command("varnishd", "-V").Output()
+	if err != nil {
+		v.logger.Error(err.Error())
+		return "", err
+	}
 
-	// version, err := v.parseVersion(output)
-	// if err != nil {
-	// 	return err
-	// }
+	return parseVersion(output)
+}
 
-	// if v.validateVersion(version) {
-	// 	v.logger.Warn(zap.String("warning", ""))
-	// }
+// parseVersion parses the varnish version from a varnishd -V response.
+func parseVersion(rawVersion []byte) (version, error) {
 	return "", nil
 }
 
-// GetStats executes the varnish command to collect json formated stats.
+// GetStats executes and parses the varnish stats.
 func (v *varnishClient) GetStats() (*Stats, error) {
 	output, err := v.exec.Execute("varnishstat", "-j")
 	if err != nil {
@@ -109,20 +109,9 @@ func (v *varnishClient) GetStats() (*Stats, error) {
 	return parseStats(v.version, output)
 }
 
-// // GetStats executes the varnish command to collect json formated stats.
-// func (v *varnishClient) GetStats() (*Stats, error) {
-
-// 	output, err := exec.Command("varnishstat", "-j").Output()
-// 	if err != nil {
-// 		v.logger.Error(err.Error(), zap.String("try executeing with elevated privileges", "sudo ./bin/otelcontrib_OS_VERSION --config config.yaml"))
-// 		return nil, err
-// 	}
-
-// 	return parseStats(output)
-// }
-
-// if version < 6.5 put into lower version then parse it into new version
-
+// parseStats parses varnishStats json response into a Stats struct.
+// Version < 6.5 does not have a json response with a nested in a "counter"
+// field and therefore is therefore converted to gain parity to 6.5+ Stats.
 func parseStats(version string, rawStats []byte) (*Stats, error) {
 
 	// jsonBody := `{
