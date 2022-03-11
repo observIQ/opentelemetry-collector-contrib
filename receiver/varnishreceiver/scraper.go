@@ -32,7 +32,7 @@ type varnishScraper struct {
 }
 
 func (v *varnishScraper) start(_ context.Context, host component.Host) error {
-	v.client = newVarnishClient(v.config, host, v.settings)
+	v.client, _ = newVarnishClient(v.config, host, v.settings)
 	return nil
 }
 

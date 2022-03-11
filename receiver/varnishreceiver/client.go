@@ -23,42 +23,90 @@ import (
 )
 
 type executer interface {
-	Execute(command string, args ...string) ([]byte, error)
+	Execute(command string, args string) ([]byte, error)
+}
+
+type varnishExecuter struct{}
+
+func newExecuter() executer {
+	return &varnishExecuter{}
+}
+
+// Execute implementation.
+func (e *varnishExecuter) Execute(command string, args string) ([]byte, error) {
+	return exec.Command(command, args).Output()
+}
+
+type version string
+
+// validate implementation.
+func (ve *version) validate() bool {
+	return true
 }
 
 type client interface {
 	GetStats() (*Stats, error)
+	GetVersion() (version, error)
 }
-
-// type client interface {
-// 	GetStats() (*Stats, error)
-// }
 
 var _ client = (*varnishClient)(nil)
 
 type varnishClient struct {
-	cfg    *Config
-	logger *zap.Logger
+	version string
+	exec    executer
+	cfg     *Config
+	logger  *zap.Logger
 }
 
-func newVarnishClient(cfg *Config, host component.Host, settings component.TelemetrySettings) client {
-	// check version here
-	return &varnishClient{
+func newVarnishClient(cfg *Config, host component.Host, settings component.TelemetrySettings) (client, error) {
+	vc := varnishClient{
+		exec:   newExecuter(),
 		cfg:    cfg,
 		logger: settings.Logger,
 	}
+
+	version, err := vc.GetVersion()
+	if err != nil {
+		return nil, err
+	}
+
+	if !version.validate() {
+		vc.logger.Warn("not supported version")
+	}
+
+	return &vc, nil
+}
+
+// need to create a get function interface to mock
+
+// GetVersion implementation.
+func (v *varnishClient) GetVersion() (version, error) {
+	// output, err := exec.Command("varnishd", "-V").Output()
+	// if err != nil {
+	// 	v.logger.Error(err.Error(), zap.String("try executeing with elevated privileges", "sudo ./bin/otelcontrib_OS_VERSION --config config.yaml"))
+	// 	return "", err
+	// }
+
+	// version, err := v.parseVersion(output)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if v.validateVersion(version) {
+	// 	v.logger.Warn(zap.String("warning", ""))
+	// }
+	return "", nil
 }
 
 // GetStats executes the varnish command to collect json formated stats.
 func (v *varnishClient) GetStats() (*Stats, error) {
-
-	output, err := exec.Command("varnishstat", "-j").Output()
+	output, err := v.exec.Execute("varnishstat", "-j")
 	if err != nil {
-		v.logger.Error(err.Error(), zap.String("try executeing with elevated privileges", "sudo ./bin/otelcontrib_OS_VERSION --config config.yaml"))
+		v.logger.Error(err.Error())
 		return nil, err
 	}
 
-	return parseStats(output)
+	return parseStats(v.version, output)
 }
 
 // // GetStats executes the varnish command to collect json formated stats.
@@ -73,7 +121,9 @@ func (v *varnishClient) GetStats() (*Stats, error) {
 // 	return parseStats(output)
 // }
 
-func parseStats(rawStats []byte) (*Stats, error) {
+// if version < 6.5 put into lower version then parse it into new version
+
+func parseStats(version string, rawStats []byte) (*Stats, error) {
 
 	// jsonBody := `{
 	// 	"version": 1,

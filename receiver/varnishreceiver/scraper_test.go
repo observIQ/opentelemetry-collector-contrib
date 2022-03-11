@@ -125,6 +125,27 @@ func (_m *MockClient) GetStats() (*Stats, error) {
 	return r0, r1
 }
 
+// GetVersion provides a mock function with given fields:
+func (_m *MockClient) GetVersion() (version, error) {
+	ret := _m.Called()
+
+	var r0 version
+	if rf, ok := ret.Get(0).(func() version); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(version)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 func getStats(filename string) (*Stats, error) {
 	if filename == "" {
 		return nil, errors.New("bad response")
@@ -141,5 +162,5 @@ func getStats(filename string) (*Stats, error) {
 		return nil, err
 	}
 
-	return parseStats(body)
+	return parseStats("", body)
 }
