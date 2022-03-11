@@ -1,0 +1,16 @@
+receivers:
+    varnish:
+    collection_interval: 60s
+
+processors:
+  nop:
+
+exporters:
+  nop:
+
+service:
+  pipelines:
+    metrics:
+     receivers: [varnishcache]
+     processors: [nop]
+     exporters: [nop]
