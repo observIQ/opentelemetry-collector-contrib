@@ -18,10 +18,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/varnishreceiver/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/model/pdata"
 	"go.uber.org/zap"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/varnishreceiver/internal/metadata"
 )
 
 type varnishScraper struct {
@@ -32,7 +33,7 @@ type varnishScraper struct {
 }
 
 func (v *varnishScraper) start(_ context.Context, host component.Host) error {
-	v.client, _ = newVarnishClient(v.config, host, v.settings)
+	v.client = newVarnishClient(v.config, host, v.settings)
 	return nil
 }
 
@@ -49,7 +50,7 @@ func (v *varnishScraper) scrape(context.Context) (pdata.Metrics, error) {
 	if err != nil {
 		v.settings.Logger.Error("Failed to execute varnishstat",
 			zap.String("Working Directory:", v.config.WorkingDir),
-			zap.String("Executable Directory:", v.config.ExecutableDir),
+			zap.String("Executable Directory:", v.config.ExecDir),
 			zap.Error(err),
 		)
 		return pdata.NewMetrics(), err

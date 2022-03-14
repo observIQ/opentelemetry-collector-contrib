@@ -10,8 +10,6 @@ Supported pipeline types: `metrics`
 
 This Varnish Cache receiver will collect metrics for [supported versions](https://varnish-cache.org/releases/) 6.0.10+ - 7.0.2+ 
 
-If an unsupported version is used, a warning will occur. Refer to [releases](https://github.com/varnishcache/varnish-cache/blob/master/doc/changes.rst) to see if `varnishstat` has changed. The `SupportedVersionLatest` can be updated as needed.
-
 ## Configuration
 
 The following configuration settings are optional:
@@ -19,7 +17,7 @@ The following configuration settings are optional:
 collection_interval (default = 10s): This receiver collects metrics on an interval. Valid time units are ns, us (or µs), ms, s, m, h.
 
 - working_dir (Optional): The -n flag used in [varnishstat](https://varnish-cache.org/docs/7.0/reference/varnishstat.html#description) to get logs from a varnishd working directory.
-- executable_dir (Optional): The directory where the varnishadm and varnishstat executables are located. 
+- exec_dir (Optional): The directory where the varnishadm and varnishstat executables are located. 
 
 ### Example Configuration
 ```yaml

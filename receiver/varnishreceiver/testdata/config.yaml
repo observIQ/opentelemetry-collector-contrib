@@ -11,6 +11,6 @@ exporters:
 service:
   pipelines:
     metrics:
-     receivers: [varnishcache]
+     receivers: [varnish]
      processors: [nop]
      exporters: [nop]

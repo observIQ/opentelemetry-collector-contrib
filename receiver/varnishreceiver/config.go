@@ -18,5 +18,5 @@ import "go.opentelemetry.io/collector/receiver/scraperhelper" // Config defines 
 type Config struct {
 	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
 	WorkingDir                              string `mapstructure:"working_dir"`
-	ExecutableDir                           string `mapstructure:"executable_dir"`
+	ExecDir                                 string `mapstructure:"exec_dir"`
 }
