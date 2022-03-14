@@ -57,9 +57,7 @@ func (v *varnishScraper) scrape(context.Context) (pdata.Metrics, error) {
 	}
 
 	now := pdata.NewTimestampFromTime(time.Now())
-	md := pdata.NewMetrics()
-	ilm := md.ResourceMetrics().AppendEmpty().InstrumentationLibraryMetrics().AppendEmpty()
-	ilm.InstrumentationLibrary().SetName("otelcol/varnish")
+	md := v.mb.NewMetricData()
 
 	v.recordVarnishBackendConnectionsCountDataPoint(now, stats)
 	v.recordVarnishCacheOperationsCountDataPoint(now, stats)
@@ -73,6 +71,6 @@ func (v *varnishScraper) scrape(context.Context) (pdata.Metrics, error) {
 	v.mb.RecordVarnishClientRequestsCountDataPoint(now, stats.Counters.MAINClientReq.Value)
 	v.mb.RecordVarnishBackendRequestsCountDataPoint(now, stats.Counters.MAINBackendReq.Value)
 
-	v.mb.Emit(ilm.Metrics())
+	v.mb.Emit(md.ResourceMetrics().At(0).InstrumentationLibraryMetrics().At(0).Metrics())
 	return md, nil
 }
