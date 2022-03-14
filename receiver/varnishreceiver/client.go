@@ -56,7 +56,7 @@ type varnishClient struct {
 
 // newVarnishClient creates a client and does a health check via version validation.
 // If version is not supported, a log warning is sent.
-func newVarnishClient(cfg *Config, host component.Host, settings component.TelemetrySettings) client {
+func newVarnishClient(cfg *Config, _ component.Host, settings component.TelemetrySettings) client {
 	return &varnishClient{
 		cfg:    cfg,
 		logger: settings.Logger,

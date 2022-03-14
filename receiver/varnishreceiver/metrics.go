@@ -164,7 +164,7 @@ type Stats6_4 struct {
 	} `json:"MAIN.backend_req"`
 }
 
-//  update convers Stats6_4 into a Stats struct, the varnish 6.5+ supported stats object.
+//  update converts Stats6_4 into a Stats struct, the varnish 6.5+ supported stats object.
 func (s *Stats6_4) update() *Stats {
 	return &Stats{
 		Counters: struct {
