@@ -13,7 +13,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.22.2
 	github.com/signalfx/com_signalfx_metrics_protobuf v0.0.3
 	github.com/signalfx/signalfx-agent/pkg/apm v0.0.0-20201202163743-65b4fa925fc8
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	go.opentelemetry.io/collector v0.46.1-0.20220307173244-f980c9ef25b1
 	go.opentelemetry.io/collector/model v0.46.1-0.20220307173244-f980c9ef25b1
 	go.uber.org/multierr v1.8.0
