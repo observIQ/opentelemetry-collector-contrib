@@ -291,7 +291,7 @@ func EnabledMetrics(settings MetricsSettings) map[string]bool {
 	}
 }
 
-func (m *metricStruct) ByName(n string) MetricIntf {
+func ByName(n string) MetricIntf {
     return metricsByName[n]
 }
 
