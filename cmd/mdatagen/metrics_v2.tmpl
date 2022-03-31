@@ -30,6 +30,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum *Sum `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+    ValueType pdata.MetricValueType
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality    
+	Monotonic bool            
+	ValueType string
+}
+
 {{ range $name, $metric := .Metrics -}}
 type metric{{ $name.Render }} struct {
 	data     pdata.Metric   // data buffer for generated metric.
@@ -53,6 +75,37 @@ func (m *metric{{ $name.Render }}) init() {
 	m.data.{{ $metric.Data.Type }}().DataPoints().EnsureCapacity(m.capacity)
 	{{- end }}
 }
+
+type MetricMetdata{{ $name.Render }} struct {}
+
+func (m MetricMetdata{{ $name.Render }}) GetName() string {
+	return "{{ $name }}"
+}
+
+func (m MetricMetdata{{ $name.Render }}) GetDescription() string {
+	return "{{ $metric.Description }}"
+}
+
+func (m MetricMetdata{{ $name.Render }}) GetUnit() string {
+	return "{{ $metric.Unit }}"
+}
+
+func (m MetricMetdata{{ $name.Render }}) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		{{- if eq $metric.Data.Type "Sum" }}
+		Sum: &Sum{
+			Aggregation: {{ $metric.Data.Aggregated.Type }},
+			Monotonic:	{{ $metric.Data.Monotonic }},
+		{{- end }}
+		{{- if eq $metric.Data.Type "Gauge" }}
+		Gauge: &Gauge{
+		{{- end }}
+			ValueType: "{{ $metric.Data.MetricValueType }}",
+		},
+	}
+}
+
+
 
 func (m *metric{{ $name.Render }}) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp
 {{- if $metric.Data.HasMetricValueType }}, val {{ $metric.Data.MetricValueType.BasicType }}{{ end }}
@@ -223,6 +276,25 @@ var Attributes = struct {
 	{{- end }}
 {{- end }}
 }
+
+var metricsByName = map[string]MetricIntf {
+{{- range $name, $metric := .Metrics }}
+	"{{ $name }}": MetricMetdata{{ $name.Render }}{},
+{{- end }}
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool {
+	{{- range $name, $metric := .Metrics }}
+		"{{ $name }}": settings.{{ $name.Render }}.Enabled,
+	{{- end }}
+	}
+}
+
+func (m *metricStruct) ByName(n string) MetricIntf {
+    return metricsByName[n]
+}
+
 
 // A is an alias for Attributes.
 var A = Attributes
