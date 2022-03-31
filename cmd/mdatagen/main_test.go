@@ -26,6 +26,9 @@ import (
 const (
 	validMetadata = `
 name: metricreceiver
+attributes:
+  freeFormAttribute:
+    description: Attribute that can take on any value.
 metrics:
   system.cpu.time:
     enabled: true
@@ -35,7 +38,15 @@ metrics:
     sum:
       aggregation: cumulative
       value_type: double
-    attributes: []
+    attributes: [ freeFormAttribute ]
+  system.memory:
+    enabled: true
+    description: Total memory.
+    unit: s
+    gauge:
+      value_type: int
+    attributes: [ freeFormAttribute ]
+
 `
 )
 

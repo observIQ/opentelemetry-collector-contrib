@@ -4,6 +4,7 @@ package {{ .Package }}
 
 import (
 	"time"
+	"fmt"
 
 	"go.opentelemetry.io/collector/model/pdata"
 )
@@ -43,7 +44,7 @@ type MetricDataTypeMetadata struct {
 }
 
 type Gauge struct {
-    ValueType pdata.MetricValueType
+    ValueType string
 }
 
 type Sum struct {
@@ -88,6 +89,10 @@ func (m MetricMetdata{{ $name.Render }}) GetDescription() string {
 
 func (m MetricMetdata{{ $name.Render }}) GetUnit() string {
 	return "{{ $metric.Unit }}"
+}
+
+func (m MetricMetdata{{ $name.Render }}) GetValueType() string {
+	return "{{ $metric.Data.MetricValueType.BasicType }}"
 }
 
 func (m MetricMetdata{{ $name.Render }}) GetMetricType() MetricDataTypeMetadata {
@@ -260,6 +265,29 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 		op(mb)
 	}
 }
+
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName{
+	{{ range $name, $metric := .Metrics }}
+	case "{{ $name }}":
+		 {{- if eq $metric.Data.MetricValueType.BasicType "float64" }}floatVal, ok := value.({{ $metric.Data.MetricValueType.BasicType }})
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.Record{{ $name.Render }}DataPoint(ts, floatVal
+		{{- end -}}
+		{{- if eq $metric.Data.MetricValueType.BasicType "int64" }} intVal, ok := value.({{ $metric.Data.MetricValueType.BasicType }})
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.Record{{ $name.Render }}DataPoint(ts, intVal
+		{{- end }}
+		{{- range $i, $attribute := $metric.Attributes -}} , attributes[{{ $i }}]{{ end }})
+		{{- end }}
+	}
+	return nil
+}
+
 
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
