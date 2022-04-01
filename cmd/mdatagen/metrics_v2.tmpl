@@ -77,25 +77,25 @@ func (m *metric{{ $name.Render }}) init() {
 	{{- end }}
 }
 
-type MetricMetdata{{ $name.Render }} struct {}
+type MetricMetadata{{ $name.Render }} struct {}
 
-func (m MetricMetdata{{ $name.Render }}) GetName() string {
+func (m MetricMetadata{{ $name.Render }}) GetName() string {
 	return "{{ $name }}"
 }
 
-func (m MetricMetdata{{ $name.Render }}) GetDescription() string {
+func (m MetricMetadata{{ $name.Render }}) GetDescription() string {
 	return "{{ $metric.Description }}"
 }
 
-func (m MetricMetdata{{ $name.Render }}) GetUnit() string {
+func (m MetricMetadata{{ $name.Render }}) GetUnit() string {
 	return "{{ $metric.Unit }}"
 }
 
-func (m MetricMetdata{{ $name.Render }}) GetValueType() string {
+func (m MetricMetadata{{ $name.Render }}) GetValueType() string {
 	return "{{ $metric.Data.MetricValueType.BasicType }}"
 }
 
-func (m MetricMetdata{{ $name.Render }}) GetMetricType() MetricDataTypeMetadata {
+func (m MetricMetadata{{ $name.Render }}) GetMetricType() MetricDataTypeMetadata {
 	return MetricDataTypeMetadata{
 		{{- if eq $metric.Data.Type "Sum" }}
 		Sum: &Sum{
@@ -307,7 +307,7 @@ var Attributes = struct {
 
 var metricsByName = map[string]MetricIntf {
 {{- range $name, $metric := .Metrics }}
-	"{{ $name }}": MetricMetdata{{ $name.Render }}{},
+	"{{ $name }}": MetricMetadata{{ $name.Render }}{},
 {{- end }}
 }
 
