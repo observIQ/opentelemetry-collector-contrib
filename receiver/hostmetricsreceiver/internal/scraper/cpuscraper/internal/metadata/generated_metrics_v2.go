@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -30,6 +31,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricSystemCPUTime struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -45,6 +68,34 @@ func (m *metricSystemCPUTime) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemCPUTime struct{}
+
+func (m MetricMetadataSystemCPUTime) GetName() string {
+	return "system.cpu.time"
+}
+
+func (m MetricMetadataSystemCPUTime) GetDescription() string {
+	return "Total CPU seconds broken down by different states."
+}
+
+func (m MetricMetadataSystemCPUTime) GetUnit() string {
+	return "s"
+}
+
+func (m MetricMetadataSystemCPUTime) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemCPUTime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Double",
+		},
+	}
 }
 
 func (m *metricSystemCPUTime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64, cpuAttributeValue string, stateAttributeValue string) {
@@ -97,6 +148,32 @@ func (m *metricSystemCPUUtilization) init() {
 	m.data.SetUnit("1")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemCPUUtilization struct{}
+
+func (m MetricMetadataSystemCPUUtilization) GetName() string {
+	return "system.cpu.utilization"
+}
+
+func (m MetricMetadataSystemCPUUtilization) GetDescription() string {
+	return "Percentage of CPU time broken down by different states."
+}
+
+func (m MetricMetadataSystemCPUUtilization) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataSystemCPUUtilization) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemCPUUtilization) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Double",
+		},
+	}
 }
 
 func (m *metricSystemCPUUtilization) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64, cpuAttributeValue string, stateAttributeValue string) {
@@ -233,6 +310,25 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "system.cpu.time":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemCPUTimeDataPoint(ts, floatVal, attributes[0], attributes[1])
+	case "system.cpu.utilization":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemCPUUtilizationDataPoint(ts, floatVal, attributes[0], attributes[1])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// Cpu (CPU number starting at 0.)
@@ -242,6 +338,22 @@ var Attributes = struct {
 }{
 	"cpu",
 	"state",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"system.cpu.time":        MetricMetadataSystemCPUTime{},
+	"system.cpu.utilization": MetricMetadataSystemCPUUtilization{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"system.cpu.time":        settings.SystemCPUTime.Enabled,
+		"system.cpu.utilization": settings.SystemCPUUtilization.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

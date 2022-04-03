@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -54,6 +55,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricCouchdbAverageRequestTime struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -66,6 +89,32 @@ func (m *metricCouchdbAverageRequestTime) init() {
 	m.data.SetDescription("The average duration of a served request.")
 	m.data.SetUnit("ms")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataCouchdbAverageRequestTime struct{}
+
+func (m MetricMetadataCouchdbAverageRequestTime) GetName() string {
+	return "couchdb.average_request_time"
+}
+
+func (m MetricMetadataCouchdbAverageRequestTime) GetDescription() string {
+	return "The average duration of a served request."
+}
+
+func (m MetricMetadataCouchdbAverageRequestTime) GetUnit() string {
+	return "ms"
+}
+
+func (m MetricMetadataCouchdbAverageRequestTime) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataCouchdbAverageRequestTime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Double",
+		},
+	}
 }
 
 func (m *metricCouchdbAverageRequestTime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64) {
@@ -117,6 +166,34 @@ func (m *metricCouchdbDatabaseOpen) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataCouchdbDatabaseOpen struct{}
+
+func (m MetricMetadataCouchdbDatabaseOpen) GetName() string {
+	return "couchdb.database.open"
+}
+
+func (m MetricMetadataCouchdbDatabaseOpen) GetDescription() string {
+	return "The number of open databases."
+}
+
+func (m MetricMetadataCouchdbDatabaseOpen) GetUnit() string {
+	return "{databases}"
+}
+
+func (m MetricMetadataCouchdbDatabaseOpen) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataCouchdbDatabaseOpen) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricCouchdbDatabaseOpen) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -171,6 +248,34 @@ func (m *metricCouchdbDatabaseOperations) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataCouchdbDatabaseOperations struct{}
+
+func (m MetricMetadataCouchdbDatabaseOperations) GetName() string {
+	return "couchdb.database.operations"
+}
+
+func (m MetricMetadataCouchdbDatabaseOperations) GetDescription() string {
+	return "The number of database operations."
+}
+
+func (m MetricMetadataCouchdbDatabaseOperations) GetUnit() string {
+	return "{operations}"
+}
+
+func (m MetricMetadataCouchdbDatabaseOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataCouchdbDatabaseOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricCouchdbDatabaseOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, operationAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -221,6 +326,34 @@ func (m *metricCouchdbFileDescriptorOpen) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataCouchdbFileDescriptorOpen struct{}
+
+func (m MetricMetadataCouchdbFileDescriptorOpen) GetName() string {
+	return "couchdb.file_descriptor.open"
+}
+
+func (m MetricMetadataCouchdbFileDescriptorOpen) GetDescription() string {
+	return "The number of open file descriptors."
+}
+
+func (m MetricMetadataCouchdbFileDescriptorOpen) GetUnit() string {
+	return "{files}"
+}
+
+func (m MetricMetadataCouchdbFileDescriptorOpen) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataCouchdbFileDescriptorOpen) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricCouchdbFileDescriptorOpen) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -274,6 +407,34 @@ func (m *metricCouchdbHttpdBulkRequests) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataCouchdbHttpdBulkRequests struct{}
+
+func (m MetricMetadataCouchdbHttpdBulkRequests) GetName() string {
+	return "couchdb.httpd.bulk_requests"
+}
+
+func (m MetricMetadataCouchdbHttpdBulkRequests) GetDescription() string {
+	return "The number of bulk requests."
+}
+
+func (m MetricMetadataCouchdbHttpdBulkRequests) GetUnit() string {
+	return "{requests}"
+}
+
+func (m MetricMetadataCouchdbHttpdBulkRequests) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataCouchdbHttpdBulkRequests) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricCouchdbHttpdBulkRequests) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -324,6 +485,34 @@ func (m *metricCouchdbHttpdRequests) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataCouchdbHttpdRequests struct{}
+
+func (m MetricMetadataCouchdbHttpdRequests) GetName() string {
+	return "couchdb.httpd.requests"
+}
+
+func (m MetricMetadataCouchdbHttpdRequests) GetDescription() string {
+	return "The number of HTTP requests by method."
+}
+
+func (m MetricMetadataCouchdbHttpdRequests) GetUnit() string {
+	return "{requests}"
+}
+
+func (m MetricMetadataCouchdbHttpdRequests) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataCouchdbHttpdRequests) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricCouchdbHttpdRequests) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, httpMethodAttributeValue string) {
@@ -379,6 +568,34 @@ func (m *metricCouchdbHttpdResponses) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataCouchdbHttpdResponses struct{}
+
+func (m MetricMetadataCouchdbHttpdResponses) GetName() string {
+	return "couchdb.httpd.responses"
+}
+
+func (m MetricMetadataCouchdbHttpdResponses) GetDescription() string {
+	return "The number of each HTTP status code."
+}
+
+func (m MetricMetadataCouchdbHttpdResponses) GetUnit() string {
+	return "{responses}"
+}
+
+func (m MetricMetadataCouchdbHttpdResponses) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataCouchdbHttpdResponses) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricCouchdbHttpdResponses) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, httpStatusCodeAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -430,6 +647,34 @@ func (m *metricCouchdbHttpdViews) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataCouchdbHttpdViews struct{}
+
+func (m MetricMetadataCouchdbHttpdViews) GetName() string {
+	return "couchdb.httpd.views"
+}
+
+func (m MetricMetadataCouchdbHttpdViews) GetDescription() string {
+	return "The number of views read."
+}
+
+func (m MetricMetadataCouchdbHttpdViews) GetUnit() string {
+	return "{views}"
+}
+
+func (m MetricMetadataCouchdbHttpdViews) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataCouchdbHttpdViews) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricCouchdbHttpdViews) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, viewAttributeValue string) {
@@ -620,6 +865,61 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "couchdb.average_request_time":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordCouchdbAverageRequestTimeDataPoint(ts, floatVal)
+	case "couchdb.database.open":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordCouchdbDatabaseOpenDataPoint(ts, intVal)
+	case "couchdb.database.operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordCouchdbDatabaseOperationsDataPoint(ts, intVal, attributes[0])
+	case "couchdb.file_descriptor.open":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordCouchdbFileDescriptorOpenDataPoint(ts, intVal)
+	case "couchdb.httpd.bulk_requests":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordCouchdbHttpdBulkRequestsDataPoint(ts, intVal)
+	case "couchdb.httpd.requests":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordCouchdbHttpdRequestsDataPoint(ts, intVal, attributes[0])
+	case "couchdb.httpd.responses":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordCouchdbHttpdResponsesDataPoint(ts, intVal, attributes[0])
+	case "couchdb.httpd.views":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordCouchdbHttpdViewsDataPoint(ts, intVal, attributes[0])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// HTTPMethod (An HTTP request method.)
@@ -635,6 +935,34 @@ var Attributes = struct {
 	"http.status_code",
 	"operation",
 	"view",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"couchdb.average_request_time": MetricMetadataCouchdbAverageRequestTime{},
+	"couchdb.database.open":        MetricMetadataCouchdbDatabaseOpen{},
+	"couchdb.database.operations":  MetricMetadataCouchdbDatabaseOperations{},
+	"couchdb.file_descriptor.open": MetricMetadataCouchdbFileDescriptorOpen{},
+	"couchdb.httpd.bulk_requests":  MetricMetadataCouchdbHttpdBulkRequests{},
+	"couchdb.httpd.requests":       MetricMetadataCouchdbHttpdRequests{},
+	"couchdb.httpd.responses":      MetricMetadataCouchdbHttpdResponses{},
+	"couchdb.httpd.views":          MetricMetadataCouchdbHttpdViews{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"couchdb.average_request_time": settings.CouchdbAverageRequestTime.Enabled,
+		"couchdb.database.open":        settings.CouchdbDatabaseOpen.Enabled,
+		"couchdb.database.operations":  settings.CouchdbDatabaseOperations.Enabled,
+		"couchdb.file_descriptor.open": settings.CouchdbFileDescriptorOpen.Enabled,
+		"couchdb.httpd.bulk_requests":  settings.CouchdbHttpdBulkRequests.Enabled,
+		"couchdb.httpd.requests":       settings.CouchdbHttpdRequests.Enabled,
+		"couchdb.httpd.responses":      settings.CouchdbHttpdResponses.Enabled,
+		"couchdb.httpd.views":          settings.CouchdbHttpdViews.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

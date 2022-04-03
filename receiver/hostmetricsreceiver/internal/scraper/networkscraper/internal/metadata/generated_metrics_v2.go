@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -42,6 +43,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricSystemNetworkConnections struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -57,6 +80,34 @@ func (m *metricSystemNetworkConnections) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemNetworkConnections struct{}
+
+func (m MetricMetadataSystemNetworkConnections) GetName() string {
+	return "system.network.connections"
+}
+
+func (m MetricMetadataSystemNetworkConnections) GetDescription() string {
+	return "The number of connections."
+}
+
+func (m MetricMetadataSystemNetworkConnections) GetUnit() string {
+	return "{connections}"
+}
+
+func (m MetricMetadataSystemNetworkConnections) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemNetworkConnections) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemNetworkConnections) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, protocolAttributeValue string, stateAttributeValue string) {
@@ -113,6 +164,34 @@ func (m *metricSystemNetworkDropped) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataSystemNetworkDropped struct{}
+
+func (m MetricMetadataSystemNetworkDropped) GetName() string {
+	return "system.network.dropped"
+}
+
+func (m MetricMetadataSystemNetworkDropped) GetDescription() string {
+	return "The number of packets dropped."
+}
+
+func (m MetricMetadataSystemNetworkDropped) GetUnit() string {
+	return "{packets}"
+}
+
+func (m MetricMetadataSystemNetworkDropped) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemNetworkDropped) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricSystemNetworkDropped) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, directionAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -165,6 +244,34 @@ func (m *metricSystemNetworkErrors) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemNetworkErrors struct{}
+
+func (m MetricMetadataSystemNetworkErrors) GetName() string {
+	return "system.network.errors"
+}
+
+func (m MetricMetadataSystemNetworkErrors) GetDescription() string {
+	return "The number of errors encountered."
+}
+
+func (m MetricMetadataSystemNetworkErrors) GetUnit() string {
+	return "{errors}"
+}
+
+func (m MetricMetadataSystemNetworkErrors) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemNetworkErrors) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemNetworkErrors) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, directionAttributeValue string) {
@@ -221,6 +328,34 @@ func (m *metricSystemNetworkIo) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataSystemNetworkIo struct{}
+
+func (m MetricMetadataSystemNetworkIo) GetName() string {
+	return "system.network.io"
+}
+
+func (m MetricMetadataSystemNetworkIo) GetDescription() string {
+	return "The number of bytes transmitted and received."
+}
+
+func (m MetricMetadataSystemNetworkIo) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataSystemNetworkIo) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemNetworkIo) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricSystemNetworkIo) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, directionAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -273,6 +408,34 @@ func (m *metricSystemNetworkPackets) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemNetworkPackets struct{}
+
+func (m MetricMetadataSystemNetworkPackets) GetName() string {
+	return "system.network.packets"
+}
+
+func (m MetricMetadataSystemNetworkPackets) GetDescription() string {
+	return "The number of packets transferred."
+}
+
+func (m MetricMetadataSystemNetworkPackets) GetUnit() string {
+	return "{packets}"
+}
+
+func (m MetricMetadataSystemNetworkPackets) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemNetworkPackets) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemNetworkPackets) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, directionAttributeValue string) {
@@ -433,6 +596,43 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "system.network.connections":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemNetworkConnectionsDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "system.network.dropped":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemNetworkDroppedDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "system.network.errors":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemNetworkErrorsDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "system.network.io":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemNetworkIoDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "system.network.packets":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemNetworkPacketsDataPoint(ts, intVal, attributes[0], attributes[1])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// Device (Name of the network interface.)
@@ -448,6 +648,28 @@ var Attributes = struct {
 	"direction",
 	"protocol",
 	"state",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"system.network.connections": MetricMetadataSystemNetworkConnections{},
+	"system.network.dropped":     MetricMetadataSystemNetworkDropped{},
+	"system.network.errors":      MetricMetadataSystemNetworkErrors{},
+	"system.network.io":          MetricMetadataSystemNetworkIo{},
+	"system.network.packets":     MetricMetadataSystemNetworkPackets{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"system.network.connections": settings.SystemNetworkConnections.Enabled,
+		"system.network.dropped":     settings.SystemNetworkDropped.Enabled,
+		"system.network.errors":      settings.SystemNetworkErrors.Enabled,
+		"system.network.io":          settings.SystemNetworkIo.Enabled,
+		"system.network.packets":     settings.SystemNetworkPackets.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

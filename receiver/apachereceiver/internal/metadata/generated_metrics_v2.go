@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -46,6 +47,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricApacheCurrentConnections struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -61,6 +84,34 @@ func (m *metricApacheCurrentConnections) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataApacheCurrentConnections struct{}
+
+func (m MetricMetadataApacheCurrentConnections) GetName() string {
+	return "apache.current_connections"
+}
+
+func (m MetricMetadataApacheCurrentConnections) GetDescription() string {
+	return "The number of active connections currently attached to the HTTP server."
+}
+
+func (m MetricMetadataApacheCurrentConnections) GetUnit() string {
+	return "connections"
+}
+
+func (m MetricMetadataApacheCurrentConnections) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataApacheCurrentConnections) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricApacheCurrentConnections) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, serverNameAttributeValue string) {
@@ -116,6 +167,34 @@ func (m *metricApacheRequests) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataApacheRequests struct{}
+
+func (m MetricMetadataApacheRequests) GetName() string {
+	return "apache.requests"
+}
+
+func (m MetricMetadataApacheRequests) GetDescription() string {
+	return "The number of requests serviced by the HTTP server per second."
+}
+
+func (m MetricMetadataApacheRequests) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataApacheRequests) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataApacheRequests) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricApacheRequests) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, serverNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -167,6 +246,34 @@ func (m *metricApacheScoreboard) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataApacheScoreboard struct{}
+
+func (m MetricMetadataApacheScoreboard) GetName() string {
+	return "apache.scoreboard"
+}
+
+func (m MetricMetadataApacheScoreboard) GetDescription() string {
+	return "The number of connections in each state."
+}
+
+func (m MetricMetadataApacheScoreboard) GetUnit() string {
+	return "scoreboard"
+}
+
+func (m MetricMetadataApacheScoreboard) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataApacheScoreboard) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricApacheScoreboard) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, serverNameAttributeValue string, scoreboardStateAttributeValue string) {
@@ -223,6 +330,34 @@ func (m *metricApacheTraffic) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataApacheTraffic struct{}
+
+func (m MetricMetadataApacheTraffic) GetName() string {
+	return "apache.traffic"
+}
+
+func (m MetricMetadataApacheTraffic) GetDescription() string {
+	return "Total HTTP server traffic."
+}
+
+func (m MetricMetadataApacheTraffic) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataApacheTraffic) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataApacheTraffic) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricApacheTraffic) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, serverNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -276,6 +411,34 @@ func (m *metricApacheUptime) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataApacheUptime struct{}
+
+func (m MetricMetadataApacheUptime) GetName() string {
+	return "apache.uptime"
+}
+
+func (m MetricMetadataApacheUptime) GetDescription() string {
+	return "The amount of time that the server has been running in seconds."
+}
+
+func (m MetricMetadataApacheUptime) GetUnit() string {
+	return "s"
+}
+
+func (m MetricMetadataApacheUptime) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataApacheUptime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricApacheUptime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, serverNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -327,6 +490,34 @@ func (m *metricApacheWorkers) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataApacheWorkers struct{}
+
+func (m MetricMetadataApacheWorkers) GetName() string {
+	return "apache.workers"
+}
+
+func (m MetricMetadataApacheWorkers) GetDescription() string {
+	return "The number of workers currently attached to the HTTP server."
+}
+
+func (m MetricMetadataApacheWorkers) GetUnit() string {
+	return "connections"
+}
+
+func (m MetricMetadataApacheWorkers) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataApacheWorkers) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricApacheWorkers) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, serverNameAttributeValue string, workersStateAttributeValue string) {
@@ -495,6 +686,49 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "apache.current_connections":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordApacheCurrentConnectionsDataPoint(ts, intVal, attributes[0])
+	case "apache.requests":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordApacheRequestsDataPoint(ts, intVal, attributes[0])
+	case "apache.scoreboard":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordApacheScoreboardDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "apache.traffic":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordApacheTrafficDataPoint(ts, intVal, attributes[0])
+	case "apache.uptime":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordApacheUptimeDataPoint(ts, intVal, attributes[0])
+	case "apache.workers":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordApacheWorkersDataPoint(ts, intVal, attributes[0], attributes[1])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// ScoreboardState (The state of a connection.)
@@ -507,6 +741,30 @@ var Attributes = struct {
 	"state",
 	"server_name",
 	"state",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"apache.current_connections": MetricMetadataApacheCurrentConnections{},
+	"apache.requests":            MetricMetadataApacheRequests{},
+	"apache.scoreboard":          MetricMetadataApacheScoreboard{},
+	"apache.traffic":             MetricMetadataApacheTraffic{},
+	"apache.uptime":              MetricMetadataApacheUptime{},
+	"apache.workers":             MetricMetadataApacheWorkers{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"apache.current_connections": settings.ApacheCurrentConnections.Enabled,
+		"apache.requests":            settings.ApacheRequests.Enabled,
+		"apache.scoreboard":          settings.ApacheScoreboard.Enabled,
+		"apache.traffic":             settings.ApacheTraffic.Enabled,
+		"apache.uptime":              settings.ApacheUptime.Enabled,
+		"apache.workers":             settings.ApacheWorkers.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

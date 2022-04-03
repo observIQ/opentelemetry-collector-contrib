@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -38,6 +39,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricSystemPagingFaults struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -53,6 +76,34 @@ func (m *metricSystemPagingFaults) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemPagingFaults struct{}
+
+func (m MetricMetadataSystemPagingFaults) GetName() string {
+	return "system.paging.faults"
+}
+
+func (m MetricMetadataSystemPagingFaults) GetDescription() string {
+	return "The number of page faults."
+}
+
+func (m MetricMetadataSystemPagingFaults) GetUnit() string {
+	return "{faults}"
+}
+
+func (m MetricMetadataSystemPagingFaults) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemPagingFaults) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemPagingFaults) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, typeAttributeValue string) {
@@ -106,6 +157,34 @@ func (m *metricSystemPagingOperations) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemPagingOperations struct{}
+
+func (m MetricMetadataSystemPagingOperations) GetName() string {
+	return "system.paging.operations"
+}
+
+func (m MetricMetadataSystemPagingOperations) GetDescription() string {
+	return "The number of paging operations."
+}
+
+func (m MetricMetadataSystemPagingOperations) GetUnit() string {
+	return "{operations}"
+}
+
+func (m MetricMetadataSystemPagingOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemPagingOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemPagingOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, directionAttributeValue string, typeAttributeValue string) {
@@ -162,6 +241,34 @@ func (m *metricSystemPagingUsage) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataSystemPagingUsage struct{}
+
+func (m MetricMetadataSystemPagingUsage) GetName() string {
+	return "system.paging.usage"
+}
+
+func (m MetricMetadataSystemPagingUsage) GetDescription() string {
+	return "Swap (unix) or pagefile (windows) usage."
+}
+
+func (m MetricMetadataSystemPagingUsage) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataSystemPagingUsage) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemPagingUsage) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricSystemPagingUsage) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, stateAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -212,6 +319,32 @@ func (m *metricSystemPagingUtilization) init() {
 	m.data.SetUnit("1")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemPagingUtilization struct{}
+
+func (m MetricMetadataSystemPagingUtilization) GetName() string {
+	return "system.paging.utilization"
+}
+
+func (m MetricMetadataSystemPagingUtilization) GetDescription() string {
+	return "Swap (unix) or pagefile (windows) utilization."
+}
+
+func (m MetricMetadataSystemPagingUtilization) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataSystemPagingUtilization) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemPagingUtilization) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Double",
+		},
+	}
 }
 
 func (m *metricSystemPagingUtilization) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64, deviceAttributeValue string, stateAttributeValue string) {
@@ -364,6 +497,37 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "system.paging.faults":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemPagingFaultsDataPoint(ts, intVal, attributes[0])
+	case "system.paging.operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemPagingOperationsDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "system.paging.usage":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemPagingUsageDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "system.paging.utilization":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemPagingUtilizationDataPoint(ts, floatVal, attributes[0], attributes[1])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// Device (Name of the page file.)
@@ -379,6 +543,26 @@ var Attributes = struct {
 	"direction",
 	"state",
 	"type",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"system.paging.faults":      MetricMetadataSystemPagingFaults{},
+	"system.paging.operations":  MetricMetadataSystemPagingOperations{},
+	"system.paging.usage":       MetricMetadataSystemPagingUsage{},
+	"system.paging.utilization": MetricMetadataSystemPagingUtilization{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"system.paging.faults":      settings.SystemPagingFaults.Enabled,
+		"system.paging.operations":  settings.SystemPagingOperations.Enabled,
+		"system.paging.usage":       settings.SystemPagingUsage.Enabled,
+		"system.paging.utilization": settings.SystemPagingUtilization.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

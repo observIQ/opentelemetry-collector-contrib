@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -30,6 +31,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricSystemMemoryUsage struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -45,6 +68,34 @@ func (m *metricSystemMemoryUsage) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemMemoryUsage struct{}
+
+func (m MetricMetadataSystemMemoryUsage) GetName() string {
+	return "system.memory.usage"
+}
+
+func (m MetricMetadataSystemMemoryUsage) GetDescription() string {
+	return "Bytes of memory in use."
+}
+
+func (m MetricMetadataSystemMemoryUsage) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataSystemMemoryUsage) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemMemoryUsage) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemMemoryUsage) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, stateAttributeValue string) {
@@ -96,6 +147,32 @@ func (m *metricSystemMemoryUtilization) init() {
 	m.data.SetUnit("1")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemMemoryUtilization struct{}
+
+func (m MetricMetadataSystemMemoryUtilization) GetName() string {
+	return "system.memory.utilization"
+}
+
+func (m MetricMetadataSystemMemoryUtilization) GetDescription() string {
+	return "Percentage of memory bytes in use."
+}
+
+func (m MetricMetadataSystemMemoryUtilization) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataSystemMemoryUtilization) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemMemoryUtilization) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Double",
+		},
+	}
 }
 
 func (m *metricSystemMemoryUtilization) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64, stateAttributeValue string) {
@@ -231,12 +308,47 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "system.memory.usage":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemMemoryUsageDataPoint(ts, intVal, attributes[0])
+	case "system.memory.utilization":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemMemoryUtilizationDataPoint(ts, floatVal, attributes[0])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// State (Breakdown of memory usage by type.)
 	State string
 }{
 	"state",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"system.memory.usage":       MetricMetadataSystemMemoryUsage{},
+	"system.memory.utilization": MetricMetadataSystemMemoryUtilization{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"system.memory.usage":       settings.SystemMemoryUsage.Enabled,
+		"system.memory.utilization": settings.SystemMemoryUtilization.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

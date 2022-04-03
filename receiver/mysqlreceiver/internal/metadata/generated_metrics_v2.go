@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -90,6 +91,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricMysqlBufferPoolDataPages struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -105,6 +128,34 @@ func (m *metricMysqlBufferPoolDataPages) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMysqlBufferPoolDataPages struct{}
+
+func (m MetricMetadataMysqlBufferPoolDataPages) GetName() string {
+	return "mysql.buffer_pool.data_pages"
+}
+
+func (m MetricMetadataMysqlBufferPoolDataPages) GetDescription() string {
+	return "The number of data pages in the InnoDB buffer pool."
+}
+
+func (m MetricMetadataMysqlBufferPoolDataPages) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlBufferPoolDataPages) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlBufferPoolDataPages) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMysqlBufferPoolDataPages) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, bufferPoolDataAttributeValue string) {
@@ -159,6 +210,34 @@ func (m *metricMysqlBufferPoolLimit) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataMysqlBufferPoolLimit struct{}
+
+func (m MetricMetadataMysqlBufferPoolLimit) GetName() string {
+	return "mysql.buffer_pool.limit"
+}
+
+func (m MetricMetadataMysqlBufferPoolLimit) GetDescription() string {
+	return "The configured size of the InnoDB buffer pool."
+}
+
+func (m MetricMetadataMysqlBufferPoolLimit) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataMysqlBufferPoolLimit) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlBufferPoolLimit) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMysqlBufferPoolLimit) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -209,6 +288,34 @@ func (m *metricMysqlBufferPoolOperations) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMysqlBufferPoolOperations struct{}
+
+func (m MetricMetadataMysqlBufferPoolOperations) GetName() string {
+	return "mysql.buffer_pool.operations"
+}
+
+func (m MetricMetadataMysqlBufferPoolOperations) GetDescription() string {
+	return "The number of operations on the InnoDB buffer pool."
+}
+
+func (m MetricMetadataMysqlBufferPoolOperations) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlBufferPoolOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlBufferPoolOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMysqlBufferPoolOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, bufferPoolOperationsAttributeValue string) {
@@ -263,6 +370,34 @@ func (m *metricMysqlBufferPoolPageFlushes) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataMysqlBufferPoolPageFlushes struct{}
+
+func (m MetricMetadataMysqlBufferPoolPageFlushes) GetName() string {
+	return "mysql.buffer_pool.page_flushes"
+}
+
+func (m MetricMetadataMysqlBufferPoolPageFlushes) GetDescription() string {
+	return "The number of requests to flush pages from the InnoDB buffer pool."
+}
+
+func (m MetricMetadataMysqlBufferPoolPageFlushes) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlBufferPoolPageFlushes) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlBufferPoolPageFlushes) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMysqlBufferPoolPageFlushes) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -313,6 +448,34 @@ func (m *metricMysqlBufferPoolPages) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMysqlBufferPoolPages struct{}
+
+func (m MetricMetadataMysqlBufferPoolPages) GetName() string {
+	return "mysql.buffer_pool.pages"
+}
+
+func (m MetricMetadataMysqlBufferPoolPages) GetDescription() string {
+	return "The number of pages in the InnoDB buffer pool."
+}
+
+func (m MetricMetadataMysqlBufferPoolPages) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlBufferPoolPages) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlBufferPoolPages) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMysqlBufferPoolPages) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, bufferPoolPagesAttributeValue string) {
@@ -368,6 +531,34 @@ func (m *metricMysqlBufferPoolUsage) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMysqlBufferPoolUsage struct{}
+
+func (m MetricMetadataMysqlBufferPoolUsage) GetName() string {
+	return "mysql.buffer_pool.usage"
+}
+
+func (m MetricMetadataMysqlBufferPoolUsage) GetDescription() string {
+	return "The number of bytes in the InnoDB buffer pool."
+}
+
+func (m MetricMetadataMysqlBufferPoolUsage) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataMysqlBufferPoolUsage) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlBufferPoolUsage) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMysqlBufferPoolUsage) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, bufferPoolDataAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -419,6 +610,34 @@ func (m *metricMysqlCommands) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMysqlCommands struct{}
+
+func (m MetricMetadataMysqlCommands) GetName() string {
+	return "mysql.commands"
+}
+
+func (m MetricMetadataMysqlCommands) GetDescription() string {
+	return "The number of times each type of command has been executed."
+}
+
+func (m MetricMetadataMysqlCommands) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlCommands) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlCommands) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMysqlCommands) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, commandAttributeValue string) {
@@ -474,6 +693,34 @@ func (m *metricMysqlDoubleWrites) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMysqlDoubleWrites struct{}
+
+func (m MetricMetadataMysqlDoubleWrites) GetName() string {
+	return "mysql.double_writes"
+}
+
+func (m MetricMetadataMysqlDoubleWrites) GetDescription() string {
+	return "The number of writes to the InnoDB doublewrite buffer."
+}
+
+func (m MetricMetadataMysqlDoubleWrites) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlDoubleWrites) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlDoubleWrites) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMysqlDoubleWrites) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, doubleWritesAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -525,6 +772,34 @@ func (m *metricMysqlHandlers) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMysqlHandlers struct{}
+
+func (m MetricMetadataMysqlHandlers) GetName() string {
+	return "mysql.handlers"
+}
+
+func (m MetricMetadataMysqlHandlers) GetDescription() string {
+	return "The number of requests to various MySQL handlers."
+}
+
+func (m MetricMetadataMysqlHandlers) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlHandlers) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlHandlers) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMysqlHandlers) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, handlerAttributeValue string) {
@@ -580,6 +855,34 @@ func (m *metricMysqlLocks) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMysqlLocks struct{}
+
+func (m MetricMetadataMysqlLocks) GetName() string {
+	return "mysql.locks"
+}
+
+func (m MetricMetadataMysqlLocks) GetDescription() string {
+	return "The number of MySQL locks."
+}
+
+func (m MetricMetadataMysqlLocks) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlLocks) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlLocks) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMysqlLocks) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, locksAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -631,6 +934,34 @@ func (m *metricMysqlLogOperations) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMysqlLogOperations struct{}
+
+func (m MetricMetadataMysqlLogOperations) GetName() string {
+	return "mysql.log_operations"
+}
+
+func (m MetricMetadataMysqlLogOperations) GetDescription() string {
+	return "The number of InndoDB log operations."
+}
+
+func (m MetricMetadataMysqlLogOperations) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlLogOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlLogOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMysqlLogOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, logOperationsAttributeValue string) {
@@ -686,6 +1017,34 @@ func (m *metricMysqlOperations) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMysqlOperations struct{}
+
+func (m MetricMetadataMysqlOperations) GetName() string {
+	return "mysql.operations"
+}
+
+func (m MetricMetadataMysqlOperations) GetDescription() string {
+	return "The number of InndoDB operations."
+}
+
+func (m MetricMetadataMysqlOperations) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMysqlOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, operationsAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -737,6 +1096,34 @@ func (m *metricMysqlPageOperations) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMysqlPageOperations struct{}
+
+func (m MetricMetadataMysqlPageOperations) GetName() string {
+	return "mysql.page_operations"
+}
+
+func (m MetricMetadataMysqlPageOperations) GetDescription() string {
+	return "The number of InndoDB page operations."
+}
+
+func (m MetricMetadataMysqlPageOperations) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlPageOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlPageOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMysqlPageOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, pageOperationsAttributeValue string) {
@@ -792,6 +1179,34 @@ func (m *metricMysqlRowLocks) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMysqlRowLocks struct{}
+
+func (m MetricMetadataMysqlRowLocks) GetName() string {
+	return "mysql.row_locks"
+}
+
+func (m MetricMetadataMysqlRowLocks) GetDescription() string {
+	return "The number of InndoDB row locks."
+}
+
+func (m MetricMetadataMysqlRowLocks) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlRowLocks) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlRowLocks) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMysqlRowLocks) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, rowLocksAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -843,6 +1258,34 @@ func (m *metricMysqlRowOperations) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMysqlRowOperations struct{}
+
+func (m MetricMetadataMysqlRowOperations) GetName() string {
+	return "mysql.row_operations"
+}
+
+func (m MetricMetadataMysqlRowOperations) GetDescription() string {
+	return "The number of InndoDB row operations."
+}
+
+func (m MetricMetadataMysqlRowOperations) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlRowOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlRowOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMysqlRowOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, rowOperationsAttributeValue string) {
@@ -898,6 +1341,34 @@ func (m *metricMysqlSorts) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMysqlSorts struct{}
+
+func (m MetricMetadataMysqlSorts) GetName() string {
+	return "mysql.sorts"
+}
+
+func (m MetricMetadataMysqlSorts) GetDescription() string {
+	return "The number of MySQL sorts."
+}
+
+func (m MetricMetadataMysqlSorts) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlSorts) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlSorts) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMysqlSorts) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, sortsAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -949,6 +1420,34 @@ func (m *metricMysqlThreads) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMysqlThreads struct{}
+
+func (m MetricMetadataMysqlThreads) GetName() string {
+	return "mysql.threads"
+}
+
+func (m MetricMetadataMysqlThreads) GetDescription() string {
+	return "The state of MySQL threads."
+}
+
+func (m MetricMetadataMysqlThreads) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataMysqlThreads) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMysqlThreads) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMysqlThreads) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, threadsAttributeValue string) {
@@ -1204,6 +1703,115 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "mysql.buffer_pool.data_pages":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlBufferPoolDataPagesDataPoint(ts, intVal, attributes[0])
+	case "mysql.buffer_pool.limit":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlBufferPoolLimitDataPoint(ts, intVal)
+	case "mysql.buffer_pool.operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlBufferPoolOperationsDataPoint(ts, intVal, attributes[0])
+	case "mysql.buffer_pool.page_flushes":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlBufferPoolPageFlushesDataPoint(ts, intVal)
+	case "mysql.buffer_pool.pages":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlBufferPoolPagesDataPoint(ts, intVal, attributes[0])
+	case "mysql.buffer_pool.usage":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlBufferPoolUsageDataPoint(ts, intVal, attributes[0])
+	case "mysql.commands":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlCommandsDataPoint(ts, intVal, attributes[0])
+	case "mysql.double_writes":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlDoubleWritesDataPoint(ts, intVal, attributes[0])
+	case "mysql.handlers":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlHandlersDataPoint(ts, intVal, attributes[0])
+	case "mysql.locks":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlLocksDataPoint(ts, intVal, attributes[0])
+	case "mysql.log_operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlLogOperationsDataPoint(ts, intVal, attributes[0])
+	case "mysql.operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlOperationsDataPoint(ts, intVal, attributes[0])
+	case "mysql.page_operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlPageOperationsDataPoint(ts, intVal, attributes[0])
+	case "mysql.row_locks":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlRowLocksDataPoint(ts, intVal, attributes[0])
+	case "mysql.row_operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlRowOperationsDataPoint(ts, intVal, attributes[0])
+	case "mysql.sorts":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlSortsDataPoint(ts, intVal, attributes[0])
+	case "mysql.threads":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMysqlThreadsDataPoint(ts, intVal, attributes[0])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// BufferPoolData (The status of buffer pool data.)
@@ -1249,6 +1857,52 @@ var Attributes = struct {
 	"operation",
 	"kind",
 	"kind",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"mysql.buffer_pool.data_pages":   MetricMetadataMysqlBufferPoolDataPages{},
+	"mysql.buffer_pool.limit":        MetricMetadataMysqlBufferPoolLimit{},
+	"mysql.buffer_pool.operations":   MetricMetadataMysqlBufferPoolOperations{},
+	"mysql.buffer_pool.page_flushes": MetricMetadataMysqlBufferPoolPageFlushes{},
+	"mysql.buffer_pool.pages":        MetricMetadataMysqlBufferPoolPages{},
+	"mysql.buffer_pool.usage":        MetricMetadataMysqlBufferPoolUsage{},
+	"mysql.commands":                 MetricMetadataMysqlCommands{},
+	"mysql.double_writes":            MetricMetadataMysqlDoubleWrites{},
+	"mysql.handlers":                 MetricMetadataMysqlHandlers{},
+	"mysql.locks":                    MetricMetadataMysqlLocks{},
+	"mysql.log_operations":           MetricMetadataMysqlLogOperations{},
+	"mysql.operations":               MetricMetadataMysqlOperations{},
+	"mysql.page_operations":          MetricMetadataMysqlPageOperations{},
+	"mysql.row_locks":                MetricMetadataMysqlRowLocks{},
+	"mysql.row_operations":           MetricMetadataMysqlRowOperations{},
+	"mysql.sorts":                    MetricMetadataMysqlSorts{},
+	"mysql.threads":                  MetricMetadataMysqlThreads{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"mysql.buffer_pool.data_pages":   settings.MysqlBufferPoolDataPages.Enabled,
+		"mysql.buffer_pool.limit":        settings.MysqlBufferPoolLimit.Enabled,
+		"mysql.buffer_pool.operations":   settings.MysqlBufferPoolOperations.Enabled,
+		"mysql.buffer_pool.page_flushes": settings.MysqlBufferPoolPageFlushes.Enabled,
+		"mysql.buffer_pool.pages":        settings.MysqlBufferPoolPages.Enabled,
+		"mysql.buffer_pool.usage":        settings.MysqlBufferPoolUsage.Enabled,
+		"mysql.commands":                 settings.MysqlCommands.Enabled,
+		"mysql.double_writes":            settings.MysqlDoubleWrites.Enabled,
+		"mysql.handlers":                 settings.MysqlHandlers.Enabled,
+		"mysql.locks":                    settings.MysqlLocks.Enabled,
+		"mysql.log_operations":           settings.MysqlLogOperations.Enabled,
+		"mysql.operations":               settings.MysqlOperations.Enabled,
+		"mysql.page_operations":          settings.MysqlPageOperations.Enabled,
+		"mysql.row_locks":                settings.MysqlRowLocks.Enabled,
+		"mysql.row_operations":           settings.MysqlRowOperations.Enabled,
+		"mysql.sorts":                    settings.MysqlSorts.Enabled,
+		"mysql.threads":                  settings.MysqlThreads.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -34,6 +35,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricSystemCPULoadAverage15m struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -46,6 +69,32 @@ func (m *metricSystemCPULoadAverage15m) init() {
 	m.data.SetDescription("Average CPU Load over 15 minutes.")
 	m.data.SetUnit("1")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataSystemCPULoadAverage15m struct{}
+
+func (m MetricMetadataSystemCPULoadAverage15m) GetName() string {
+	return "system.cpu.load_average.15m"
+}
+
+func (m MetricMetadataSystemCPULoadAverage15m) GetDescription() string {
+	return "Average CPU Load over 15 minutes."
+}
+
+func (m MetricMetadataSystemCPULoadAverage15m) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataSystemCPULoadAverage15m) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemCPULoadAverage15m) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Double",
+		},
+	}
 }
 
 func (m *metricSystemCPULoadAverage15m) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64) {
@@ -97,6 +146,32 @@ func (m *metricSystemCPULoadAverage1m) init() {
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 }
 
+type MetricMetadataSystemCPULoadAverage1m struct{}
+
+func (m MetricMetadataSystemCPULoadAverage1m) GetName() string {
+	return "system.cpu.load_average.1m"
+}
+
+func (m MetricMetadataSystemCPULoadAverage1m) GetDescription() string {
+	return "Average CPU Load over 1 minute."
+}
+
+func (m MetricMetadataSystemCPULoadAverage1m) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataSystemCPULoadAverage1m) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemCPULoadAverage1m) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Double",
+		},
+	}
+}
+
 func (m *metricSystemCPULoadAverage1m) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64) {
 	if !m.settings.Enabled {
 		return
@@ -144,6 +219,32 @@ func (m *metricSystemCPULoadAverage5m) init() {
 	m.data.SetDescription("Average CPU Load over 5 minutes.")
 	m.data.SetUnit("1")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataSystemCPULoadAverage5m struct{}
+
+func (m MetricMetadataSystemCPULoadAverage5m) GetName() string {
+	return "system.cpu.load_average.5m"
+}
+
+func (m MetricMetadataSystemCPULoadAverage5m) GetDescription() string {
+	return "Average CPU Load over 5 minutes."
+}
+
+func (m MetricMetadataSystemCPULoadAverage5m) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataSystemCPULoadAverage5m) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemCPULoadAverage5m) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Double",
+		},
+	}
 }
 
 func (m *metricSystemCPULoadAverage5m) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64) {
@@ -286,9 +387,52 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "system.cpu.load_average.15m":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemCPULoadAverage15mDataPoint(ts, floatVal)
+	case "system.cpu.load_average.1m":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemCPULoadAverage1mDataPoint(ts, floatVal)
+	case "system.cpu.load_average.5m":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemCPULoadAverage5mDataPoint(ts, floatVal)
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 }{}
+
+var metricsByName = map[string]MetricIntf{
+	"system.cpu.load_average.15m": MetricMetadataSystemCPULoadAverage15m{},
+	"system.cpu.load_average.1m":  MetricMetadataSystemCPULoadAverage1m{},
+	"system.cpu.load_average.5m":  MetricMetadataSystemCPULoadAverage5m{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"system.cpu.load_average.15m": settings.SystemCPULoadAverage15m.Enabled,
+		"system.cpu.load_average.1m":  settings.SystemCPULoadAverage1m.Enabled,
+		"system.cpu.load_average.5m":  settings.SystemCPULoadAverage5m.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
+}
 
 // A is an alias for Attributes.
 var A = Attributes

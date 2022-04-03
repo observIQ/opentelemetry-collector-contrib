@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -38,6 +39,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricNginxConnectionsAccepted struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -52,6 +75,34 @@ func (m *metricNginxConnectionsAccepted) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataNginxConnectionsAccepted struct{}
+
+func (m MetricMetadataNginxConnectionsAccepted) GetName() string {
+	return "nginx.connections_accepted"
+}
+
+func (m MetricMetadataNginxConnectionsAccepted) GetDescription() string {
+	return "The total number of accepted client connections"
+}
+
+func (m MetricMetadataNginxConnectionsAccepted) GetUnit() string {
+	return "connections"
+}
+
+func (m MetricMetadataNginxConnectionsAccepted) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataNginxConnectionsAccepted) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricNginxConnectionsAccepted) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -102,6 +153,32 @@ func (m *metricNginxConnectionsCurrent) init() {
 	m.data.SetUnit("connections")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataNginxConnectionsCurrent struct{}
+
+func (m MetricMetadataNginxConnectionsCurrent) GetName() string {
+	return "nginx.connections_current"
+}
+
+func (m MetricMetadataNginxConnectionsCurrent) GetDescription() string {
+	return "The current number of nginx connections by state"
+}
+
+func (m MetricMetadataNginxConnectionsCurrent) GetUnit() string {
+	return "connections"
+}
+
+func (m MetricMetadataNginxConnectionsCurrent) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataNginxConnectionsCurrent) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricNginxConnectionsCurrent) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, stateAttributeValue string) {
@@ -156,6 +233,34 @@ func (m *metricNginxConnectionsHandled) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataNginxConnectionsHandled struct{}
+
+func (m MetricMetadataNginxConnectionsHandled) GetName() string {
+	return "nginx.connections_handled"
+}
+
+func (m MetricMetadataNginxConnectionsHandled) GetDescription() string {
+	return "The total number of handled connections. Generally, the parameter value is the same as nginx.connections_accepted unless some resource limits have been reached (for example, the worker_connections limit)."
+}
+
+func (m MetricMetadataNginxConnectionsHandled) GetUnit() string {
+	return "connections"
+}
+
+func (m MetricMetadataNginxConnectionsHandled) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataNginxConnectionsHandled) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricNginxConnectionsHandled) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -205,6 +310,34 @@ func (m *metricNginxRequests) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataNginxRequests struct{}
+
+func (m MetricMetadataNginxRequests) GetName() string {
+	return "nginx.requests"
+}
+
+func (m MetricMetadataNginxRequests) GetDescription() string {
+	return "Total number of requests made to the server since it started"
+}
+
+func (m MetricMetadataNginxRequests) GetUnit() string {
+	return "requests"
+}
+
+func (m MetricMetadataNginxRequests) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataNginxRequests) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricNginxRequests) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -355,12 +488,63 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "nginx.connections_accepted":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordNginxConnectionsAcceptedDataPoint(ts, intVal)
+	case "nginx.connections_current":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordNginxConnectionsCurrentDataPoint(ts, intVal, attributes[0])
+	case "nginx.connections_handled":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordNginxConnectionsHandledDataPoint(ts, intVal)
+	case "nginx.requests":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordNginxRequestsDataPoint(ts, intVal)
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// State (The state of a connection)
 	State string
 }{
 	"state",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"nginx.connections_accepted": MetricMetadataNginxConnectionsAccepted{},
+	"nginx.connections_current":  MetricMetadataNginxConnectionsCurrent{},
+	"nginx.connections_handled":  MetricMetadataNginxConnectionsHandled{},
+	"nginx.requests":             MetricMetadataNginxRequests{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"nginx.connections_accepted": settings.NginxConnectionsAccepted.Enabled,
+		"nginx.connections_current":  settings.NginxConnectionsCurrent.Enabled,
+		"nginx.connections_handled":  settings.NginxConnectionsHandled.Enabled,
+		"nginx.requests":             settings.NginxRequests.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

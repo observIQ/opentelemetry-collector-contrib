@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -138,6 +139,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricElasticsearchClusterDataNodes struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -152,6 +175,34 @@ func (m *metricElasticsearchClusterDataNodes) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataElasticsearchClusterDataNodes struct{}
+
+func (m MetricMetadataElasticsearchClusterDataNodes) GetName() string {
+	return "elasticsearch.cluster.data_nodes"
+}
+
+func (m MetricMetadataElasticsearchClusterDataNodes) GetDescription() string {
+	return "The number of data nodes in the cluster."
+}
+
+func (m MetricMetadataElasticsearchClusterDataNodes) GetUnit() string {
+	return "{nodes}"
+}
+
+func (m MetricMetadataElasticsearchClusterDataNodes) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchClusterDataNodes) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricElasticsearchClusterDataNodes) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -206,6 +257,34 @@ func (m *metricElasticsearchClusterHealth) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataElasticsearchClusterHealth struct{}
+
+func (m MetricMetadataElasticsearchClusterHealth) GetName() string {
+	return "elasticsearch.cluster.health"
+}
+
+func (m MetricMetadataElasticsearchClusterHealth) GetDescription() string {
+	return "The health status of the cluster."
+}
+
+func (m MetricMetadataElasticsearchClusterHealth) GetUnit() string {
+	return "{status}"
+}
+
+func (m MetricMetadataElasticsearchClusterHealth) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchClusterHealth) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchClusterHealth) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, healthStatusAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -258,6 +337,34 @@ func (m *metricElasticsearchClusterNodes) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataElasticsearchClusterNodes struct{}
+
+func (m MetricMetadataElasticsearchClusterNodes) GetName() string {
+	return "elasticsearch.cluster.nodes"
+}
+
+func (m MetricMetadataElasticsearchClusterNodes) GetDescription() string {
+	return "The total number of nodes in the cluster."
+}
+
+func (m MetricMetadataElasticsearchClusterNodes) GetUnit() string {
+	return "{nodes}"
+}
+
+func (m MetricMetadataElasticsearchClusterNodes) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchClusterNodes) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchClusterNodes) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -308,6 +415,34 @@ func (m *metricElasticsearchClusterShards) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataElasticsearchClusterShards struct{}
+
+func (m MetricMetadataElasticsearchClusterShards) GetName() string {
+	return "elasticsearch.cluster.shards"
+}
+
+func (m MetricMetadataElasticsearchClusterShards) GetDescription() string {
+	return "The number of shards in the cluster."
+}
+
+func (m MetricMetadataElasticsearchClusterShards) GetUnit() string {
+	return "{shards}"
+}
+
+func (m MetricMetadataElasticsearchClusterShards) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchClusterShards) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricElasticsearchClusterShards) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, shardStateAttributeValue string) {
@@ -363,6 +498,34 @@ func (m *metricElasticsearchNodeCacheEvictions) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataElasticsearchNodeCacheEvictions struct{}
+
+func (m MetricMetadataElasticsearchNodeCacheEvictions) GetName() string {
+	return "elasticsearch.node.cache.evictions"
+}
+
+func (m MetricMetadataElasticsearchNodeCacheEvictions) GetDescription() string {
+	return "The number of evictions from the cache."
+}
+
+func (m MetricMetadataElasticsearchNodeCacheEvictions) GetUnit() string {
+	return "{evictions}"
+}
+
+func (m MetricMetadataElasticsearchNodeCacheEvictions) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeCacheEvictions) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchNodeCacheEvictions) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, cacheNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -414,6 +577,34 @@ func (m *metricElasticsearchNodeCacheMemoryUsage) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataElasticsearchNodeCacheMemoryUsage struct{}
+
+func (m MetricMetadataElasticsearchNodeCacheMemoryUsage) GetName() string {
+	return "elasticsearch.node.cache.memory.usage"
+}
+
+func (m MetricMetadataElasticsearchNodeCacheMemoryUsage) GetDescription() string {
+	return "The size in bytes of the cache."
+}
+
+func (m MetricMetadataElasticsearchNodeCacheMemoryUsage) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataElasticsearchNodeCacheMemoryUsage) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeCacheMemoryUsage) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricElasticsearchNodeCacheMemoryUsage) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, cacheNameAttributeValue string) {
@@ -468,6 +659,34 @@ func (m *metricElasticsearchNodeClusterConnections) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataElasticsearchNodeClusterConnections struct{}
+
+func (m MetricMetadataElasticsearchNodeClusterConnections) GetName() string {
+	return "elasticsearch.node.cluster.connections"
+}
+
+func (m MetricMetadataElasticsearchNodeClusterConnections) GetDescription() string {
+	return "The number of open tcp connections for internal cluster communication."
+}
+
+func (m MetricMetadataElasticsearchNodeClusterConnections) GetUnit() string {
+	return "{connections}"
+}
+
+func (m MetricMetadataElasticsearchNodeClusterConnections) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeClusterConnections) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchNodeClusterConnections) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -518,6 +737,34 @@ func (m *metricElasticsearchNodeClusterIo) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataElasticsearchNodeClusterIo struct{}
+
+func (m MetricMetadataElasticsearchNodeClusterIo) GetName() string {
+	return "elasticsearch.node.cluster.io"
+}
+
+func (m MetricMetadataElasticsearchNodeClusterIo) GetDescription() string {
+	return "The number of bytes sent and received on the network for internal cluster communication."
+}
+
+func (m MetricMetadataElasticsearchNodeClusterIo) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataElasticsearchNodeClusterIo) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeClusterIo) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricElasticsearchNodeClusterIo) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, directionAttributeValue string) {
@@ -573,6 +820,34 @@ func (m *metricElasticsearchNodeDocuments) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataElasticsearchNodeDocuments struct{}
+
+func (m MetricMetadataElasticsearchNodeDocuments) GetName() string {
+	return "elasticsearch.node.documents"
+}
+
+func (m MetricMetadataElasticsearchNodeDocuments) GetDescription() string {
+	return "The number of documents on the node."
+}
+
+func (m MetricMetadataElasticsearchNodeDocuments) GetUnit() string {
+	return "{documents}"
+}
+
+func (m MetricMetadataElasticsearchNodeDocuments) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeDocuments) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchNodeDocuments) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, documentStateAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -623,6 +898,34 @@ func (m *metricElasticsearchNodeFsDiskAvailable) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataElasticsearchNodeFsDiskAvailable struct{}
+
+func (m MetricMetadataElasticsearchNodeFsDiskAvailable) GetName() string {
+	return "elasticsearch.node.fs.disk.available"
+}
+
+func (m MetricMetadataElasticsearchNodeFsDiskAvailable) GetDescription() string {
+	return "The amount of disk space available across all file stores for this node."
+}
+
+func (m MetricMetadataElasticsearchNodeFsDiskAvailable) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataElasticsearchNodeFsDiskAvailable) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeFsDiskAvailable) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricElasticsearchNodeFsDiskAvailable) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -676,6 +979,34 @@ func (m *metricElasticsearchNodeHTTPConnections) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataElasticsearchNodeHTTPConnections struct{}
+
+func (m MetricMetadataElasticsearchNodeHTTPConnections) GetName() string {
+	return "elasticsearch.node.http.connections"
+}
+
+func (m MetricMetadataElasticsearchNodeHTTPConnections) GetDescription() string {
+	return "The number of HTTP connections to the node."
+}
+
+func (m MetricMetadataElasticsearchNodeHTTPConnections) GetUnit() string {
+	return "{connections}"
+}
+
+func (m MetricMetadataElasticsearchNodeHTTPConnections) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeHTTPConnections) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchNodeHTTPConnections) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -725,6 +1056,34 @@ func (m *metricElasticsearchNodeOpenFiles) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataElasticsearchNodeOpenFiles struct{}
+
+func (m MetricMetadataElasticsearchNodeOpenFiles) GetName() string {
+	return "elasticsearch.node.open_files"
+}
+
+func (m MetricMetadataElasticsearchNodeOpenFiles) GetDescription() string {
+	return "The number of open file descriptors held by the node."
+}
+
+func (m MetricMetadataElasticsearchNodeOpenFiles) GetUnit() string {
+	return "{files}"
+}
+
+func (m MetricMetadataElasticsearchNodeOpenFiles) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeOpenFiles) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricElasticsearchNodeOpenFiles) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -777,6 +1136,34 @@ func (m *metricElasticsearchNodeOperationsCompleted) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataElasticsearchNodeOperationsCompleted struct{}
+
+func (m MetricMetadataElasticsearchNodeOperationsCompleted) GetName() string {
+	return "elasticsearch.node.operations.completed"
+}
+
+func (m MetricMetadataElasticsearchNodeOperationsCompleted) GetDescription() string {
+	return "The number of operations completed."
+}
+
+func (m MetricMetadataElasticsearchNodeOperationsCompleted) GetUnit() string {
+	return "{operations}"
+}
+
+func (m MetricMetadataElasticsearchNodeOperationsCompleted) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeOperationsCompleted) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricElasticsearchNodeOperationsCompleted) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, operationAttributeValue string) {
@@ -832,6 +1219,34 @@ func (m *metricElasticsearchNodeOperationsTime) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataElasticsearchNodeOperationsTime struct{}
+
+func (m MetricMetadataElasticsearchNodeOperationsTime) GetName() string {
+	return "elasticsearch.node.operations.time"
+}
+
+func (m MetricMetadataElasticsearchNodeOperationsTime) GetDescription() string {
+	return "Time spent on operations."
+}
+
+func (m MetricMetadataElasticsearchNodeOperationsTime) GetUnit() string {
+	return "ms"
+}
+
+func (m MetricMetadataElasticsearchNodeOperationsTime) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeOperationsTime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchNodeOperationsTime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, operationAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -884,6 +1299,34 @@ func (m *metricElasticsearchNodeShardsSize) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataElasticsearchNodeShardsSize struct{}
+
+func (m MetricMetadataElasticsearchNodeShardsSize) GetName() string {
+	return "elasticsearch.node.shards.size"
+}
+
+func (m MetricMetadataElasticsearchNodeShardsSize) GetDescription() string {
+	return "The size of the shards assigned to this node."
+}
+
+func (m MetricMetadataElasticsearchNodeShardsSize) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataElasticsearchNodeShardsSize) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeShardsSize) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchNodeShardsSize) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -934,6 +1377,34 @@ func (m *metricElasticsearchNodeThreadPoolTasksFinished) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataElasticsearchNodeThreadPoolTasksFinished struct{}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksFinished) GetName() string {
+	return "elasticsearch.node.thread_pool.tasks.finished"
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksFinished) GetDescription() string {
+	return "The number of tasks finished by the thread pool."
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksFinished) GetUnit() string {
+	return "{tasks}"
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksFinished) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksFinished) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricElasticsearchNodeThreadPoolTasksFinished) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, threadPoolNameAttributeValue string, taskStateAttributeValue string) {
@@ -990,6 +1461,34 @@ func (m *metricElasticsearchNodeThreadPoolTasksQueued) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataElasticsearchNodeThreadPoolTasksQueued struct{}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksQueued) GetName() string {
+	return "elasticsearch.node.thread_pool.tasks.queued"
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksQueued) GetDescription() string {
+	return "The number of queued tasks in the thread pool."
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksQueued) GetUnit() string {
+	return "{tasks}"
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksQueued) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolTasksQueued) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchNodeThreadPoolTasksQueued) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, threadPoolNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -1043,6 +1542,34 @@ func (m *metricElasticsearchNodeThreadPoolThreads) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataElasticsearchNodeThreadPoolThreads struct{}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolThreads) GetName() string {
+	return "elasticsearch.node.thread_pool.threads"
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolThreads) GetDescription() string {
+	return "The number of threads in the thread pool."
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolThreads) GetUnit() string {
+	return "{threads}"
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolThreads) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataElasticsearchNodeThreadPoolThreads) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricElasticsearchNodeThreadPoolThreads) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, threadPoolNameAttributeValue string, threadStateAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -1092,6 +1619,32 @@ func (m *metricJvmClassesLoaded) init() {
 	m.data.SetDescription("The number of loaded classes")
 	m.data.SetUnit("1")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataJvmClassesLoaded struct{}
+
+func (m MetricMetadataJvmClassesLoaded) GetName() string {
+	return "jvm.classes.loaded"
+}
+
+func (m MetricMetadataJvmClassesLoaded) GetDescription() string {
+	return "The number of loaded classes"
+}
+
+func (m MetricMetadataJvmClassesLoaded) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataJvmClassesLoaded) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmClassesLoaded) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricJvmClassesLoaded) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1144,6 +1697,34 @@ func (m *metricJvmGcCollectionsCount) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataJvmGcCollectionsCount struct{}
+
+func (m MetricMetadataJvmGcCollectionsCount) GetName() string {
+	return "jvm.gc.collections.count"
+}
+
+func (m MetricMetadataJvmGcCollectionsCount) GetDescription() string {
+	return "The total number of garbage collections that have occurred"
+}
+
+func (m MetricMetadataJvmGcCollectionsCount) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataJvmGcCollectionsCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmGcCollectionsCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricJvmGcCollectionsCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, collectorNameAttributeValue string) {
@@ -1199,6 +1780,34 @@ func (m *metricJvmGcCollectionsElapsed) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataJvmGcCollectionsElapsed struct{}
+
+func (m MetricMetadataJvmGcCollectionsElapsed) GetName() string {
+	return "jvm.gc.collections.elapsed"
+}
+
+func (m MetricMetadataJvmGcCollectionsElapsed) GetDescription() string {
+	return "The approximate accumulated collection elapsed time"
+}
+
+func (m MetricMetadataJvmGcCollectionsElapsed) GetUnit() string {
+	return "ms"
+}
+
+func (m MetricMetadataJvmGcCollectionsElapsed) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmGcCollectionsElapsed) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricJvmGcCollectionsElapsed) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, collectorNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -1247,6 +1856,32 @@ func (m *metricJvmMemoryHeapCommitted) init() {
 	m.data.SetDescription("The amount of memory that is guaranteed to be available for the heap")
 	m.data.SetUnit("By")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataJvmMemoryHeapCommitted struct{}
+
+func (m MetricMetadataJvmMemoryHeapCommitted) GetName() string {
+	return "jvm.memory.heap.committed"
+}
+
+func (m MetricMetadataJvmMemoryHeapCommitted) GetDescription() string {
+	return "The amount of memory that is guaranteed to be available for the heap"
+}
+
+func (m MetricMetadataJvmMemoryHeapCommitted) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataJvmMemoryHeapCommitted) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmMemoryHeapCommitted) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricJvmMemoryHeapCommitted) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1298,6 +1933,32 @@ func (m *metricJvmMemoryHeapMax) init() {
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 }
 
+type MetricMetadataJvmMemoryHeapMax struct{}
+
+func (m MetricMetadataJvmMemoryHeapMax) GetName() string {
+	return "jvm.memory.heap.max"
+}
+
+func (m MetricMetadataJvmMemoryHeapMax) GetDescription() string {
+	return "The maximum amount of memory can be used for the heap"
+}
+
+func (m MetricMetadataJvmMemoryHeapMax) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataJvmMemoryHeapMax) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmMemoryHeapMax) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
+}
+
 func (m *metricJvmMemoryHeapMax) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -1345,6 +2006,32 @@ func (m *metricJvmMemoryHeapUsed) init() {
 	m.data.SetDescription("The current heap memory usage")
 	m.data.SetUnit("By")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataJvmMemoryHeapUsed struct{}
+
+func (m MetricMetadataJvmMemoryHeapUsed) GetName() string {
+	return "jvm.memory.heap.used"
+}
+
+func (m MetricMetadataJvmMemoryHeapUsed) GetDescription() string {
+	return "The current heap memory usage"
+}
+
+func (m MetricMetadataJvmMemoryHeapUsed) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataJvmMemoryHeapUsed) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmMemoryHeapUsed) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricJvmMemoryHeapUsed) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1396,6 +2083,32 @@ func (m *metricJvmMemoryNonheapCommitted) init() {
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 }
 
+type MetricMetadataJvmMemoryNonheapCommitted struct{}
+
+func (m MetricMetadataJvmMemoryNonheapCommitted) GetName() string {
+	return "jvm.memory.nonheap.committed"
+}
+
+func (m MetricMetadataJvmMemoryNonheapCommitted) GetDescription() string {
+	return "The amount of memory that is guaranteed to be available for non-heap purposes"
+}
+
+func (m MetricMetadataJvmMemoryNonheapCommitted) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataJvmMemoryNonheapCommitted) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmMemoryNonheapCommitted) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
+}
+
 func (m *metricJvmMemoryNonheapCommitted) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -1443,6 +2156,32 @@ func (m *metricJvmMemoryNonheapUsed) init() {
 	m.data.SetDescription("The current non-heap memory usage")
 	m.data.SetUnit("By")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataJvmMemoryNonheapUsed struct{}
+
+func (m MetricMetadataJvmMemoryNonheapUsed) GetName() string {
+	return "jvm.memory.nonheap.used"
+}
+
+func (m MetricMetadataJvmMemoryNonheapUsed) GetDescription() string {
+	return "The current non-heap memory usage"
+}
+
+func (m MetricMetadataJvmMemoryNonheapUsed) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataJvmMemoryNonheapUsed) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmMemoryNonheapUsed) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricJvmMemoryNonheapUsed) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1493,6 +2232,32 @@ func (m *metricJvmMemoryPoolMax) init() {
 	m.data.SetUnit("By")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataJvmMemoryPoolMax struct{}
+
+func (m MetricMetadataJvmMemoryPoolMax) GetName() string {
+	return "jvm.memory.pool.max"
+}
+
+func (m MetricMetadataJvmMemoryPoolMax) GetDescription() string {
+	return "The maximum amount of memory can be used for the memory pool"
+}
+
+func (m MetricMetadataJvmMemoryPoolMax) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataJvmMemoryPoolMax) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmMemoryPoolMax) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricJvmMemoryPoolMax) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, memoryPoolNameAttributeValue string) {
@@ -1546,6 +2311,32 @@ func (m *metricJvmMemoryPoolUsed) init() {
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataJvmMemoryPoolUsed struct{}
+
+func (m MetricMetadataJvmMemoryPoolUsed) GetName() string {
+	return "jvm.memory.pool.used"
+}
+
+func (m MetricMetadataJvmMemoryPoolUsed) GetDescription() string {
+	return "The current memory pool memory usage"
+}
+
+func (m MetricMetadataJvmMemoryPoolUsed) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataJvmMemoryPoolUsed) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmMemoryPoolUsed) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
+}
+
 func (m *metricJvmMemoryPoolUsed) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, memoryPoolNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -1594,6 +2385,32 @@ func (m *metricJvmThreadsCount) init() {
 	m.data.SetDescription("The current number of threads")
 	m.data.SetUnit("1")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataJvmThreadsCount struct{}
+
+func (m MetricMetadataJvmThreadsCount) GetName() string {
+	return "jvm.threads.count"
+}
+
+func (m MetricMetadataJvmThreadsCount) GetDescription() string {
+	return "The current number of threads"
+}
+
+func (m MetricMetadataJvmThreadsCount) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataJvmThreadsCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataJvmThreadsCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricJvmThreadsCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1944,6 +2761,187 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "elasticsearch.cluster.data_nodes":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchClusterDataNodesDataPoint(ts, intVal)
+	case "elasticsearch.cluster.health":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchClusterHealthDataPoint(ts, intVal, attributes[0])
+	case "elasticsearch.cluster.nodes":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchClusterNodesDataPoint(ts, intVal)
+	case "elasticsearch.cluster.shards":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchClusterShardsDataPoint(ts, intVal, attributes[0])
+	case "elasticsearch.node.cache.evictions":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeCacheEvictionsDataPoint(ts, intVal, attributes[0])
+	case "elasticsearch.node.cache.memory.usage":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeCacheMemoryUsageDataPoint(ts, intVal, attributes[0])
+	case "elasticsearch.node.cluster.connections":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeClusterConnectionsDataPoint(ts, intVal)
+	case "elasticsearch.node.cluster.io":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeClusterIoDataPoint(ts, intVal, attributes[0])
+	case "elasticsearch.node.documents":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeDocumentsDataPoint(ts, intVal, attributes[0])
+	case "elasticsearch.node.fs.disk.available":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeFsDiskAvailableDataPoint(ts, intVal)
+	case "elasticsearch.node.http.connections":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeHTTPConnectionsDataPoint(ts, intVal)
+	case "elasticsearch.node.open_files":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeOpenFilesDataPoint(ts, intVal)
+	case "elasticsearch.node.operations.completed":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeOperationsCompletedDataPoint(ts, intVal, attributes[0])
+	case "elasticsearch.node.operations.time":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeOperationsTimeDataPoint(ts, intVal, attributes[0])
+	case "elasticsearch.node.shards.size":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeShardsSizeDataPoint(ts, intVal)
+	case "elasticsearch.node.thread_pool.tasks.finished":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeThreadPoolTasksFinishedDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "elasticsearch.node.thread_pool.tasks.queued":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeThreadPoolTasksQueuedDataPoint(ts, intVal, attributes[0])
+	case "elasticsearch.node.thread_pool.threads":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordElasticsearchNodeThreadPoolThreadsDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "jvm.classes.loaded":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmClassesLoadedDataPoint(ts, intVal)
+	case "jvm.gc.collections.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmGcCollectionsCountDataPoint(ts, intVal, attributes[0])
+	case "jvm.gc.collections.elapsed":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmGcCollectionsElapsedDataPoint(ts, intVal, attributes[0])
+	case "jvm.memory.heap.committed":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmMemoryHeapCommittedDataPoint(ts, intVal)
+	case "jvm.memory.heap.max":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmMemoryHeapMaxDataPoint(ts, intVal)
+	case "jvm.memory.heap.used":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmMemoryHeapUsedDataPoint(ts, intVal)
+	case "jvm.memory.nonheap.committed":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmMemoryNonheapCommittedDataPoint(ts, intVal)
+	case "jvm.memory.nonheap.used":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmMemoryNonheapUsedDataPoint(ts, intVal)
+	case "jvm.memory.pool.max":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmMemoryPoolMaxDataPoint(ts, intVal, attributes[0])
+	case "jvm.memory.pool.used":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmMemoryPoolUsedDataPoint(ts, intVal, attributes[0])
+	case "jvm.threads.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordJvmThreadsCountDataPoint(ts, intVal)
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// CacheName (The name of cache.)
@@ -1992,6 +2990,76 @@ var Attributes = struct {
 	"state",
 	"thread_pool_name",
 	"state",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"elasticsearch.cluster.data_nodes":              MetricMetadataElasticsearchClusterDataNodes{},
+	"elasticsearch.cluster.health":                  MetricMetadataElasticsearchClusterHealth{},
+	"elasticsearch.cluster.nodes":                   MetricMetadataElasticsearchClusterNodes{},
+	"elasticsearch.cluster.shards":                  MetricMetadataElasticsearchClusterShards{},
+	"elasticsearch.node.cache.evictions":            MetricMetadataElasticsearchNodeCacheEvictions{},
+	"elasticsearch.node.cache.memory.usage":         MetricMetadataElasticsearchNodeCacheMemoryUsage{},
+	"elasticsearch.node.cluster.connections":        MetricMetadataElasticsearchNodeClusterConnections{},
+	"elasticsearch.node.cluster.io":                 MetricMetadataElasticsearchNodeClusterIo{},
+	"elasticsearch.node.documents":                  MetricMetadataElasticsearchNodeDocuments{},
+	"elasticsearch.node.fs.disk.available":          MetricMetadataElasticsearchNodeFsDiskAvailable{},
+	"elasticsearch.node.http.connections":           MetricMetadataElasticsearchNodeHTTPConnections{},
+	"elasticsearch.node.open_files":                 MetricMetadataElasticsearchNodeOpenFiles{},
+	"elasticsearch.node.operations.completed":       MetricMetadataElasticsearchNodeOperationsCompleted{},
+	"elasticsearch.node.operations.time":            MetricMetadataElasticsearchNodeOperationsTime{},
+	"elasticsearch.node.shards.size":                MetricMetadataElasticsearchNodeShardsSize{},
+	"elasticsearch.node.thread_pool.tasks.finished": MetricMetadataElasticsearchNodeThreadPoolTasksFinished{},
+	"elasticsearch.node.thread_pool.tasks.queued":   MetricMetadataElasticsearchNodeThreadPoolTasksQueued{},
+	"elasticsearch.node.thread_pool.threads":        MetricMetadataElasticsearchNodeThreadPoolThreads{},
+	"jvm.classes.loaded":                            MetricMetadataJvmClassesLoaded{},
+	"jvm.gc.collections.count":                      MetricMetadataJvmGcCollectionsCount{},
+	"jvm.gc.collections.elapsed":                    MetricMetadataJvmGcCollectionsElapsed{},
+	"jvm.memory.heap.committed":                     MetricMetadataJvmMemoryHeapCommitted{},
+	"jvm.memory.heap.max":                           MetricMetadataJvmMemoryHeapMax{},
+	"jvm.memory.heap.used":                          MetricMetadataJvmMemoryHeapUsed{},
+	"jvm.memory.nonheap.committed":                  MetricMetadataJvmMemoryNonheapCommitted{},
+	"jvm.memory.nonheap.used":                       MetricMetadataJvmMemoryNonheapUsed{},
+	"jvm.memory.pool.max":                           MetricMetadataJvmMemoryPoolMax{},
+	"jvm.memory.pool.used":                          MetricMetadataJvmMemoryPoolUsed{},
+	"jvm.threads.count":                             MetricMetadataJvmThreadsCount{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"elasticsearch.cluster.data_nodes":              settings.ElasticsearchClusterDataNodes.Enabled,
+		"elasticsearch.cluster.health":                  settings.ElasticsearchClusterHealth.Enabled,
+		"elasticsearch.cluster.nodes":                   settings.ElasticsearchClusterNodes.Enabled,
+		"elasticsearch.cluster.shards":                  settings.ElasticsearchClusterShards.Enabled,
+		"elasticsearch.node.cache.evictions":            settings.ElasticsearchNodeCacheEvictions.Enabled,
+		"elasticsearch.node.cache.memory.usage":         settings.ElasticsearchNodeCacheMemoryUsage.Enabled,
+		"elasticsearch.node.cluster.connections":        settings.ElasticsearchNodeClusterConnections.Enabled,
+		"elasticsearch.node.cluster.io":                 settings.ElasticsearchNodeClusterIo.Enabled,
+		"elasticsearch.node.documents":                  settings.ElasticsearchNodeDocuments.Enabled,
+		"elasticsearch.node.fs.disk.available":          settings.ElasticsearchNodeFsDiskAvailable.Enabled,
+		"elasticsearch.node.http.connections":           settings.ElasticsearchNodeHTTPConnections.Enabled,
+		"elasticsearch.node.open_files":                 settings.ElasticsearchNodeOpenFiles.Enabled,
+		"elasticsearch.node.operations.completed":       settings.ElasticsearchNodeOperationsCompleted.Enabled,
+		"elasticsearch.node.operations.time":            settings.ElasticsearchNodeOperationsTime.Enabled,
+		"elasticsearch.node.shards.size":                settings.ElasticsearchNodeShardsSize.Enabled,
+		"elasticsearch.node.thread_pool.tasks.finished": settings.ElasticsearchNodeThreadPoolTasksFinished.Enabled,
+		"elasticsearch.node.thread_pool.tasks.queued":   settings.ElasticsearchNodeThreadPoolTasksQueued.Enabled,
+		"elasticsearch.node.thread_pool.threads":        settings.ElasticsearchNodeThreadPoolThreads.Enabled,
+		"jvm.classes.loaded":                            settings.JvmClassesLoaded.Enabled,
+		"jvm.gc.collections.count":                      settings.JvmGcCollectionsCount.Enabled,
+		"jvm.gc.collections.elapsed":                    settings.JvmGcCollectionsElapsed.Enabled,
+		"jvm.memory.heap.committed":                     settings.JvmMemoryHeapCommitted.Enabled,
+		"jvm.memory.heap.max":                           settings.JvmMemoryHeapMax.Enabled,
+		"jvm.memory.heap.used":                          settings.JvmMemoryHeapUsed.Enabled,
+		"jvm.memory.nonheap.committed":                  settings.JvmMemoryNonheapCommitted.Enabled,
+		"jvm.memory.nonheap.used":                       settings.JvmMemoryNonheapUsed.Enabled,
+		"jvm.memory.pool.max":                           settings.JvmMemoryPoolMax.Enabled,
+		"jvm.memory.pool.used":                          settings.JvmMemoryPoolUsed.Enabled,
+		"jvm.threads.count":                             settings.JvmThreadsCount.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

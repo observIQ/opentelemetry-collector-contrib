@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -46,6 +47,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricRabbitmqConsumerCount struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -60,6 +83,34 @@ func (m *metricRabbitmqConsumerCount) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataRabbitmqConsumerCount struct{}
+
+func (m MetricMetadataRabbitmqConsumerCount) GetName() string {
+	return "rabbitmq.consumer.count"
+}
+
+func (m MetricMetadataRabbitmqConsumerCount) GetDescription() string {
+	return "The number of consumers currently reading from the queue."
+}
+
+func (m MetricMetadataRabbitmqConsumerCount) GetUnit() string {
+	return "{consumers}"
+}
+
+func (m MetricMetadataRabbitmqConsumerCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRabbitmqConsumerCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricRabbitmqConsumerCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -111,6 +162,34 @@ func (m *metricRabbitmqMessageAcknowledged) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataRabbitmqMessageAcknowledged struct{}
+
+func (m MetricMetadataRabbitmqMessageAcknowledged) GetName() string {
+	return "rabbitmq.message.acknowledged"
+}
+
+func (m MetricMetadataRabbitmqMessageAcknowledged) GetDescription() string {
+	return "The number of messages acknowledged by consumers."
+}
+
+func (m MetricMetadataRabbitmqMessageAcknowledged) GetUnit() string {
+	return "{messages}"
+}
+
+func (m MetricMetadataRabbitmqMessageAcknowledged) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRabbitmqMessageAcknowledged) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricRabbitmqMessageAcknowledged) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -165,6 +244,34 @@ func (m *metricRabbitmqMessageCurrent) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataRabbitmqMessageCurrent struct{}
+
+func (m MetricMetadataRabbitmqMessageCurrent) GetName() string {
+	return "rabbitmq.message.current"
+}
+
+func (m MetricMetadataRabbitmqMessageCurrent) GetDescription() string {
+	return "The total number of messages currently in the queue."
+}
+
+func (m MetricMetadataRabbitmqMessageCurrent) GetUnit() string {
+	return "{messages}"
+}
+
+func (m MetricMetadataRabbitmqMessageCurrent) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRabbitmqMessageCurrent) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRabbitmqMessageCurrent) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, messageStateAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -215,6 +322,34 @@ func (m *metricRabbitmqMessageDelivered) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataRabbitmqMessageDelivered struct{}
+
+func (m MetricMetadataRabbitmqMessageDelivered) GetName() string {
+	return "rabbitmq.message.delivered"
+}
+
+func (m MetricMetadataRabbitmqMessageDelivered) GetDescription() string {
+	return "The number of messages delivered to consumers."
+}
+
+func (m MetricMetadataRabbitmqMessageDelivered) GetUnit() string {
+	return "{messages}"
+}
+
+func (m MetricMetadataRabbitmqMessageDelivered) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRabbitmqMessageDelivered) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricRabbitmqMessageDelivered) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -268,6 +403,34 @@ func (m *metricRabbitmqMessageDropped) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRabbitmqMessageDropped struct{}
+
+func (m MetricMetadataRabbitmqMessageDropped) GetName() string {
+	return "rabbitmq.message.dropped"
+}
+
+func (m MetricMetadataRabbitmqMessageDropped) GetDescription() string {
+	return "The number of messages dropped as unroutable."
+}
+
+func (m MetricMetadataRabbitmqMessageDropped) GetUnit() string {
+	return "{messages}"
+}
+
+func (m MetricMetadataRabbitmqMessageDropped) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRabbitmqMessageDropped) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRabbitmqMessageDropped) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -317,6 +480,34 @@ func (m *metricRabbitmqMessagePublished) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataRabbitmqMessagePublished struct{}
+
+func (m MetricMetadataRabbitmqMessagePublished) GetName() string {
+	return "rabbitmq.message.published"
+}
+
+func (m MetricMetadataRabbitmqMessagePublished) GetDescription() string {
+	return "The number of messages published to a queue."
+}
+
+func (m MetricMetadataRabbitmqMessagePublished) GetUnit() string {
+	return "{messages}"
+}
+
+func (m MetricMetadataRabbitmqMessagePublished) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRabbitmqMessagePublished) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricRabbitmqMessagePublished) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -504,12 +695,79 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "rabbitmq.consumer.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRabbitmqConsumerCountDataPoint(ts, intVal)
+	case "rabbitmq.message.acknowledged":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRabbitmqMessageAcknowledgedDataPoint(ts, intVal)
+	case "rabbitmq.message.current":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRabbitmqMessageCurrentDataPoint(ts, intVal, attributes[0])
+	case "rabbitmq.message.delivered":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRabbitmqMessageDeliveredDataPoint(ts, intVal)
+	case "rabbitmq.message.dropped":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRabbitmqMessageDroppedDataPoint(ts, intVal)
+	case "rabbitmq.message.published":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRabbitmqMessagePublishedDataPoint(ts, intVal)
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// MessageState (The state of messages in a queue.)
 	MessageState string
 }{
 	"state",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"rabbitmq.consumer.count":       MetricMetadataRabbitmqConsumerCount{},
+	"rabbitmq.message.acknowledged": MetricMetadataRabbitmqMessageAcknowledged{},
+	"rabbitmq.message.current":      MetricMetadataRabbitmqMessageCurrent{},
+	"rabbitmq.message.delivered":    MetricMetadataRabbitmqMessageDelivered{},
+	"rabbitmq.message.dropped":      MetricMetadataRabbitmqMessageDropped{},
+	"rabbitmq.message.published":    MetricMetadataRabbitmqMessagePublished{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"rabbitmq.consumer.count":       settings.RabbitmqConsumerCount.Enabled,
+		"rabbitmq.message.acknowledged": settings.RabbitmqMessageAcknowledged.Enabled,
+		"rabbitmq.message.current":      settings.RabbitmqMessageCurrent.Enabled,
+		"rabbitmq.message.delivered":    settings.RabbitmqMessageDelivered.Enabled,
+		"rabbitmq.message.dropped":      settings.RabbitmqMessageDropped.Enabled,
+		"rabbitmq.message.published":    settings.RabbitmqMessagePublished.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

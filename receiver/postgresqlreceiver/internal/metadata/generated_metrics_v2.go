@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -50,6 +51,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricPostgresqlBackends struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -65,6 +88,34 @@ func (m *metricPostgresqlBackends) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataPostgresqlBackends struct{}
+
+func (m MetricMetadataPostgresqlBackends) GetName() string {
+	return "postgresql.backends"
+}
+
+func (m MetricMetadataPostgresqlBackends) GetDescription() string {
+	return "The number of backends."
+}
+
+func (m MetricMetadataPostgresqlBackends) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataPostgresqlBackends) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataPostgresqlBackends) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricPostgresqlBackends) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
@@ -118,6 +169,34 @@ func (m *metricPostgresqlBlocksRead) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataPostgresqlBlocksRead struct{}
+
+func (m MetricMetadataPostgresqlBlocksRead) GetName() string {
+	return "postgresql.blocks_read"
+}
+
+func (m MetricMetadataPostgresqlBlocksRead) GetDescription() string {
+	return "The number of blocks read."
+}
+
+func (m MetricMetadataPostgresqlBlocksRead) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataPostgresqlBlocksRead) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataPostgresqlBlocksRead) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricPostgresqlBlocksRead) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string, tableAttributeValue string, sourceAttributeValue string) {
@@ -175,6 +254,34 @@ func (m *metricPostgresqlCommits) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataPostgresqlCommits struct{}
+
+func (m MetricMetadataPostgresqlCommits) GetName() string {
+	return "postgresql.commits"
+}
+
+func (m MetricMetadataPostgresqlCommits) GetDescription() string {
+	return "The number of commits."
+}
+
+func (m MetricMetadataPostgresqlCommits) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataPostgresqlCommits) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataPostgresqlCommits) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricPostgresqlCommits) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -228,6 +335,34 @@ func (m *metricPostgresqlDbSize) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataPostgresqlDbSize struct{}
+
+func (m MetricMetadataPostgresqlDbSize) GetName() string {
+	return "postgresql.db_size"
+}
+
+func (m MetricMetadataPostgresqlDbSize) GetDescription() string {
+	return "The database disk usage."
+}
+
+func (m MetricMetadataPostgresqlDbSize) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataPostgresqlDbSize) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataPostgresqlDbSize) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricPostgresqlDbSize) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -279,6 +414,34 @@ func (m *metricPostgresqlOperations) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataPostgresqlOperations struct{}
+
+func (m MetricMetadataPostgresqlOperations) GetName() string {
+	return "postgresql.operations"
+}
+
+func (m MetricMetadataPostgresqlOperations) GetDescription() string {
+	return "The number of db row operations."
+}
+
+func (m MetricMetadataPostgresqlOperations) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataPostgresqlOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataPostgresqlOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricPostgresqlOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string, tableAttributeValue string, operationAttributeValue string) {
@@ -336,6 +499,34 @@ func (m *metricPostgresqlRollbacks) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataPostgresqlRollbacks struct{}
+
+func (m MetricMetadataPostgresqlRollbacks) GetName() string {
+	return "postgresql.rollbacks"
+}
+
+func (m MetricMetadataPostgresqlRollbacks) GetDescription() string {
+	return "The number of rollbacks."
+}
+
+func (m MetricMetadataPostgresqlRollbacks) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataPostgresqlRollbacks) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataPostgresqlRollbacks) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricPostgresqlRollbacks) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -387,6 +578,34 @@ func (m *metricPostgresqlRows) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataPostgresqlRows struct{}
+
+func (m MetricMetadataPostgresqlRows) GetName() string {
+	return "postgresql.rows"
+}
+
+func (m MetricMetadataPostgresqlRows) GetDescription() string {
+	return "The number of rows in the database."
+}
+
+func (m MetricMetadataPostgresqlRows) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataPostgresqlRows) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataPostgresqlRows) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricPostgresqlRows) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string, tableAttributeValue string, stateAttributeValue string) {
@@ -564,6 +783,55 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "postgresql.backends":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordPostgresqlBackendsDataPoint(ts, intVal, attributes[0])
+	case "postgresql.blocks_read":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordPostgresqlBlocksReadDataPoint(ts, intVal, attributes[0], attributes[1], attributes[2])
+	case "postgresql.commits":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordPostgresqlCommitsDataPoint(ts, intVal, attributes[0])
+	case "postgresql.db_size":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordPostgresqlDbSizeDataPoint(ts, intVal, attributes[0])
+	case "postgresql.operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordPostgresqlOperationsDataPoint(ts, intVal, attributes[0], attributes[1], attributes[2])
+	case "postgresql.rollbacks":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordPostgresqlRollbacksDataPoint(ts, intVal, attributes[0])
+	case "postgresql.rows":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordPostgresqlRowsDataPoint(ts, intVal, attributes[0], attributes[1], attributes[2])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// Database (The name of the database.)
@@ -582,6 +850,32 @@ var Attributes = struct {
 	"source",
 	"state",
 	"table",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"postgresql.backends":    MetricMetadataPostgresqlBackends{},
+	"postgresql.blocks_read": MetricMetadataPostgresqlBlocksRead{},
+	"postgresql.commits":     MetricMetadataPostgresqlCommits{},
+	"postgresql.db_size":     MetricMetadataPostgresqlDbSize{},
+	"postgresql.operations":  MetricMetadataPostgresqlOperations{},
+	"postgresql.rollbacks":   MetricMetadataPostgresqlRollbacks{},
+	"postgresql.rows":        MetricMetadataPostgresqlRows{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"postgresql.backends":    settings.PostgresqlBackends.Enabled,
+		"postgresql.blocks_read": settings.PostgresqlBlocksRead.Enabled,
+		"postgresql.commits":     settings.PostgresqlCommits.Enabled,
+		"postgresql.db_size":     settings.PostgresqlDbSize.Enabled,
+		"postgresql.operations":  settings.PostgresqlOperations.Enabled,
+		"postgresql.rollbacks":   settings.PostgresqlRollbacks.Enabled,
+		"postgresql.rows":        settings.PostgresqlRows.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -70,6 +71,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricMongodbCacheOperations struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -85,6 +108,34 @@ func (m *metricMongodbCacheOperations) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMongodbCacheOperations struct{}
+
+func (m MetricMetadataMongodbCacheOperations) GetName() string {
+	return "mongodb.cache.operations"
+}
+
+func (m MetricMetadataMongodbCacheOperations) GetDescription() string {
+	return "The number of cache operations of the instance."
+}
+
+func (m MetricMetadataMongodbCacheOperations) GetUnit() string {
+	return "{operations}"
+}
+
+func (m MetricMetadataMongodbCacheOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbCacheOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMongodbCacheOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, typeAttributeValue string) {
@@ -140,6 +191,34 @@ func (m *metricMongodbCollectionCount) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMongodbCollectionCount struct{}
+
+func (m MetricMetadataMongodbCollectionCount) GetName() string {
+	return "mongodb.collection.count"
+}
+
+func (m MetricMetadataMongodbCollectionCount) GetDescription() string {
+	return "The number of collections."
+}
+
+func (m MetricMetadataMongodbCollectionCount) GetUnit() string {
+	return "{collections}"
+}
+
+func (m MetricMetadataMongodbCollectionCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbCollectionCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMongodbCollectionCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -191,6 +270,34 @@ func (m *metricMongodbConnectionCount) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMongodbConnectionCount struct{}
+
+func (m MetricMetadataMongodbConnectionCount) GetName() string {
+	return "mongodb.connection.count"
+}
+
+func (m MetricMetadataMongodbConnectionCount) GetDescription() string {
+	return "The number of connections."
+}
+
+func (m MetricMetadataMongodbConnectionCount) GetUnit() string {
+	return "{connections}"
+}
+
+func (m MetricMetadataMongodbConnectionCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbConnectionCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMongodbConnectionCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string, connectionTypeAttributeValue string) {
@@ -247,6 +354,34 @@ func (m *metricMongodbDataSize) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMongodbDataSize struct{}
+
+func (m MetricMetadataMongodbDataSize) GetName() string {
+	return "mongodb.data.size"
+}
+
+func (m MetricMetadataMongodbDataSize) GetDescription() string {
+	return "The size of the collection. Data compression does not affect this value."
+}
+
+func (m MetricMetadataMongodbDataSize) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataMongodbDataSize) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbDataSize) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMongodbDataSize) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -298,6 +433,34 @@ func (m *metricMongodbExtentCount) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMongodbExtentCount struct{}
+
+func (m MetricMetadataMongodbExtentCount) GetName() string {
+	return "mongodb.extent.count"
+}
+
+func (m MetricMetadataMongodbExtentCount) GetDescription() string {
+	return "The number of extents."
+}
+
+func (m MetricMetadataMongodbExtentCount) GetUnit() string {
+	return "{extents}"
+}
+
+func (m MetricMetadataMongodbExtentCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbExtentCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMongodbExtentCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
@@ -352,6 +515,34 @@ func (m *metricMongodbGlobalLockTime) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataMongodbGlobalLockTime struct{}
+
+func (m MetricMetadataMongodbGlobalLockTime) GetName() string {
+	return "mongodb.global_lock.time"
+}
+
+func (m MetricMetadataMongodbGlobalLockTime) GetDescription() string {
+	return "The time the global lock has been held."
+}
+
+func (m MetricMetadataMongodbGlobalLockTime) GetUnit() string {
+	return "ms"
+}
+
+func (m MetricMetadataMongodbGlobalLockTime) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbGlobalLockTime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMongodbGlobalLockTime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -402,6 +593,34 @@ func (m *metricMongodbIndexCount) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMongodbIndexCount struct{}
+
+func (m MetricMetadataMongodbIndexCount) GetName() string {
+	return "mongodb.index.count"
+}
+
+func (m MetricMetadataMongodbIndexCount) GetDescription() string {
+	return "The number of indexes."
+}
+
+func (m MetricMetadataMongodbIndexCount) GetUnit() string {
+	return "{indexes}"
+}
+
+func (m MetricMetadataMongodbIndexCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbIndexCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMongodbIndexCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
@@ -457,6 +676,34 @@ func (m *metricMongodbIndexSize) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMongodbIndexSize struct{}
+
+func (m MetricMetadataMongodbIndexSize) GetName() string {
+	return "mongodb.index.size"
+}
+
+func (m MetricMetadataMongodbIndexSize) GetDescription() string {
+	return "Sum of the space allocated to all indexes in the database, including free index space."
+}
+
+func (m MetricMetadataMongodbIndexSize) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataMongodbIndexSize) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbIndexSize) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMongodbIndexSize) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -508,6 +755,34 @@ func (m *metricMongodbMemoryUsage) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMongodbMemoryUsage struct{}
+
+func (m MetricMetadataMongodbMemoryUsage) GetName() string {
+	return "mongodb.memory.usage"
+}
+
+func (m MetricMetadataMongodbMemoryUsage) GetDescription() string {
+	return "The amount of memory used."
+}
+
+func (m MetricMetadataMongodbMemoryUsage) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataMongodbMemoryUsage) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbMemoryUsage) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMongodbMemoryUsage) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string, memoryTypeAttributeValue string) {
@@ -564,6 +839,34 @@ func (m *metricMongodbObjectCount) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMongodbObjectCount struct{}
+
+func (m MetricMetadataMongodbObjectCount) GetName() string {
+	return "mongodb.object.count"
+}
+
+func (m MetricMetadataMongodbObjectCount) GetDescription() string {
+	return "The number of objects."
+}
+
+func (m MetricMetadataMongodbObjectCount) GetUnit() string {
+	return "{objects}"
+}
+
+func (m MetricMetadataMongodbObjectCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbObjectCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMongodbObjectCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -617,6 +920,34 @@ func (m *metricMongodbOperationCount) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataMongodbOperationCount struct{}
+
+func (m MetricMetadataMongodbOperationCount) GetName() string {
+	return "mongodb.operation.count"
+}
+
+func (m MetricMetadataMongodbOperationCount) GetDescription() string {
+	return "The number of operations executed."
+}
+
+func (m MetricMetadataMongodbOperationCount) GetUnit() string {
+	return "{operations}"
+}
+
+func (m MetricMetadataMongodbOperationCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbOperationCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricMongodbOperationCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, operationAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -668,6 +999,34 @@ func (m *metricMongodbStorageSize) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataMongodbStorageSize struct{}
+
+func (m MetricMetadataMongodbStorageSize) GetName() string {
+	return "mongodb.storage.size"
+}
+
+func (m MetricMetadataMongodbStorageSize) GetDescription() string {
+	return "The total amount of storage allocated to this collection."
+}
+
+func (m MetricMetadataMongodbStorageSize) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataMongodbStorageSize) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataMongodbStorageSize) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricMongodbStorageSize) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, databaseAttributeValue string) {
@@ -883,6 +1242,85 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "mongodb.cache.operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbCacheOperationsDataPoint(ts, intVal, attributes[0])
+	case "mongodb.collection.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbCollectionCountDataPoint(ts, intVal, attributes[0])
+	case "mongodb.connection.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbConnectionCountDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "mongodb.data.size":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbDataSizeDataPoint(ts, intVal, attributes[0])
+	case "mongodb.extent.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbExtentCountDataPoint(ts, intVal, attributes[0])
+	case "mongodb.global_lock.time":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbGlobalLockTimeDataPoint(ts, intVal)
+	case "mongodb.index.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbIndexCountDataPoint(ts, intVal, attributes[0])
+	case "mongodb.index.size":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbIndexSizeDataPoint(ts, intVal, attributes[0])
+	case "mongodb.memory.usage":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbMemoryUsageDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "mongodb.object.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbObjectCountDataPoint(ts, intVal, attributes[0])
+	case "mongodb.operation.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbOperationCountDataPoint(ts, intVal, attributes[0])
+	case "mongodb.storage.size":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordMongodbStorageSizeDataPoint(ts, intVal, attributes[0])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// ConnectionType (The status of the connection.)
@@ -901,6 +1339,42 @@ var Attributes = struct {
 	"type",
 	"operation",
 	"type",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"mongodb.cache.operations": MetricMetadataMongodbCacheOperations{},
+	"mongodb.collection.count": MetricMetadataMongodbCollectionCount{},
+	"mongodb.connection.count": MetricMetadataMongodbConnectionCount{},
+	"mongodb.data.size":        MetricMetadataMongodbDataSize{},
+	"mongodb.extent.count":     MetricMetadataMongodbExtentCount{},
+	"mongodb.global_lock.time": MetricMetadataMongodbGlobalLockTime{},
+	"mongodb.index.count":      MetricMetadataMongodbIndexCount{},
+	"mongodb.index.size":       MetricMetadataMongodbIndexSize{},
+	"mongodb.memory.usage":     MetricMetadataMongodbMemoryUsage{},
+	"mongodb.object.count":     MetricMetadataMongodbObjectCount{},
+	"mongodb.operation.count":  MetricMetadataMongodbOperationCount{},
+	"mongodb.storage.size":     MetricMetadataMongodbStorageSize{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"mongodb.cache.operations": settings.MongodbCacheOperations.Enabled,
+		"mongodb.collection.count": settings.MongodbCollectionCount.Enabled,
+		"mongodb.connection.count": settings.MongodbConnectionCount.Enabled,
+		"mongodb.data.size":        settings.MongodbDataSize.Enabled,
+		"mongodb.extent.count":     settings.MongodbExtentCount.Enabled,
+		"mongodb.global_lock.time": settings.MongodbGlobalLockTime.Enabled,
+		"mongodb.index.count":      settings.MongodbIndexCount.Enabled,
+		"mongodb.index.size":       settings.MongodbIndexSize.Enabled,
+		"mongodb.memory.usage":     settings.MongodbMemoryUsage.Enabled,
+		"mongodb.object.count":     settings.MongodbObjectCount.Enabled,
+		"mongodb.operation.count":  settings.MongodbOperationCount.Enabled,
+		"mongodb.storage.size":     settings.MongodbStorageSize.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

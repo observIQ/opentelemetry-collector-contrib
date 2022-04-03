@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -50,6 +51,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricSystemDiskIo struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -65,6 +88,34 @@ func (m *metricSystemDiskIo) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemDiskIo struct{}
+
+func (m MetricMetadataSystemDiskIo) GetName() string {
+	return "system.disk.io"
+}
+
+func (m MetricMetadataSystemDiskIo) GetDescription() string {
+	return "Disk bytes transferred."
+}
+
+func (m MetricMetadataSystemDiskIo) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataSystemDiskIo) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemDiskIo) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemDiskIo) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, directionAttributeValue string) {
@@ -121,6 +172,34 @@ func (m *metricSystemDiskIoTime) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataSystemDiskIoTime struct{}
+
+func (m MetricMetadataSystemDiskIoTime) GetName() string {
+	return "system.disk.io_time"
+}
+
+func (m MetricMetadataSystemDiskIoTime) GetDescription() string {
+	return "Time disk spent activated. On Windows, this is calculated as the inverse of disk idle time."
+}
+
+func (m MetricMetadataSystemDiskIoTime) GetUnit() string {
+	return "s"
+}
+
+func (m MetricMetadataSystemDiskIoTime) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemDiskIoTime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Double",
+		},
+	}
+}
+
 func (m *metricSystemDiskIoTime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64, deviceAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -172,6 +251,34 @@ func (m *metricSystemDiskMerged) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemDiskMerged struct{}
+
+func (m MetricMetadataSystemDiskMerged) GetName() string {
+	return "system.disk.merged"
+}
+
+func (m MetricMetadataSystemDiskMerged) GetDescription() string {
+	return "The number of disk reads merged into single physical disk access operations."
+}
+
+func (m MetricMetadataSystemDiskMerged) GetUnit() string {
+	return "{operations}"
+}
+
+func (m MetricMetadataSystemDiskMerged) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemDiskMerged) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemDiskMerged) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, directionAttributeValue string) {
@@ -228,6 +335,34 @@ func (m *metricSystemDiskOperationTime) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataSystemDiskOperationTime struct{}
+
+func (m MetricMetadataSystemDiskOperationTime) GetName() string {
+	return "system.disk.operation_time"
+}
+
+func (m MetricMetadataSystemDiskOperationTime) GetDescription() string {
+	return "Time spent in disk operations."
+}
+
+func (m MetricMetadataSystemDiskOperationTime) GetUnit() string {
+	return "s"
+}
+
+func (m MetricMetadataSystemDiskOperationTime) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemDiskOperationTime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Double",
+		},
+	}
+}
+
 func (m *metricSystemDiskOperationTime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64, deviceAttributeValue string, directionAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -280,6 +415,34 @@ func (m *metricSystemDiskOperations) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemDiskOperations struct{}
+
+func (m MetricMetadataSystemDiskOperations) GetName() string {
+	return "system.disk.operations"
+}
+
+func (m MetricMetadataSystemDiskOperations) GetDescription() string {
+	return "Disk operations count."
+}
+
+func (m MetricMetadataSystemDiskOperations) GetUnit() string {
+	return "{operations}"
+}
+
+func (m MetricMetadataSystemDiskOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemDiskOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemDiskOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, directionAttributeValue string) {
@@ -336,6 +499,34 @@ func (m *metricSystemDiskPendingOperations) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataSystemDiskPendingOperations struct{}
+
+func (m MetricMetadataSystemDiskPendingOperations) GetName() string {
+	return "system.disk.pending_operations"
+}
+
+func (m MetricMetadataSystemDiskPendingOperations) GetDescription() string {
+	return "The queue size of pending I/O operations."
+}
+
+func (m MetricMetadataSystemDiskPendingOperations) GetUnit() string {
+	return "{operations}"
+}
+
+func (m MetricMetadataSystemDiskPendingOperations) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemDiskPendingOperations) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricSystemDiskPendingOperations) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -387,6 +578,34 @@ func (m *metricSystemDiskWeightedIoTime) init() {
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemDiskWeightedIoTime struct{}
+
+func (m MetricMetadataSystemDiskWeightedIoTime) GetName() string {
+	return "system.disk.weighted_io_time"
+}
+
+func (m MetricMetadataSystemDiskWeightedIoTime) GetDescription() string {
+	return "Time disk spent activated multiplied by the queue length."
+}
+
+func (m MetricMetadataSystemDiskWeightedIoTime) GetUnit() string {
+	return "s"
+}
+
+func (m MetricMetadataSystemDiskWeightedIoTime) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemDiskWeightedIoTime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Double",
+		},
+	}
 }
 
 func (m *metricSystemDiskWeightedIoTime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64, deviceAttributeValue string) {
@@ -562,6 +781,55 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "system.disk.io":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemDiskIoDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "system.disk.io_time":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemDiskIoTimeDataPoint(ts, floatVal, attributes[0])
+	case "system.disk.merged":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemDiskMergedDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "system.disk.operation_time":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemDiskOperationTimeDataPoint(ts, floatVal, attributes[0], attributes[1])
+	case "system.disk.operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemDiskOperationsDataPoint(ts, intVal, attributes[0], attributes[1])
+	case "system.disk.pending_operations":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemDiskPendingOperationsDataPoint(ts, intVal, attributes[0])
+	case "system.disk.weighted_io_time":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemDiskWeightedIoTimeDataPoint(ts, floatVal, attributes[0])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// Device (Name of the disk.)
@@ -571,6 +839,32 @@ var Attributes = struct {
 }{
 	"device",
 	"direction",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"system.disk.io":                 MetricMetadataSystemDiskIo{},
+	"system.disk.io_time":            MetricMetadataSystemDiskIoTime{},
+	"system.disk.merged":             MetricMetadataSystemDiskMerged{},
+	"system.disk.operation_time":     MetricMetadataSystemDiskOperationTime{},
+	"system.disk.operations":         MetricMetadataSystemDiskOperations{},
+	"system.disk.pending_operations": MetricMetadataSystemDiskPendingOperations{},
+	"system.disk.weighted_io_time":   MetricMetadataSystemDiskWeightedIoTime{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"system.disk.io":                 settings.SystemDiskIo.Enabled,
+		"system.disk.io_time":            settings.SystemDiskIoTime.Enabled,
+		"system.disk.merged":             settings.SystemDiskMerged.Enabled,
+		"system.disk.operation_time":     settings.SystemDiskOperationTime.Enabled,
+		"system.disk.operations":         settings.SystemDiskOperations.Enabled,
+		"system.disk.pending_operations": settings.SystemDiskPendingOperations.Enabled,
+		"system.disk.weighted_io_time":   settings.SystemDiskWeightedIoTime.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

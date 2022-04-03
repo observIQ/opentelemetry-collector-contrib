@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -82,6 +83,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricZookeeperConnectionActive struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -96,6 +119,34 @@ func (m *metricZookeeperConnectionActive) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataZookeeperConnectionActive struct{}
+
+func (m MetricMetadataZookeeperConnectionActive) GetName() string {
+	return "zookeeper.connection.active"
+}
+
+func (m MetricMetadataZookeeperConnectionActive) GetDescription() string {
+	return "Number of active clients connected to a ZooKeeper server."
+}
+
+func (m MetricMetadataZookeeperConnectionActive) GetUnit() string {
+	return "{connections}"
+}
+
+func (m MetricMetadataZookeeperConnectionActive) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperConnectionActive) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricZookeeperConnectionActive) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -149,6 +200,34 @@ func (m *metricZookeeperDataTreeEphemeralNodeCount) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataZookeeperDataTreeEphemeralNodeCount struct{}
+
+func (m MetricMetadataZookeeperDataTreeEphemeralNodeCount) GetName() string {
+	return "zookeeper.data_tree.ephemeral_node.count"
+}
+
+func (m MetricMetadataZookeeperDataTreeEphemeralNodeCount) GetDescription() string {
+	return "Number of ephemeral nodes that a ZooKeeper server has in its data tree."
+}
+
+func (m MetricMetadataZookeeperDataTreeEphemeralNodeCount) GetUnit() string {
+	return "{nodes}"
+}
+
+func (m MetricMetadataZookeeperDataTreeEphemeralNodeCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperDataTreeEphemeralNodeCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricZookeeperDataTreeEphemeralNodeCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -200,6 +279,34 @@ func (m *metricZookeeperDataTreeSize) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataZookeeperDataTreeSize struct{}
+
+func (m MetricMetadataZookeeperDataTreeSize) GetName() string {
+	return "zookeeper.data_tree.size"
+}
+
+func (m MetricMetadataZookeeperDataTreeSize) GetDescription() string {
+	return "Size of data in bytes that a ZooKeeper server has in its data tree."
+}
+
+func (m MetricMetadataZookeeperDataTreeSize) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataZookeeperDataTreeSize) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperDataTreeSize) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricZookeeperDataTreeSize) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -247,6 +354,32 @@ func (m *metricZookeeperFileDescriptorLimit) init() {
 	m.data.SetDescription("Maximum number of file descriptors that a ZooKeeper server can open.")
 	m.data.SetUnit("{file_descriptors}")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataZookeeperFileDescriptorLimit struct{}
+
+func (m MetricMetadataZookeeperFileDescriptorLimit) GetName() string {
+	return "zookeeper.file_descriptor.limit"
+}
+
+func (m MetricMetadataZookeeperFileDescriptorLimit) GetDescription() string {
+	return "Maximum number of file descriptors that a ZooKeeper server can open."
+}
+
+func (m MetricMetadataZookeeperFileDescriptorLimit) GetUnit() string {
+	return "{file_descriptors}"
+}
+
+func (m MetricMetadataZookeeperFileDescriptorLimit) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperFileDescriptorLimit) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricZookeeperFileDescriptorLimit) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -298,6 +431,34 @@ func (m *metricZookeeperFileDescriptorOpen) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataZookeeperFileDescriptorOpen struct{}
+
+func (m MetricMetadataZookeeperFileDescriptorOpen) GetName() string {
+	return "zookeeper.file_descriptor.open"
+}
+
+func (m MetricMetadataZookeeperFileDescriptorOpen) GetDescription() string {
+	return "Number of file descriptors that a ZooKeeper server has open."
+}
+
+func (m MetricMetadataZookeeperFileDescriptorOpen) GetUnit() string {
+	return "{file_descriptors}"
+}
+
+func (m MetricMetadataZookeeperFileDescriptorOpen) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperFileDescriptorOpen) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricZookeeperFileDescriptorOpen) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -352,6 +513,34 @@ func (m *metricZookeeperFollowerCount) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataZookeeperFollowerCount struct{}
+
+func (m MetricMetadataZookeeperFollowerCount) GetName() string {
+	return "zookeeper.follower.count"
+}
+
+func (m MetricMetadataZookeeperFollowerCount) GetDescription() string {
+	return "The number of followers. Only exposed by the leader."
+}
+
+func (m MetricMetadataZookeeperFollowerCount) GetUnit() string {
+	return "{followers}"
+}
+
+func (m MetricMetadataZookeeperFollowerCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperFollowerCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricZookeeperFollowerCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, stateAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -404,6 +593,34 @@ func (m *metricZookeeperFsyncExceededThresholdCount) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataZookeeperFsyncExceededThresholdCount struct{}
+
+func (m MetricMetadataZookeeperFsyncExceededThresholdCount) GetName() string {
+	return "zookeeper.fsync.exceeded_threshold.count"
+}
+
+func (m MetricMetadataZookeeperFsyncExceededThresholdCount) GetDescription() string {
+	return "Number of times fsync duration has exceeded warning threshold."
+}
+
+func (m MetricMetadataZookeeperFsyncExceededThresholdCount) GetUnit() string {
+	return "{events}"
+}
+
+func (m MetricMetadataZookeeperFsyncExceededThresholdCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperFsyncExceededThresholdCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricZookeeperFsyncExceededThresholdCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -451,6 +668,32 @@ func (m *metricZookeeperLatencyAvg) init() {
 	m.data.SetDescription("Average time in milliseconds for requests to be processed.")
 	m.data.SetUnit("ms")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataZookeeperLatencyAvg struct{}
+
+func (m MetricMetadataZookeeperLatencyAvg) GetName() string {
+	return "zookeeper.latency.avg"
+}
+
+func (m MetricMetadataZookeeperLatencyAvg) GetDescription() string {
+	return "Average time in milliseconds for requests to be processed."
+}
+
+func (m MetricMetadataZookeeperLatencyAvg) GetUnit() string {
+	return "ms"
+}
+
+func (m MetricMetadataZookeeperLatencyAvg) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperLatencyAvg) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricZookeeperLatencyAvg) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -502,6 +745,32 @@ func (m *metricZookeeperLatencyMax) init() {
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 }
 
+type MetricMetadataZookeeperLatencyMax struct{}
+
+func (m MetricMetadataZookeeperLatencyMax) GetName() string {
+	return "zookeeper.latency.max"
+}
+
+func (m MetricMetadataZookeeperLatencyMax) GetDescription() string {
+	return "Maximum time in milliseconds for requests to be processed."
+}
+
+func (m MetricMetadataZookeeperLatencyMax) GetUnit() string {
+	return "ms"
+}
+
+func (m MetricMetadataZookeeperLatencyMax) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperLatencyMax) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
+}
+
 func (m *metricZookeeperLatencyMax) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -549,6 +818,32 @@ func (m *metricZookeeperLatencyMin) init() {
 	m.data.SetDescription("Minimum time in milliseconds for requests to be processed.")
 	m.data.SetUnit("ms")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataZookeeperLatencyMin struct{}
+
+func (m MetricMetadataZookeeperLatencyMin) GetName() string {
+	return "zookeeper.latency.min"
+}
+
+func (m MetricMetadataZookeeperLatencyMin) GetDescription() string {
+	return "Minimum time in milliseconds for requests to be processed."
+}
+
+func (m MetricMetadataZookeeperLatencyMin) GetUnit() string {
+	return "ms"
+}
+
+func (m MetricMetadataZookeeperLatencyMin) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperLatencyMin) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricZookeeperLatencyMin) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -603,6 +898,34 @@ func (m *metricZookeeperPacketCount) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataZookeeperPacketCount struct{}
+
+func (m MetricMetadataZookeeperPacketCount) GetName() string {
+	return "zookeeper.packet.count"
+}
+
+func (m MetricMetadataZookeeperPacketCount) GetDescription() string {
+	return "The number of ZooKeeper packets received or sent by a server."
+}
+
+func (m MetricMetadataZookeeperPacketCount) GetUnit() string {
+	return "{packets}"
+}
+
+func (m MetricMetadataZookeeperPacketCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperPacketCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricZookeeperPacketCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, directionAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -653,6 +976,34 @@ func (m *metricZookeeperRequestActive) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataZookeeperRequestActive struct{}
+
+func (m MetricMetadataZookeeperRequestActive) GetName() string {
+	return "zookeeper.request.active"
+}
+
+func (m MetricMetadataZookeeperRequestActive) GetDescription() string {
+	return "Number of currently executing requests."
+}
+
+func (m MetricMetadataZookeeperRequestActive) GetUnit() string {
+	return "{requests}"
+}
+
+func (m MetricMetadataZookeeperRequestActive) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperRequestActive) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricZookeeperRequestActive) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -706,6 +1057,34 @@ func (m *metricZookeeperSyncPending) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataZookeeperSyncPending struct{}
+
+func (m MetricMetadataZookeeperSyncPending) GetName() string {
+	return "zookeeper.sync.pending"
+}
+
+func (m MetricMetadataZookeeperSyncPending) GetDescription() string {
+	return "The number of pending syncs from the followers. Only exposed by the leader."
+}
+
+func (m MetricMetadataZookeeperSyncPending) GetUnit() string {
+	return "{syncs}"
+}
+
+func (m MetricMetadataZookeeperSyncPending) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperSyncPending) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricZookeeperSyncPending) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -757,6 +1136,34 @@ func (m *metricZookeeperWatchCount) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataZookeeperWatchCount struct{}
+
+func (m MetricMetadataZookeeperWatchCount) GetName() string {
+	return "zookeeper.watch.count"
+}
+
+func (m MetricMetadataZookeeperWatchCount) GetDescription() string {
+	return "Number of watches placed on Z-Nodes on a ZooKeeper server."
+}
+
+func (m MetricMetadataZookeeperWatchCount) GetUnit() string {
+	return "{watches}"
+}
+
+func (m MetricMetadataZookeeperWatchCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperWatchCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricZookeeperWatchCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -806,6 +1213,34 @@ func (m *metricZookeeperZnodeCount) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataZookeeperZnodeCount struct{}
+
+func (m MetricMetadataZookeeperZnodeCount) GetName() string {
+	return "zookeeper.znode.count"
+}
+
+func (m MetricMetadataZookeeperZnodeCount) GetDescription() string {
+	return "Number of z-nodes that a ZooKeeper server has in its data tree."
+}
+
+func (m MetricMetadataZookeeperZnodeCount) GetUnit() string {
+	return "{znodes}"
+}
+
+func (m MetricMetadataZookeeperZnodeCount) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataZookeeperZnodeCount) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricZookeeperZnodeCount) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1058,6 +1493,103 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "zookeeper.connection.active":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperConnectionActiveDataPoint(ts, intVal)
+	case "zookeeper.data_tree.ephemeral_node.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperDataTreeEphemeralNodeCountDataPoint(ts, intVal)
+	case "zookeeper.data_tree.size":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperDataTreeSizeDataPoint(ts, intVal)
+	case "zookeeper.file_descriptor.limit":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperFileDescriptorLimitDataPoint(ts, intVal)
+	case "zookeeper.file_descriptor.open":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperFileDescriptorOpenDataPoint(ts, intVal)
+	case "zookeeper.follower.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperFollowerCountDataPoint(ts, intVal, attributes[0])
+	case "zookeeper.fsync.exceeded_threshold.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperFsyncExceededThresholdCountDataPoint(ts, intVal)
+	case "zookeeper.latency.avg":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperLatencyAvgDataPoint(ts, intVal)
+	case "zookeeper.latency.max":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperLatencyMaxDataPoint(ts, intVal)
+	case "zookeeper.latency.min":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperLatencyMinDataPoint(ts, intVal)
+	case "zookeeper.packet.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperPacketCountDataPoint(ts, intVal, attributes[0])
+	case "zookeeper.request.active":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperRequestActiveDataPoint(ts, intVal)
+	case "zookeeper.sync.pending":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperSyncPendingDataPoint(ts, intVal)
+	case "zookeeper.watch.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperWatchCountDataPoint(ts, intVal)
+	case "zookeeper.znode.count":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordZookeeperZnodeCountDataPoint(ts, intVal)
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// Direction (State of a packet based on io direction.)
@@ -1067,6 +1599,48 @@ var Attributes = struct {
 }{
 	"direction",
 	"state",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"zookeeper.connection.active":              MetricMetadataZookeeperConnectionActive{},
+	"zookeeper.data_tree.ephemeral_node.count": MetricMetadataZookeeperDataTreeEphemeralNodeCount{},
+	"zookeeper.data_tree.size":                 MetricMetadataZookeeperDataTreeSize{},
+	"zookeeper.file_descriptor.limit":          MetricMetadataZookeeperFileDescriptorLimit{},
+	"zookeeper.file_descriptor.open":           MetricMetadataZookeeperFileDescriptorOpen{},
+	"zookeeper.follower.count":                 MetricMetadataZookeeperFollowerCount{},
+	"zookeeper.fsync.exceeded_threshold.count": MetricMetadataZookeeperFsyncExceededThresholdCount{},
+	"zookeeper.latency.avg":                    MetricMetadataZookeeperLatencyAvg{},
+	"zookeeper.latency.max":                    MetricMetadataZookeeperLatencyMax{},
+	"zookeeper.latency.min":                    MetricMetadataZookeeperLatencyMin{},
+	"zookeeper.packet.count":                   MetricMetadataZookeeperPacketCount{},
+	"zookeeper.request.active":                 MetricMetadataZookeeperRequestActive{},
+	"zookeeper.sync.pending":                   MetricMetadataZookeeperSyncPending{},
+	"zookeeper.watch.count":                    MetricMetadataZookeeperWatchCount{},
+	"zookeeper.znode.count":                    MetricMetadataZookeeperZnodeCount{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"zookeeper.connection.active":              settings.ZookeeperConnectionActive.Enabled,
+		"zookeeper.data_tree.ephemeral_node.count": settings.ZookeeperDataTreeEphemeralNodeCount.Enabled,
+		"zookeeper.data_tree.size":                 settings.ZookeeperDataTreeSize.Enabled,
+		"zookeeper.file_descriptor.limit":          settings.ZookeeperFileDescriptorLimit.Enabled,
+		"zookeeper.file_descriptor.open":           settings.ZookeeperFileDescriptorOpen.Enabled,
+		"zookeeper.follower.count":                 settings.ZookeeperFollowerCount.Enabled,
+		"zookeeper.fsync.exceeded_threshold.count": settings.ZookeeperFsyncExceededThresholdCount.Enabled,
+		"zookeeper.latency.avg":                    settings.ZookeeperLatencyAvg.Enabled,
+		"zookeeper.latency.max":                    settings.ZookeeperLatencyMax.Enabled,
+		"zookeeper.latency.min":                    settings.ZookeeperLatencyMin.Enabled,
+		"zookeeper.packet.count":                   settings.ZookeeperPacketCount.Enabled,
+		"zookeeper.request.active":                 settings.ZookeeperRequestActive.Enabled,
+		"zookeeper.sync.pending":                   settings.ZookeeperSyncPending.Enabled,
+		"zookeeper.watch.count":                    settings.ZookeeperWatchCount.Enabled,
+		"zookeeper.znode.count":                    settings.ZookeeperZnodeCount.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

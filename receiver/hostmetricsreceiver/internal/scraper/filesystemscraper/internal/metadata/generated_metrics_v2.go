@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -34,6 +35,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricSystemFilesystemInodesUsage struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -49,6 +72,34 @@ func (m *metricSystemFilesystemInodesUsage) init() {
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemFilesystemInodesUsage struct{}
+
+func (m MetricMetadataSystemFilesystemInodesUsage) GetName() string {
+	return "system.filesystem.inodes.usage"
+}
+
+func (m MetricMetadataSystemFilesystemInodesUsage) GetDescription() string {
+	return "FileSystem inodes used."
+}
+
+func (m MetricMetadataSystemFilesystemInodesUsage) GetUnit() string {
+	return "{inodes}"
+}
+
+func (m MetricMetadataSystemFilesystemInodesUsage) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemFilesystemInodesUsage) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricSystemFilesystemInodesUsage) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, modeAttributeValue string, mountpointAttributeValue string, typeAttributeValue string, stateAttributeValue string) {
@@ -108,6 +159,34 @@ func (m *metricSystemFilesystemUsage) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataSystemFilesystemUsage struct{}
+
+func (m MetricMetadataSystemFilesystemUsage) GetName() string {
+	return "system.filesystem.usage"
+}
+
+func (m MetricMetadataSystemFilesystemUsage) GetDescription() string {
+	return "Filesystem bytes used."
+}
+
+func (m MetricMetadataSystemFilesystemUsage) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataSystemFilesystemUsage) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataSystemFilesystemUsage) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricSystemFilesystemUsage) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, deviceAttributeValue string, modeAttributeValue string, mountpointAttributeValue string, typeAttributeValue string, stateAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -161,6 +240,32 @@ func (m *metricSystemFilesystemUtilization) init() {
 	m.data.SetUnit("1")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataSystemFilesystemUtilization struct{}
+
+func (m MetricMetadataSystemFilesystemUtilization) GetName() string {
+	return "system.filesystem.utilization"
+}
+
+func (m MetricMetadataSystemFilesystemUtilization) GetDescription() string {
+	return "Fraction of filesystem bytes used."
+}
+
+func (m MetricMetadataSystemFilesystemUtilization) GetUnit() string {
+	return "1"
+}
+
+func (m MetricMetadataSystemFilesystemUtilization) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataSystemFilesystemUtilization) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Double",
+		},
+	}
 }
 
 func (m *metricSystemFilesystemUtilization) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64, deviceAttributeValue string, modeAttributeValue string, mountpointAttributeValue string, typeAttributeValue string) {
@@ -307,6 +412,31 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "system.filesystem.inodes.usage":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemFilesystemInodesUsageDataPoint(ts, intVal, attributes[0], attributes[1], attributes[2], attributes[3], attributes[4])
+	case "system.filesystem.usage":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemFilesystemUsageDataPoint(ts, intVal, attributes[0], attributes[1], attributes[2], attributes[3], attributes[4])
+	case "system.filesystem.utilization":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordSystemFilesystemUtilizationDataPoint(ts, floatVal, attributes[0], attributes[1], attributes[2], attributes[3])
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// Device (Identifier of the filesystem.)
@@ -325,6 +455,24 @@ var Attributes = struct {
 	"mountpoint",
 	"state",
 	"type",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"system.filesystem.inodes.usage": MetricMetadataSystemFilesystemInodesUsage{},
+	"system.filesystem.usage":        MetricMetadataSystemFilesystemUsage{},
+	"system.filesystem.utilization":  MetricMetadataSystemFilesystemUtilization{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"system.filesystem.inodes.usage": settings.SystemFilesystemInodesUsage.Enabled,
+		"system.filesystem.usage":        settings.SystemFilesystemUsage.Enabled,
+		"system.filesystem.utilization":  settings.SystemFilesystemUtilization.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.

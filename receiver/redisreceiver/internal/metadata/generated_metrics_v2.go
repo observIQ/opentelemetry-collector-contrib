@@ -3,6 +3,7 @@
 package metadata
 
 import (
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/model/pdata"
@@ -138,6 +139,28 @@ func DefaultMetricsSettings() MetricsSettings {
 	}
 }
 
+type MetricIntf interface {
+	GetName() string
+	GetDescription() string
+	GetUnit() string
+	GetMetricType() MetricDataTypeMetadata
+}
+
+type MetricDataTypeMetadata struct {
+	Sum   *Sum   `yaml:"sum"`
+	Gauge *Gauge `yaml:"gauge"`
+}
+
+type Gauge struct {
+	ValueType string
+}
+
+type Sum struct {
+	Aggregation pdata.MetricAggregationTemporality
+	Monotonic   bool
+	ValueType   string
+}
+
 type metricRedisClientsBlocked struct {
 	data     pdata.Metric   // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
@@ -152,6 +175,34 @@ func (m *metricRedisClientsBlocked) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataRedisClientsBlocked struct{}
+
+func (m MetricMetadataRedisClientsBlocked) GetName() string {
+	return "redis.clients.blocked"
+}
+
+func (m MetricMetadataRedisClientsBlocked) GetDescription() string {
+	return "Number of clients pending on a blocking call"
+}
+
+func (m MetricMetadataRedisClientsBlocked) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisClientsBlocked) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisClientsBlocked) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricRedisClientsBlocked) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -205,6 +256,34 @@ func (m *metricRedisClientsConnected) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRedisClientsConnected struct{}
+
+func (m MetricMetadataRedisClientsConnected) GetName() string {
+	return "redis.clients.connected"
+}
+
+func (m MetricMetadataRedisClientsConnected) GetDescription() string {
+	return "Number of client connections (excluding connections from replicas)"
+}
+
+func (m MetricMetadataRedisClientsConnected) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisClientsConnected) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisClientsConnected) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRedisClientsConnected) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -252,6 +331,32 @@ func (m *metricRedisClientsMaxInputBuffer) init() {
 	m.data.SetDescription("Biggest input buffer among current client connections")
 	m.data.SetUnit("")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataRedisClientsMaxInputBuffer struct{}
+
+func (m MetricMetadataRedisClientsMaxInputBuffer) GetName() string {
+	return "redis.clients.max_input_buffer"
+}
+
+func (m MetricMetadataRedisClientsMaxInputBuffer) GetDescription() string {
+	return "Biggest input buffer among current client connections"
+}
+
+func (m MetricMetadataRedisClientsMaxInputBuffer) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisClientsMaxInputBuffer) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisClientsMaxInputBuffer) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricRedisClientsMaxInputBuffer) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -303,6 +408,32 @@ func (m *metricRedisClientsMaxOutputBuffer) init() {
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 }
 
+type MetricMetadataRedisClientsMaxOutputBuffer struct{}
+
+func (m MetricMetadataRedisClientsMaxOutputBuffer) GetName() string {
+	return "redis.clients.max_output_buffer"
+}
+
+func (m MetricMetadataRedisClientsMaxOutputBuffer) GetDescription() string {
+	return "Longest output list among current client connections"
+}
+
+func (m MetricMetadataRedisClientsMaxOutputBuffer) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisClientsMaxOutputBuffer) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisClientsMaxOutputBuffer) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
+}
+
 func (m *metricRedisClientsMaxOutputBuffer) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -350,6 +481,32 @@ func (m *metricRedisCommands) init() {
 	m.data.SetDescription("Number of commands processed per second")
 	m.data.SetUnit("{ops}/s")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataRedisCommands struct{}
+
+func (m MetricMetadataRedisCommands) GetName() string {
+	return "redis.commands"
+}
+
+func (m MetricMetadataRedisCommands) GetDescription() string {
+	return "Number of commands processed per second"
+}
+
+func (m MetricMetadataRedisCommands) GetUnit() string {
+	return "{ops}/s"
+}
+
+func (m MetricMetadataRedisCommands) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisCommands) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricRedisCommands) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -403,6 +560,34 @@ func (m *metricRedisCommandsProcessed) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRedisCommandsProcessed struct{}
+
+func (m MetricMetadataRedisCommandsProcessed) GetName() string {
+	return "redis.commands.processed"
+}
+
+func (m MetricMetadataRedisCommandsProcessed) GetDescription() string {
+	return "Total number of commands processed by the server"
+}
+
+func (m MetricMetadataRedisCommandsProcessed) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisCommandsProcessed) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisCommandsProcessed) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRedisCommandsProcessed) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -454,6 +639,34 @@ func (m *metricRedisConnectionsReceived) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRedisConnectionsReceived struct{}
+
+func (m MetricMetadataRedisConnectionsReceived) GetName() string {
+	return "redis.connections.received"
+}
+
+func (m MetricMetadataRedisConnectionsReceived) GetDescription() string {
+	return "Total number of connections accepted by the server"
+}
+
+func (m MetricMetadataRedisConnectionsReceived) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisConnectionsReceived) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisConnectionsReceived) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRedisConnectionsReceived) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -503,6 +716,34 @@ func (m *metricRedisConnectionsRejected) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataRedisConnectionsRejected struct{}
+
+func (m MetricMetadataRedisConnectionsRejected) GetName() string {
+	return "redis.connections.rejected"
+}
+
+func (m MetricMetadataRedisConnectionsRejected) GetDescription() string {
+	return "Number of connections rejected because of maxclients limit"
+}
+
+func (m MetricMetadataRedisConnectionsRejected) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisConnectionsRejected) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisConnectionsRejected) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricRedisConnectionsRejected) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -557,6 +798,34 @@ func (m *metricRedisCPUTime) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataRedisCPUTime struct{}
+
+func (m MetricMetadataRedisCPUTime) GetName() string {
+	return "redis.cpu.time"
+}
+
+func (m MetricMetadataRedisCPUTime) GetDescription() string {
+	return "System CPU consumed by the Redis server in seconds since server start"
+}
+
+func (m MetricMetadataRedisCPUTime) GetUnit() string {
+	return "s"
+}
+
+func (m MetricMetadataRedisCPUTime) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataRedisCPUTime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Double",
+		},
+	}
+}
+
 func (m *metricRedisCPUTime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64, stateAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -606,6 +875,32 @@ func (m *metricRedisDbAvgTTL) init() {
 	m.data.SetUnit("ms")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataRedisDbAvgTTL struct{}
+
+func (m MetricMetadataRedisDbAvgTTL) GetName() string {
+	return "redis.db.avg_ttl"
+}
+
+func (m MetricMetadataRedisDbAvgTTL) GetDescription() string {
+	return "Average keyspace keys TTL"
+}
+
+func (m MetricMetadataRedisDbAvgTTL) GetUnit() string {
+	return "ms"
+}
+
+func (m MetricMetadataRedisDbAvgTTL) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisDbAvgTTL) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricRedisDbAvgTTL) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, dbAttributeValue string) {
@@ -659,6 +954,32 @@ func (m *metricRedisDbExpires) init() {
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
 }
 
+type MetricMetadataRedisDbExpires struct{}
+
+func (m MetricMetadataRedisDbExpires) GetName() string {
+	return "redis.db.expires"
+}
+
+func (m MetricMetadataRedisDbExpires) GetDescription() string {
+	return "Number of keyspace keys with an expiration"
+}
+
+func (m MetricMetadataRedisDbExpires) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisDbExpires) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisDbExpires) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
+}
+
 func (m *metricRedisDbExpires) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, dbAttributeValue string) {
 	if !m.settings.Enabled {
 		return
@@ -708,6 +1029,32 @@ func (m *metricRedisDbKeys) init() {
 	m.data.SetUnit("")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+type MetricMetadataRedisDbKeys struct{}
+
+func (m MetricMetadataRedisDbKeys) GetName() string {
+	return "redis.db.keys"
+}
+
+func (m MetricMetadataRedisDbKeys) GetDescription() string {
+	return "Number of keyspace keys"
+}
+
+func (m MetricMetadataRedisDbKeys) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisDbKeys) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisDbKeys) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricRedisDbKeys) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64, dbAttributeValue string) {
@@ -762,6 +1109,34 @@ func (m *metricRedisKeysEvicted) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRedisKeysEvicted struct{}
+
+func (m MetricMetadataRedisKeysEvicted) GetName() string {
+	return "redis.keys.evicted"
+}
+
+func (m MetricMetadataRedisKeysEvicted) GetDescription() string {
+	return "Number of evicted keys due to maxmemory limit"
+}
+
+func (m MetricMetadataRedisKeysEvicted) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisKeysEvicted) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisKeysEvicted) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRedisKeysEvicted) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -811,6 +1186,34 @@ func (m *metricRedisKeysExpired) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataRedisKeysExpired struct{}
+
+func (m MetricMetadataRedisKeysExpired) GetName() string {
+	return "redis.keys.expired"
+}
+
+func (m MetricMetadataRedisKeysExpired) GetDescription() string {
+	return "Total number of key expiration events"
+}
+
+func (m MetricMetadataRedisKeysExpired) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisKeysExpired) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisKeysExpired) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricRedisKeysExpired) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -864,6 +1267,34 @@ func (m *metricRedisKeyspaceHits) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRedisKeyspaceHits struct{}
+
+func (m MetricMetadataRedisKeyspaceHits) GetName() string {
+	return "redis.keyspace.hits"
+}
+
+func (m MetricMetadataRedisKeyspaceHits) GetDescription() string {
+	return "Number of successful lookup of keys in the main dictionary"
+}
+
+func (m MetricMetadataRedisKeyspaceHits) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisKeyspaceHits) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisKeyspaceHits) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRedisKeyspaceHits) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -915,6 +1346,34 @@ func (m *metricRedisKeyspaceMisses) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRedisKeyspaceMisses struct{}
+
+func (m MetricMetadataRedisKeyspaceMisses) GetName() string {
+	return "redis.keyspace.misses"
+}
+
+func (m MetricMetadataRedisKeyspaceMisses) GetDescription() string {
+	return "Number of failed lookup of keys in the main dictionary"
+}
+
+func (m MetricMetadataRedisKeyspaceMisses) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisKeyspaceMisses) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisKeyspaceMisses) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRedisKeyspaceMisses) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -962,6 +1421,32 @@ func (m *metricRedisLatestFork) init() {
 	m.data.SetDescription("Duration of the latest fork operation in microseconds")
 	m.data.SetUnit("us")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataRedisLatestFork struct{}
+
+func (m MetricMetadataRedisLatestFork) GetName() string {
+	return "redis.latest_fork"
+}
+
+func (m MetricMetadataRedisLatestFork) GetDescription() string {
+	return "Duration of the latest fork operation in microseconds"
+}
+
+func (m MetricMetadataRedisLatestFork) GetUnit() string {
+	return "us"
+}
+
+func (m MetricMetadataRedisLatestFork) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisLatestFork) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricRedisLatestFork) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1013,6 +1498,32 @@ func (m *metricRedisMemoryFragmentationRatio) init() {
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 }
 
+type MetricMetadataRedisMemoryFragmentationRatio struct{}
+
+func (m MetricMetadataRedisMemoryFragmentationRatio) GetName() string {
+	return "redis.memory.fragmentation_ratio"
+}
+
+func (m MetricMetadataRedisMemoryFragmentationRatio) GetDescription() string {
+	return "Ratio between used_memory_rss and used_memory"
+}
+
+func (m MetricMetadataRedisMemoryFragmentationRatio) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisMemoryFragmentationRatio) GetValueType() string {
+	return "float64"
+}
+
+func (m MetricMetadataRedisMemoryFragmentationRatio) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Double",
+		},
+	}
+}
+
 func (m *metricRedisMemoryFragmentationRatio) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val float64) {
 	if !m.settings.Enabled {
 		return
@@ -1060,6 +1571,32 @@ func (m *metricRedisMemoryLua) init() {
 	m.data.SetDescription("Number of bytes used by the Lua engine")
 	m.data.SetUnit("By")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataRedisMemoryLua struct{}
+
+func (m MetricMetadataRedisMemoryLua) GetName() string {
+	return "redis.memory.lua"
+}
+
+func (m MetricMetadataRedisMemoryLua) GetDescription() string {
+	return "Number of bytes used by the Lua engine"
+}
+
+func (m MetricMetadataRedisMemoryLua) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataRedisMemoryLua) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisMemoryLua) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricRedisMemoryLua) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1111,6 +1648,32 @@ func (m *metricRedisMemoryPeak) init() {
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 }
 
+type MetricMetadataRedisMemoryPeak struct{}
+
+func (m MetricMetadataRedisMemoryPeak) GetName() string {
+	return "redis.memory.peak"
+}
+
+func (m MetricMetadataRedisMemoryPeak) GetDescription() string {
+	return "Peak memory consumed by Redis (in bytes)"
+}
+
+func (m MetricMetadataRedisMemoryPeak) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataRedisMemoryPeak) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisMemoryPeak) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
+}
+
 func (m *metricRedisMemoryPeak) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -1160,6 +1723,32 @@ func (m *metricRedisMemoryRss) init() {
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 }
 
+type MetricMetadataRedisMemoryRss struct{}
+
+func (m MetricMetadataRedisMemoryRss) GetName() string {
+	return "redis.memory.rss"
+}
+
+func (m MetricMetadataRedisMemoryRss) GetDescription() string {
+	return "Number of bytes that Redis allocated as seen by the operating system"
+}
+
+func (m MetricMetadataRedisMemoryRss) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataRedisMemoryRss) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisMemoryRss) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
+}
+
 func (m *metricRedisMemoryRss) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -1207,6 +1796,32 @@ func (m *metricRedisMemoryUsed) init() {
 	m.data.SetDescription("Total number of bytes allocated by Redis using its allocator")
 	m.data.SetUnit("By")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataRedisMemoryUsed struct{}
+
+func (m MetricMetadataRedisMemoryUsed) GetName() string {
+	return "redis.memory.used"
+}
+
+func (m MetricMetadataRedisMemoryUsed) GetDescription() string {
+	return "Total number of bytes allocated by Redis using its allocator"
+}
+
+func (m MetricMetadataRedisMemoryUsed) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataRedisMemoryUsed) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisMemoryUsed) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricRedisMemoryUsed) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1260,6 +1875,34 @@ func (m *metricRedisNetInput) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRedisNetInput struct{}
+
+func (m MetricMetadataRedisNetInput) GetName() string {
+	return "redis.net.input"
+}
+
+func (m MetricMetadataRedisNetInput) GetDescription() string {
+	return "The total number of bytes read from the network"
+}
+
+func (m MetricMetadataRedisNetInput) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataRedisNetInput) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisNetInput) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRedisNetInput) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -1309,6 +1952,34 @@ func (m *metricRedisNetOutput) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataRedisNetOutput struct{}
+
+func (m MetricMetadataRedisNetOutput) GetName() string {
+	return "redis.net.output"
+}
+
+func (m MetricMetadataRedisNetOutput) GetDescription() string {
+	return "The total number of bytes written to the network"
+}
+
+func (m MetricMetadataRedisNetOutput) GetUnit() string {
+	return "By"
+}
+
+func (m MetricMetadataRedisNetOutput) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisNetOutput) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricRedisNetOutput) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1362,6 +2033,34 @@ func (m *metricRedisRdbChangesSinceLastSave) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRedisRdbChangesSinceLastSave struct{}
+
+func (m MetricMetadataRedisRdbChangesSinceLastSave) GetName() string {
+	return "redis.rdb.changes_since_last_save"
+}
+
+func (m MetricMetadataRedisRdbChangesSinceLastSave) GetDescription() string {
+	return "Number of changes since the last dump"
+}
+
+func (m MetricMetadataRedisRdbChangesSinceLastSave) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisRdbChangesSinceLastSave) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisRdbChangesSinceLastSave) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRedisRdbChangesSinceLastSave) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -1411,6 +2110,32 @@ func (m *metricRedisReplicationBacklogFirstByteOffset) init() {
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
 }
 
+type MetricMetadataRedisReplicationBacklogFirstByteOffset struct{}
+
+func (m MetricMetadataRedisReplicationBacklogFirstByteOffset) GetName() string {
+	return "redis.replication.backlog_first_byte_offset"
+}
+
+func (m MetricMetadataRedisReplicationBacklogFirstByteOffset) GetDescription() string {
+	return "The master offset of the replication backlog buffer"
+}
+
+func (m MetricMetadataRedisReplicationBacklogFirstByteOffset) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisReplicationBacklogFirstByteOffset) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisReplicationBacklogFirstByteOffset) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
+}
+
 func (m *metricRedisReplicationBacklogFirstByteOffset) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -1458,6 +2183,32 @@ func (m *metricRedisReplicationOffset) init() {
 	m.data.SetDescription("The server's current replication offset")
 	m.data.SetUnit("")
 	m.data.SetDataType(pdata.MetricDataTypeGauge)
+}
+
+type MetricMetadataRedisReplicationOffset struct{}
+
+func (m MetricMetadataRedisReplicationOffset) GetName() string {
+	return "redis.replication.offset"
+}
+
+func (m MetricMetadataRedisReplicationOffset) GetDescription() string {
+	return "The server's current replication offset"
+}
+
+func (m MetricMetadataRedisReplicationOffset) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisReplicationOffset) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisReplicationOffset) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Gauge: &Gauge{
+			ValueType: "Int",
+		},
+	}
 }
 
 func (m *metricRedisReplicationOffset) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1511,6 +2262,34 @@ func (m *metricRedisSlavesConnected) init() {
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
 }
 
+type MetricMetadataRedisSlavesConnected struct{}
+
+func (m MetricMetadataRedisSlavesConnected) GetName() string {
+	return "redis.slaves.connected"
+}
+
+func (m MetricMetadataRedisSlavesConnected) GetDescription() string {
+	return "Number of connected replicas"
+}
+
+func (m MetricMetadataRedisSlavesConnected) GetUnit() string {
+	return ""
+}
+
+func (m MetricMetadataRedisSlavesConnected) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisSlavesConnected) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   false,
+			ValueType:   "Int",
+		},
+	}
+}
+
 func (m *metricRedisSlavesConnected) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
 	if !m.settings.Enabled {
 		return
@@ -1560,6 +2339,34 @@ func (m *metricRedisUptime) init() {
 	m.data.SetDataType(pdata.MetricDataTypeSum)
 	m.data.Sum().SetIsMonotonic(true)
 	m.data.Sum().SetAggregationTemporality(pdata.MetricAggregationTemporalityCumulative)
+}
+
+type MetricMetadataRedisUptime struct{}
+
+func (m MetricMetadataRedisUptime) GetName() string {
+	return "redis.uptime"
+}
+
+func (m MetricMetadataRedisUptime) GetDescription() string {
+	return "Number of seconds since Redis server start"
+}
+
+func (m MetricMetadataRedisUptime) GetUnit() string {
+	return "s"
+}
+
+func (m MetricMetadataRedisUptime) GetValueType() string {
+	return "int64"
+}
+
+func (m MetricMetadataRedisUptime) GetMetricType() MetricDataTypeMetadata {
+	return MetricDataTypeMetadata{
+		Sum: &Sum{
+			Aggregation: pdata.MetricAggregationTemporalityCumulative,
+			Monotonic:   true,
+			ValueType:   "Int",
+		},
+	}
 }
 
 func (m *metricRedisUptime) recordDataPoint(start pdata.Timestamp, ts pdata.Timestamp, val int64) {
@@ -1910,6 +2717,187 @@ func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
 	}
 }
 
+func (mb *MetricsBuilder) Record(metricName string, ts pdata.Timestamp, value interface{}, attributes ...string) error {
+	switch metricName {
+
+	case "redis.clients.blocked":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisClientsBlockedDataPoint(ts, intVal)
+	case "redis.clients.connected":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisClientsConnectedDataPoint(ts, intVal)
+	case "redis.clients.max_input_buffer":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisClientsMaxInputBufferDataPoint(ts, intVal)
+	case "redis.clients.max_output_buffer":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisClientsMaxOutputBufferDataPoint(ts, intVal)
+	case "redis.commands":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisCommandsDataPoint(ts, intVal)
+	case "redis.commands.processed":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisCommandsProcessedDataPoint(ts, intVal)
+	case "redis.connections.received":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisConnectionsReceivedDataPoint(ts, intVal)
+	case "redis.connections.rejected":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisConnectionsRejectedDataPoint(ts, intVal)
+	case "redis.cpu.time":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisCPUTimeDataPoint(ts, floatVal, attributes[0])
+	case "redis.db.avg_ttl":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisDbAvgTTLDataPoint(ts, intVal, attributes[0])
+	case "redis.db.expires":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisDbExpiresDataPoint(ts, intVal, attributes[0])
+	case "redis.db.keys":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisDbKeysDataPoint(ts, intVal, attributes[0])
+	case "redis.keys.evicted":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisKeysEvictedDataPoint(ts, intVal)
+	case "redis.keys.expired":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisKeysExpiredDataPoint(ts, intVal)
+	case "redis.keyspace.hits":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisKeyspaceHitsDataPoint(ts, intVal)
+	case "redis.keyspace.misses":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisKeyspaceMissesDataPoint(ts, intVal)
+	case "redis.latest_fork":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisLatestForkDataPoint(ts, intVal)
+	case "redis.memory.fragmentation_ratio":
+		floatVal, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisMemoryFragmentationRatioDataPoint(ts, floatVal)
+	case "redis.memory.lua":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisMemoryLuaDataPoint(ts, intVal)
+	case "redis.memory.peak":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisMemoryPeakDataPoint(ts, intVal)
+	case "redis.memory.rss":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisMemoryRssDataPoint(ts, intVal)
+	case "redis.memory.used":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisMemoryUsedDataPoint(ts, intVal)
+	case "redis.net.input":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisNetInputDataPoint(ts, intVal)
+	case "redis.net.output":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisNetOutputDataPoint(ts, intVal)
+	case "redis.rdb.changes_since_last_save":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisRdbChangesSinceLastSaveDataPoint(ts, intVal)
+	case "redis.replication.backlog_first_byte_offset":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisReplicationBacklogFirstByteOffsetDataPoint(ts, intVal)
+	case "redis.replication.offset":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisReplicationOffsetDataPoint(ts, intVal)
+	case "redis.slaves.connected":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisSlavesConnectedDataPoint(ts, intVal)
+	case "redis.uptime":
+		intVal, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("invalid data point value")
+		}
+		mb.RecordRedisUptimeDataPoint(ts, intVal)
+	}
+	return nil
+}
+
 // Attributes contains the possible metric attributes that can be used.
 var Attributes = struct {
 	// Db (Redis database identifier)
@@ -1919,6 +2907,76 @@ var Attributes = struct {
 }{
 	"db",
 	"state",
+}
+
+var metricsByName = map[string]MetricIntf{
+	"redis.clients.blocked":                       MetricMetadataRedisClientsBlocked{},
+	"redis.clients.connected":                     MetricMetadataRedisClientsConnected{},
+	"redis.clients.max_input_buffer":              MetricMetadataRedisClientsMaxInputBuffer{},
+	"redis.clients.max_output_buffer":             MetricMetadataRedisClientsMaxOutputBuffer{},
+	"redis.commands":                              MetricMetadataRedisCommands{},
+	"redis.commands.processed":                    MetricMetadataRedisCommandsProcessed{},
+	"redis.connections.received":                  MetricMetadataRedisConnectionsReceived{},
+	"redis.connections.rejected":                  MetricMetadataRedisConnectionsRejected{},
+	"redis.cpu.time":                              MetricMetadataRedisCPUTime{},
+	"redis.db.avg_ttl":                            MetricMetadataRedisDbAvgTTL{},
+	"redis.db.expires":                            MetricMetadataRedisDbExpires{},
+	"redis.db.keys":                               MetricMetadataRedisDbKeys{},
+	"redis.keys.evicted":                          MetricMetadataRedisKeysEvicted{},
+	"redis.keys.expired":                          MetricMetadataRedisKeysExpired{},
+	"redis.keyspace.hits":                         MetricMetadataRedisKeyspaceHits{},
+	"redis.keyspace.misses":                       MetricMetadataRedisKeyspaceMisses{},
+	"redis.latest_fork":                           MetricMetadataRedisLatestFork{},
+	"redis.memory.fragmentation_ratio":            MetricMetadataRedisMemoryFragmentationRatio{},
+	"redis.memory.lua":                            MetricMetadataRedisMemoryLua{},
+	"redis.memory.peak":                           MetricMetadataRedisMemoryPeak{},
+	"redis.memory.rss":                            MetricMetadataRedisMemoryRss{},
+	"redis.memory.used":                           MetricMetadataRedisMemoryUsed{},
+	"redis.net.input":                             MetricMetadataRedisNetInput{},
+	"redis.net.output":                            MetricMetadataRedisNetOutput{},
+	"redis.rdb.changes_since_last_save":           MetricMetadataRedisRdbChangesSinceLastSave{},
+	"redis.replication.backlog_first_byte_offset": MetricMetadataRedisReplicationBacklogFirstByteOffset{},
+	"redis.replication.offset":                    MetricMetadataRedisReplicationOffset{},
+	"redis.slaves.connected":                      MetricMetadataRedisSlavesConnected{},
+	"redis.uptime":                                MetricMetadataRedisUptime{},
+}
+
+func EnabledMetrics(settings MetricsSettings) map[string]bool {
+	return map[string]bool{
+		"redis.clients.blocked":                       settings.RedisClientsBlocked.Enabled,
+		"redis.clients.connected":                     settings.RedisClientsConnected.Enabled,
+		"redis.clients.max_input_buffer":              settings.RedisClientsMaxInputBuffer.Enabled,
+		"redis.clients.max_output_buffer":             settings.RedisClientsMaxOutputBuffer.Enabled,
+		"redis.commands":                              settings.RedisCommands.Enabled,
+		"redis.commands.processed":                    settings.RedisCommandsProcessed.Enabled,
+		"redis.connections.received":                  settings.RedisConnectionsReceived.Enabled,
+		"redis.connections.rejected":                  settings.RedisConnectionsRejected.Enabled,
+		"redis.cpu.time":                              settings.RedisCPUTime.Enabled,
+		"redis.db.avg_ttl":                            settings.RedisDbAvgTTL.Enabled,
+		"redis.db.expires":                            settings.RedisDbExpires.Enabled,
+		"redis.db.keys":                               settings.RedisDbKeys.Enabled,
+		"redis.keys.evicted":                          settings.RedisKeysEvicted.Enabled,
+		"redis.keys.expired":                          settings.RedisKeysExpired.Enabled,
+		"redis.keyspace.hits":                         settings.RedisKeyspaceHits.Enabled,
+		"redis.keyspace.misses":                       settings.RedisKeyspaceMisses.Enabled,
+		"redis.latest_fork":                           settings.RedisLatestFork.Enabled,
+		"redis.memory.fragmentation_ratio":            settings.RedisMemoryFragmentationRatio.Enabled,
+		"redis.memory.lua":                            settings.RedisMemoryLua.Enabled,
+		"redis.memory.peak":                           settings.RedisMemoryPeak.Enabled,
+		"redis.memory.rss":                            settings.RedisMemoryRss.Enabled,
+		"redis.memory.used":                           settings.RedisMemoryUsed.Enabled,
+		"redis.net.input":                             settings.RedisNetInput.Enabled,
+		"redis.net.output":                            settings.RedisNetOutput.Enabled,
+		"redis.rdb.changes_since_last_save":           settings.RedisRdbChangesSinceLastSave.Enabled,
+		"redis.replication.backlog_first_byte_offset": settings.RedisReplicationBacklogFirstByteOffset.Enabled,
+		"redis.replication.offset":                    settings.RedisReplicationOffset.Enabled,
+		"redis.slaves.connected":                      settings.RedisSlavesConnected.Enabled,
+		"redis.uptime":                                settings.RedisUptime.Enabled,
+	}
+}
+
+func ByName(n string) MetricIntf {
+	return metricsByName[n]
 }
 
 // A is an alias for Attributes.
