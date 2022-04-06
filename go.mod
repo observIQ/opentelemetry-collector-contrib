@@ -121,6 +121,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplogreceiver v0.48.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver v0.48.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver v0.48.0
+	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowslogreceiver v0.48.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsperfcountersreceiver v0.48.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver v0.48.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zookeeperreceiver v0.48.0
@@ -787,6 +788,8 @@ replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplo
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver => ./receiver/udplogreceiver
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver => ./receiver/wavefrontreceiver
+
+replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowslogreceiver => ./receiver/windowslogreceiver
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsperfcountersreceiver => ./receiver/windowsperfcountersreceiver
 
