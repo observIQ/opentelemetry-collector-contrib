@@ -2,11 +2,11 @@ name: sqlserverreceiver
 
 attributes:
   page.operations:
-    value: kind
+    value: type
     description: The page operation types.
     enum: [read, write]
   transaction.databases:
-    value: status
+    value: database
     description: The database that the metric applies to.
 
 metrics:

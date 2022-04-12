@@ -40,7 +40,7 @@ metrics:
 
 ## Metric attributes
 
-| Name | Description |
-| ---- | ----------- |
-| page.operations | The page operation types. |
-| transaction.databases | The database that the metric applies to. |
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| page.operations (type) | The page operation types. | read, write |
+| transaction.databases (database) | The database that the metric applies to. |  |

@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/receiver/scraperhelper"
 )
 
 var errConfigNotSqlServer = errors.New("config was not a sqlserver receiver config")
@@ -32,13 +33,23 @@ var errConfigNotSqlServer = errors.New("config was not a sqlserver receiver conf
 func createMetricsReceiver(
 	_ context.Context,
 	params component.ReceiverCreateSettings,
-	cfg config.Receiver,
-	nextConsumer consumer.Metrics,
+	receiverCfg config.Receiver,
+	metricsConsumer consumer.Metrics,
 ) (component.MetricsReceiver, error) {
-	rCfg, ok := cfg.(*Config)
+	cfg, ok := receiverCfg.(*Config)
 	if !ok {
 		return nil, errConfigNotSqlServer
 	}
+	sqlServerScraper := newSqlServerScraper(params.Logger, cfg)
 
-	return newSqlServerReceiver(params, rCfg, nextConsumer), nil
+	scraper, err := scraperhelper.NewScraper(typeStr, sqlServerScraper.scrape,
+		scraperhelper.WithStart(sqlServerScraper.start),
+		scraperhelper.WithShutdown(sqlServerScraper.shutdown))
+	if err != nil {
+		return nil, err
+	}
+
+	return scraperhelper.NewScraperControllerReceiver(
+		&cfg.ScraperControllerSettings, params, metricsConsumer, scraperhelper.AddScraper(scraper),
+	)
 }
