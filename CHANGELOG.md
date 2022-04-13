@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### 💡 Enhancements 💡
+- `windowslogreceiver` Added implementation of Windows Event Log Receiver (#9228)
 - `riakreceiver`: Added implementation of Riak Metric Receiver (#8548)
 - `splunkhecexporter`: Add support for batching traces (#8995)
 - `hostmetricsreceiver`: Migrate Processes scraper to the Metrics builder (#8855)

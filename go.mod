@@ -128,7 +128,7 @@ require (
 	github.com/prometheus/prometheus v1.8.2-0.20220324155304-4d8bbfd4164c
 	github.com/stretchr/testify v1.7.1
 	go.opentelemetry.io/collector v0.48.0
-	golang.org/x/sys v0.0.0-20220328115105-d36c6a25d886
+	golang.org/x/sys v0.0.0-20220406163625-3f8b81556e12
 )
 
 require (
@@ -282,9 +282,9 @@ require (
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/influxdata/go-syslog/v3 v3.0.1-0.20210608084020-ac565dc76ba6 // indirect
-	github.com/influxdata/influxdb-observability/common v0.2.16 // indirect
-	github.com/influxdata/influxdb-observability/influx2otel v0.2.16 // indirect
-	github.com/influxdata/influxdb-observability/otel2influx v0.2.16 // indirect
+	github.com/influxdata/influxdb-observability/common v0.2.17 // indirect
+	github.com/influxdata/influxdb-observability/influx2otel v0.2.17 // indirect
+	github.com/influxdata/influxdb-observability/otel2influx v0.2.17 // indirect
 	github.com/influxdata/line-protocol/v2 v2.2.1 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.11.0 // indirect
