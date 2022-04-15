@@ -29,8 +29,8 @@ require (
 )
 
 require (
-     go.opentelemetry.io/collector/pdata v0.49.0 // indirect
-     go.uber.org/zap v1.21.0 // indirect
+	go.opentelemetry.io/collector/pdata v0.49.0 // indirect
+	go.uber.org/zap v1.21.0 // indirect
 )
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/winperfcounters => ../../pkg/winperfcounters
