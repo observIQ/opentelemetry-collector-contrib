@@ -9,7 +9,7 @@
 ### 🚩 Deprecations 🚩
 
 ### 🚀 New components 🚀
-- `windowslogreceiver` Added implementation of Windows Event Log Receiver (#9228)
+- `windowseventlogreceiver` Added implementation of Windows Event Log Receiver (#9228)
 - `iisreceiver`: Add implementation of IIS Metric Receiver (#8832)
 ### 💡 Enhancements 💡
 

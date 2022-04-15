@@ -331,7 +331,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/fluentforwardreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/googlecloudspannerreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver v0.49.0 // indirect
-	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/iisreceiver v0.0.0-00010101000000-000000000000 // indirect
+	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/iisreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/influxdbreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver v0.49.0 // indirect
@@ -362,7 +362,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplogreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver v0.49.0 // indirect
-	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowslogreceiver v0.49.0 // indirect
+	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowseventlogreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsperfcountersreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver v0.49.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zookeeperreceiver v0.49.0 // indirect
@@ -786,7 +786,7 @@ replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplo
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver => ../../receiver/wavefrontreceiver
 
-replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowslogreceiver => ../../receiver/windowslogreceiver
+replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowseventlogreceiver => ../../receiver/windowseventlogreceiver
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsperfcountersreceiver => ../../receiver/windowsperfcountersreceiver
 

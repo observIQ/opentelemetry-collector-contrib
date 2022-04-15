@@ -90,7 +90,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/fluentforwardreceiver v0.49.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/googlecloudspannerreceiver v0.49.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver v0.49.0
-	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/iisreceiver v0.49.0
+	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/iisreceiver v0.0.0-00010101000000-000000000000
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/influxdbreceiver v0.49.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver v0.49.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver v0.49.0
