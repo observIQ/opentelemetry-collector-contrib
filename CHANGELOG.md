@@ -15,8 +15,11 @@
 - `windowseventlogreceiver` Added implementation of Windows Event Log Receiver (#9228)
 
 ### 💡 Enhancements 💡
+- `pkg/translator/prometheusremotewrite`: Allow to disable sanitize metric labels (#8270)
 
 ### 🧰 Bug fixes 🧰
+
+- `fluentforwardreceiver`: Release port on shutdown (#9111)
 
 ## v0.49.0
 
