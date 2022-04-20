@@ -51,7 +51,7 @@ type mockCounterCreater struct{
 func (m mockCounterCreater) Create(counterName string) (winperfcounters.PerfCounterWatcher, error) {
 	for _, availableCounter := range m.availableCounterNames {
 		if counterName == availableCounter {
-			watcher := mockPerfCounterWatcher{
+			watcher := &mockPerfCounterWatcher{
 				val: float64(m.created),
 			}
 
