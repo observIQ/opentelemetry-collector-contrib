@@ -26,7 +26,7 @@ func TestGetWatchers(t *testing.T) {
 }
 
 func getAvailableCounters(t *testing.T) []string {	
-	prefix := fmt.Sprintf(`\%s\(*)\`, object)
+	prefix := fmt.Sprintf(`\%s(*)\`, object)
 
 	f, err := ioutil.ReadFile(filepath.Join("testdata", "counters.txt"))
 	require.NoError(t, err)
