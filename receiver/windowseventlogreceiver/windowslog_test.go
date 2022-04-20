@@ -20,6 +20,7 @@ package windowseventlogreceiver
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -31,7 +32,6 @@ import (
 	"go.opentelemetry.io/collector/config/configtest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/service/servicetest"
-	"golang.org/x/sys/windows/svc/eventlog"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/stanza"
 )
@@ -84,7 +84,6 @@ func TestReadWindowsEventLogger(t *testing.T) {
 	createSettings := componenttest.NewNopReceiverCreateSettings()
 	cfg := createTestConfig()
 	sink := new(consumertest.LogsSink)
-
 	receiver, err := factory.CreateLogsReceiver(ctx, createSettings, cfg, sink)
 	require.NoError(t, err)
 
@@ -92,16 +91,7 @@ func TestReadWindowsEventLogger(t *testing.T) {
 	require.NoError(t, err)
 	defer receiver.Shutdown(ctx)
 
-	src := "otel"
-	err = eventlog.InstallAsEventCreate(src, eventlog.Info|eventlog.Warning|eventlog.Error)
-	require.NoError(t, err)
-	defer eventlog.Remove(src)
-
-	logger, err := eventlog.Open(src)
-	require.NoError(t, err)
-	defer logger.Close()
-
-	err = logger.Info(10, "Test log")
+	err = exec.Command("eventcreate", "/t", "ERROR", "/id", "10", "/l", "application", "/d", "Test log").Run()
 	require.NoError(t, err)
 
 	logsReceived := func() bool {
