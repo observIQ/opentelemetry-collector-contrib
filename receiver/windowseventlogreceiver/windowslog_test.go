@@ -19,6 +19,7 @@ package windowseventlogreceiver
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
