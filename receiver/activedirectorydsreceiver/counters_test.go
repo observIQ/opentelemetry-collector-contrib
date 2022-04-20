@@ -16,7 +16,7 @@ import (
 )
 
 func TestGetWatchers(t *testing.T) {
-	creater := mockCounterCreater{
+	creater := &mockCounterCreater{
 		availableCounterNames: getAvailableCounters(t),
 	}
 
@@ -48,7 +48,7 @@ type mockCounterCreater struct{
 	availableCounterNames []string
 }
 
-func (m mockCounterCreater) Create(counterName string) (winperfcounters.PerfCounterWatcher, error) {
+func (m *mockCounterCreater) Create(counterName string) (winperfcounters.PerfCounterWatcher, error) {
 	for _, availableCounter := range m.availableCounterNames {
 		if counterName == availableCounter {
 			watcher := &mockPerfCounterWatcher{

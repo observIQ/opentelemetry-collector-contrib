@@ -39,7 +39,7 @@ func TestScrape(t *testing.T) {
 	t.Run("Fully successful scrape", func(t *testing.T) {
 		t.Parallel()
 
-		mockWatchers, err := getWatchers(mockCounterCreater{
+		mockWatchers, err := getWatchers(&mockCounterCreater{
 			availableCounterNames: getAvailableCounters(t),
 		})
 		require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestScrape(t *testing.T) {
 		fullSyncObjectsRemainingErr := errors.New("failed to scrape sync objects remaining")
 		draInboundValuesDNErr := errors.New("failed to scrape sync inbound value DNs")
 
-		mockWatchers, err := getWatchers(mockCounterCreater{
+		mockWatchers, err := getWatchers(&mockCounterCreater{
 			availableCounterNames: getAvailableCounters(t),
 		})
 		require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestScrape(t *testing.T) {
 		fullSyncObjectsRemainingErr := errors.New("failed to close sync objects remaining")
 		draInboundValuesDNErr := errors.New("failed to close sync inbound value DNs")
 
-		mockWatchers, err := getWatchers(mockCounterCreater{
+		mockWatchers, err := getWatchers(&mockCounterCreater{
 			availableCounterNames: getAvailableCounters(t),
 		})
 		require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestScrape(t *testing.T) {
 	t.Run("Double shutdown does not error", func(t *testing.T) {
 		t.Parallel()
 
-		mockWatchers, err := getWatchers(mockCounterCreater{
+		mockWatchers, err := getWatchers(&mockCounterCreater{
 			availableCounterNames: getAvailableCounters(t),
 		})
 		require.NoError(t, err)
