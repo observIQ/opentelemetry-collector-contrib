@@ -17,9 +17,14 @@
 
 package activedirectorydsreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/activedirectorydsreceiver"
 
-import "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/winperfcounters"
+import (
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/winperfcounters"
+	"go.uber.org/multierr"
+)
 
 type watchers struct {
+	closed bool
+
 	DRAInboundBytesCompressed              winperfcounters.PerfCounterWatcher
 	DRAInboundBytesNotCompressed           winperfcounters.PerfCounterWatcher
 	DRAOutboundBytesCompressed             winperfcounters.PerfCounterWatcher
@@ -52,6 +57,49 @@ type watchers struct {
 	LDAPBindTime                           winperfcounters.PerfCounterWatcher
 	LDAPSuccessfulBinds                    winperfcounters.PerfCounterWatcher
 	LDAPSearches                           winperfcounters.PerfCounterWatcher
+}
+
+func (w *watchers) Close() error {
+	if w.closed {
+		return nil
+	}
+
+	var err error
+	
+	err = multierr.Append(err, w.DRAInboundBytesCompressed.Close())
+	err = multierr.Append(err, w.DRAInboundBytesNotCompressed.Close())
+	err = multierr.Append(err, w.DRAOutboundBytesCompressed.Close())
+	err = multierr.Append(err, w.DRAOutboundBytesNotCompressed.Close())
+	err = multierr.Append(err, w.DRAInboundFullSyncObjectsRemaining.Close())
+	err = multierr.Append(err, w.DRAInboundObjects.Close())
+	err = multierr.Append(err, w.DRAOutboundObjects.Close())
+	err = multierr.Append(err, w.DRAInboundProperties.Close())
+	err = multierr.Append(err, w.DRAOutboundProperties.Close())
+	err = multierr.Append(err, w.DRAInboundValuesDNs.Close())
+	err = multierr.Append(err, w.DRAInboundValuesTotal.Close())
+	err = multierr.Append(err, w.DRAOutboundValuesDNs.Close())
+	err = multierr.Append(err, w.DRAOutboundValuesTotal.Close())
+	err = multierr.Append(err, w.DRAPendingReplicationOperations.Close())
+	err = multierr.Append(err, w.DRASyncFailuresSchemaMismatch.Close())
+	err = multierr.Append(err, w.DRASyncRequestsSuccessful.Close())
+	err = multierr.Append(err, w.DRASyncRequestsMade.Close())
+	err = multierr.Append(err, w.DSDirectoryReads.Close())
+	err = multierr.Append(err, w.DSDirectoryWrites.Close())
+	err = multierr.Append(err, w.DSDirectorySearches.Close())
+	err = multierr.Append(err, w.DSClientBinds.Close())
+	err = multierr.Append(err, w.DSServerBinds.Close())
+	err = multierr.Append(err, w.DSNameCacheHitRate.Close())
+	err = multierr.Append(err, w.DSNotifyQueueSize.Close())
+	err = multierr.Append(err, w.DSSecurityDescriptorPropagationsEvents.Close())
+	err = multierr.Append(err, w.DSSearchSubOperations.Close())
+	err = multierr.Append(err, w.DSSecurityDescripterSubOperations.Close())
+	err = multierr.Append(err, w.DSThreadsInUse.Close())
+	err = multierr.Append(err, w.LDAPClientSessions.Close())
+	err = multierr.Append(err, w.LDAPBindTime.Close())
+	err = multierr.Append(err, w.LDAPSuccessfulBinds.Close())
+	err = multierr.Append(err, w.LDAPSearches.Close())
+
+	return err
 }
 
 func getWatchers(wc watcherCreater) (*watchers, error) {

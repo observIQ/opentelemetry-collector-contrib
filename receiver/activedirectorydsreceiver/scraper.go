@@ -262,45 +262,5 @@ func (a *activeDirectoryDSScraper) scrape(ctx context.Context) (pdata.Metrics, e
 }
 
 func (a *activeDirectoryDSScraper) shutdown(ctx context.Context) error {
-	if a.w != nil {
-		var err error
-
-		err = multierr.Append(err, a.w.DRAInboundBytesCompressed.Close())
-		err = multierr.Append(err, a.w.DRAInboundBytesNotCompressed.Close())
-		err = multierr.Append(err, a.w.DRAOutboundBytesCompressed.Close())
-		err = multierr.Append(err, a.w.DRAOutboundBytesNotCompressed.Close())
-		err = multierr.Append(err, a.w.DRAInboundFullSyncObjectsRemaining.Close())
-		err = multierr.Append(err, a.w.DRAInboundObjects.Close())
-		err = multierr.Append(err, a.w.DRAOutboundObjects.Close())
-		err = multierr.Append(err, a.w.DRAInboundProperties.Close())
-		err = multierr.Append(err, a.w.DRAOutboundProperties.Close())
-		err = multierr.Append(err, a.w.DRAInboundValuesDNs.Close())
-		err = multierr.Append(err, a.w.DRAInboundValuesTotal.Close())
-		err = multierr.Append(err, a.w.DRAOutboundValuesDNs.Close())
-		err = multierr.Append(err, a.w.DRAOutboundValuesTotal.Close())
-		err = multierr.Append(err, a.w.DRAPendingReplicationOperations.Close())
-		err = multierr.Append(err, a.w.DRASyncFailuresSchemaMismatch.Close())
-		err = multierr.Append(err, a.w.DRASyncRequestsSuccessful.Close())
-		err = multierr.Append(err, a.w.DRASyncRequestsMade.Close())
-		err = multierr.Append(err, a.w.DSDirectoryReads.Close())
-		err = multierr.Append(err, a.w.DSDirectoryWrites.Close())
-		err = multierr.Append(err, a.w.DSDirectorySearches.Close())
-		err = multierr.Append(err, a.w.DSClientBinds.Close())
-		err = multierr.Append(err, a.w.DSServerBinds.Close())
-		err = multierr.Append(err, a.w.DSNameCacheHitRate.Close())
-		err = multierr.Append(err, a.w.DSNotifyQueueSize.Close())
-		err = multierr.Append(err, a.w.DSSecurityDescriptorPropagationsEvents.Close())
-		err = multierr.Append(err, a.w.DSSearchSubOperations.Close())
-		err = multierr.Append(err, a.w.DSSecurityDescripterSubOperations.Close())
-		err = multierr.Append(err, a.w.DSThreadsInUse.Close())
-		err = multierr.Append(err, a.w.LDAPClientSessions.Close())
-		err = multierr.Append(err, a.w.LDAPBindTime.Close())
-		err = multierr.Append(err, a.w.LDAPSuccessfulBinds.Close())
-		err = multierr.Append(err, a.w.LDAPSearches.Close())
-
-		a.w = nil
-		return err
-	}
-
-	return nil
+	return a.w.Close()
 }
