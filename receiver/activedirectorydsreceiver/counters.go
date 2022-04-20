@@ -62,7 +62,7 @@ const (
 type watchers struct {
 	closed bool
 
-	counterNameToWatcher map[string] winperfcounters.PerfCounterWatcher
+	counterNameToWatcher map[string]winperfcounters.PerfCounterWatcher
 }
 
 func (w *watchers) Scrape(name string) (float64, error) {
@@ -95,7 +95,9 @@ func (w *watchers) Close() error {
 func getWatchers(wc watcherCreater) (*watchers, error) {
 	var err error
 
-	w := &watchers{}
+	w := &watchers{
+		counterNameToWatcher: make(map[string]winperfcounters.PerfCounterWatcher),
+	}
 
 	if w.counterNameToWatcher[draInboundBytesCompressed], err = wc.Create(draInboundBytesCompressed); err != nil {
 		return nil, err
