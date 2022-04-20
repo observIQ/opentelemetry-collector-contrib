@@ -111,6 +111,11 @@ func TestReadWindowsEventLogger(t *testing.T) {
 	results := sink.AllLogs()
 	require.Len(t, results, 1)
 
+	fmt.Println(sink.LogRecordCount())
+	for _, i := range results {
+		fmt.Println(i.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Body().MapVal().AsRaw())
+	}
+
 	records := results[0].ResourceLogs().At(0).ScopeLogs().At(0).LogRecords()
 	require.Equal(t, records.Len(), 1)
 
