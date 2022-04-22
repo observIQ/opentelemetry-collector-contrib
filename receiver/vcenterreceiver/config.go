@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/collector/receiver/scraperhelper"
 	"go.uber.org/multierr"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/syslogreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver/internal/metadata"
 )
 
@@ -31,6 +32,7 @@ import (
 type Config struct {
 	config.ReceiverSettings `mapstructure:",squash"`
 	MetricsConfig           *MetricsConfig `mapstructure:"metrics,omitempty"`
+	LoggingConfig           *LoggingConfig `mapstructure:"logs,omitempty"`
 }
 
 // MetricsConfig is the metrics configuration of the receiver
@@ -43,12 +45,22 @@ type MetricsConfig struct {
 	Password                                string                   `mapstructure:"password"`
 }
 
-// Validate checks to see if the supplied config will work for the receiver
+// LoggingConfig is the configuration of the wrapped syslogreceiver
+type LoggingConfig struct {
+	*syslogreceiver.SysLogConfig `mapstructure:",squash"`
+}
+
+// Validate checks to see if the supplied config will work for the vmwarevcenterreceiver
 func (c *Config) Validate() error {
 	var err error
 	metricsErr := c.validateMetricsConfig()
 	if metricsErr != nil {
 		err = multierr.Append(err, metricsErr)
+	}
+
+	logsErr := c.validateLoggingConfig()
+	if logsErr != nil {
+		err = multierr.Append(err, logsErr)
 	}
 
 	return err
@@ -62,12 +74,8 @@ func (c *Config) ID() config.ComponentID {
 
 func (c *Config) validateMetricsConfig() error {
 	mc := c.MetricsConfig
-	if mc == nil {
+	if mc == nil || mc.Endpoint == "" {
 		return nil
-	}
-
-	if mc.Endpoint == "" {
-		return errors.New("no endpoint was provided")
 	}
 
 	var err error
@@ -91,6 +99,24 @@ func (c *Config) validateMetricsConfig() error {
 
 	if _, tlsErr := mc.LoadTLSConfig(); err != nil {
 		err = multierr.Append(err, fmt.Errorf("error loading tls configuration: %w", tlsErr))
+	}
+
+	return err
+}
+
+func (c *Config) validateLoggingConfig() error {
+	lc := c.LoggingConfig
+	if lc == nil {
+		return nil
+	}
+
+	var err error
+	if len(lc.Operators) != 0 {
+		err = multierr.Append(err, errors.New("this receiver does not support custom logging operators"))
+	}
+
+	if syslogValidateErr := lc.SysLogConfig.Validate(); syslogValidateErr != nil {
+		err = multierr.Append(err, syslogValidateErr)
 	}
 
 	return err

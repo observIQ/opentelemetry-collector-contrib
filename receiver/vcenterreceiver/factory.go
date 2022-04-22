@@ -118,3 +118,18 @@ func (f *vcenterReceiverFactory) createMetricsReceiver(
 	r.scraper = rcvr
 	return r, nil
 }
+
+func (f *vcenterReceiverFactory) createLogsReceiver(
+	c context.Context,
+	params component.ReceiverCreateSettings,
+	rConf config.Receiver,
+	consumer consumer.Logs,
+) (component.LogsReceiver, error) {
+	cfg, ok := rConf.(*Config)
+	if !ok {
+		return nil, errConfigNotVcenter
+	}
+	rcvr := f.ensureReceiver(params, cfg)
+	rcvr.logsReceiver = newLogsReceiver(cfg, params, consumer)
+	return rcvr, nil
+}

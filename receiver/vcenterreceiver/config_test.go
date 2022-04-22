@@ -35,15 +35,6 @@ func TestConfigValidation(t *testing.T) {
 			},
 		},
 		{
-			desc: "empty endpoint",
-			cfg: Config{
-				MetricsConfig: &MetricsConfig{
-					Endpoint: "",
-				},
-			},
-			expectedErr: errors.New("no endpoint was provided"),
-		},
-		{
 			desc: "with endpoint",
 			cfg: Config{
 				MetricsConfig: &MetricsConfig{

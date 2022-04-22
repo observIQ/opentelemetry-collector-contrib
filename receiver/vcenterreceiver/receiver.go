@@ -26,9 +26,10 @@ import (
 var _ component.Receiver = (*vcenterReceiver)(nil)
 
 type vcenterReceiver struct {
-	config  *Config
-	logger  *zap.Logger
-	scraper component.Receiver
+	config       *Config
+	logger       *zap.Logger
+	scraper      component.Receiver
+	logsReceiver component.Receiver
 }
 
 func (v *vcenterReceiver) Start(ctx context.Context, host component.Host) error {
@@ -41,6 +42,14 @@ func (v *vcenterReceiver) Start(ctx context.Context, host component.Host) error 
 			v.logger.Error(fmt.Sprintf("unable to initially connect to vSphere SDK: %s", scraperErr.Error()))
 		}
 	}
+
+	if v.logsReceiver != nil {
+		// if syslogreceiver is not bundled and logging is in the pipeline for vcenter, we probably want to not start the collector
+		if startErr := v.logsReceiver.Start(ctx, host); startErr != nil {
+			err = multierr.Append(err, startErr)
+		}
+	}
+
 	return err
 }
 
@@ -50,6 +59,12 @@ func (v *vcenterReceiver) Shutdown(ctx context.Context) error {
 		scraperErr := v.scraper.Shutdown(ctx)
 		if scraperErr != nil {
 			err = multierr.Append(err, scraperErr)
+		}
+	}
+
+	if v.logsReceiver != nil {
+		if logsErr := v.logsReceiver.Shutdown(ctx); logsErr != nil {
+			err = multierr.Append(err, logsErr)
 		}
 	}
 	return err

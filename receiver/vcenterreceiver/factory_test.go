@@ -79,3 +79,45 @@ func TestCreateMetricsReceiver(t *testing.T) {
 		t.Run(testCase.desc, testCase.testFn)
 	}
 }
+
+func TestCreateLogsReceiver(t *testing.T) {
+	f := vcenterReceiverFactory{
+		receivers:    make(map[*Config]*vcenterReceiver),
+		receiverLock: &sync.RWMutex{},
+	}
+	testCases := []struct {
+		desc   string
+		testFn func(t *testing.T)
+	}{
+		{
+			desc: "Default config",
+			testFn: func(t *testing.T) {
+				t.Parallel()
+				_, err := f.createLogsReceiver(
+					context.Background(),
+					componenttest.NewNopReceiverCreateSettings(),
+					createDefaultConfig(),
+					consumertest.NewNop(),
+				)
+
+				require.NoError(t, err)
+			},
+		},
+		{
+			desc: "Nil config",
+			testFn: func(t *testing.T) {
+				t.Parallel()
+				_, err := f.createLogsReceiver(
+					context.Background(),
+					componenttest.NewNopReceiverCreateSettings(),
+					nil,
+					consumertest.NewNop(),
+				)
+				require.ErrorIs(t, err, errConfigNotVcenter)
+			},
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.desc, testCase.testFn)
+	}
+}
