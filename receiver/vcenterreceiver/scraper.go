@@ -17,10 +17,12 @@ package vcenterreceiver // import "github.com/open-telemetry/opentelemetry-colle
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/vim25/mo"
+	"github.com/vmware/govmomi/vsan/types"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/receiver/scrapererror"
@@ -87,7 +89,7 @@ func (v *vcenterMetricScraper) collectClusters(ctx context.Context) error {
 		v.collectHosts(ctx, now, c, errs)
 		v.collectDatastores(ctx, now, c, errs)
 		v.collectVMs(ctx, now, c, errs)
-		v.collectCluster(ctx, now, c)
+		v.collectCluster(ctx, now, c, errs)
 	}
 	v.collectResourcePools(ctx, now, errs)
 
@@ -98,6 +100,7 @@ func (v *vcenterMetricScraper) collectCluster(
 	ctx context.Context,
 	now pdata.Timestamp,
 	c *object.ClusterComputeResource,
+	errs *scrapererror.ScrapeErrors,
 ) {
 	var moCluster mo.ClusterComputeResource
 	c.Properties(ctx, c.Reference(), []string{"summary"}, &moCluster)
@@ -105,6 +108,14 @@ func (v *vcenterMetricScraper) collectCluster(
 	v.mb.RecordVcenterClusterCPULimitDataPoint(now, int64(s.TotalCpu))
 	v.mb.RecordVcenterClusterHostCountDataPoint(now, int64(s.NumHosts-s.NumEffectiveHosts), "false")
 	v.mb.RecordVcenterClusterHostCountDataPoint(now, int64(s.NumEffectiveHosts), "true")
+
+	mor := c.Reference()
+	csvs, err := v.client.VSANCluster(ctx, &mor, time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		errs.AddPartial(1, err)
+	}
+	v.addVSANMetrics(csvs, "*", clusterType, errs)
+
 	v.mb.EmitForResource(
 		metadata.WithVcenterClusterName(c.Name()),
 	)
@@ -270,4 +281,54 @@ func (v *vcenterMetricScraper) collectVM(
 ) {
 	v.recordVMUsages(colTime, vm)
 	v.recordVMPerformance(ctx, vm, errs)
+}
+
+type vsanType int
+
+const (
+	clusterType vsanType = iota
+	hostType
+	vmType
+)
+
+// example 2022-03-10 14:15:00
+const timeFormat = "2006-01-02 15:04:05"
+
+func (v *vcenterMetricScraper) addVSANMetrics(
+	csvs []types.VsanPerfEntityMetricCSV,
+	entityID string,
+	vsanType vsanType,
+	errs *scrapererror.ScrapeErrors,
+) {
+	for _, r := range csvs {
+		// can't correlate this point to a timestamp so just skip it
+		if r.SampleInfo == "" {
+			continue
+		}
+		// If not this entity ID, then skip it
+		if vsanType != clusterType && r.EntityRefId != entityID {
+			continue
+		}
+
+		time, err := time.Parse(timeFormat, r.SampleInfo)
+		if err != nil {
+			errs.AddPartial(1, err)
+			continue
+		}
+
+		ts := pdata.NewTimestampFromTime(time)
+		for _, val := range r.Value {
+			values := strings.Split(val.Values, ",")
+			for _, value := range values {
+				switch vsanType {
+				case clusterType:
+					v.recordClusterVsanMetric(ts, val.MetricId.Label, value, errs)
+				case hostType:
+					v.recordHostVsanMetric(ts, val.MetricId.Label, value, errs)
+				case vmType:
+					v.recordVMVsanMetric(ts, val.MetricId.Label, value, errs)
+				}
+			}
+		}
+	}
 }
