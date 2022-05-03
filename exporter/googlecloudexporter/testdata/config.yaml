@@ -27,7 +27,12 @@ exporters:
     trace:
       endpoint: test-trace-endpoint
       use_insecure: true
-
+    log:
+      endpoint: test-log-endpoint
+      use_insecure: false
+      name_fields: 
+        - "name1"
+        - "parent.name2"
 
 service:
   pipelines:

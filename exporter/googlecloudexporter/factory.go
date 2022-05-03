@@ -47,6 +47,7 @@ func NewFactory() component.ExporterFactory {
 		createDefaultConfig,
 		component.WithTracesExporter(createTracesExporter),
 		component.WithMetricsExporter(createMetricsExporter),
+		component.WithLogsExporter(createLogsExporter),
 	)
 }
 
@@ -121,4 +122,18 @@ func createMetricsExporter(
 		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}),
 		exporterhelper.WithQueue(eCfg.QueueSettings),
 		exporterhelper.WithRetry(eCfg.RetrySettings))
+}
+
+// createLogsExporter creates a logs exporter based on this config.
+func createLogsExporter(
+	_ context.Context,
+	params component.ExporterCreateSettings,
+	cfg config.Exporter) (component.LogsExporter, error) {
+	var eCfg *Config
+	if !featuregate.GetRegistry().IsEnabled(pdataExporterFeatureGate) {
+		eCfg = toNewConfig(cfg.(*LegacyConfig))
+	} else {
+		eCfg = cfg.(*Config)
+	}
+	return newGoogleCloudLogsExporter(eCfg, params)
 }

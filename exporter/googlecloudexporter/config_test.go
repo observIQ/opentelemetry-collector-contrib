@@ -85,6 +85,11 @@ func TestLoadConfig(t *testing.T) {
 					},
 				},
 			},
+			LogConfig: LogConfig{
+				Endpoint:    "test-log-endpoint",
+				UseInsecure: false,
+				NameFields:  []string{"name1", "parent.name2"},
+			},
 			RetrySettings: exporterhelper.RetrySettings{
 				Enabled:         true,
 				InitialInterval: 10 * time.Second,

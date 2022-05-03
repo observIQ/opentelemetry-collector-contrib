@@ -20,6 +20,7 @@ import (
 	"github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/collector"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"google.golang.org/api/option"
 )
 
 // Config defines configuration for Google Cloud exporter.
@@ -31,6 +32,21 @@ type Config struct {
 	exporterhelper.TimeoutSettings `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
 	exporterhelper.QueueSettings   `mapstructure:"sending_queue"`
 	exporterhelper.RetrySettings   `mapstructure:"retry_on_failure"`
+
+	LogConfig LogConfig `mapstructure:"log"`
+}
+
+type LogConfig struct {
+	Endpoint string `mapstructure:"endpoint"`
+	// Only has effect if Endpoint is not ""
+	UseInsecure bool `mapstructure:"use_insecure"`
+	// GetClientOptions returns additional options to be passed
+	// to the underlying Google Cloud API client.
+	// Must be set programmatically (no support via declarative config).
+	// Optional.
+	GetClientOptions func() []option.ClientOption
+	// For determining which attributes to use for log name
+	NameFields []string `mapstructure:"name_fields"`
 }
 
 func (cfg *Config) Validate() error {

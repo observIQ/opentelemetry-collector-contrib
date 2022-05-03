@@ -42,6 +42,13 @@ type LegacyConfig struct {
 	GetClientOptions func() []option.ClientOption
 
 	MetricConfig MetricConfig `mapstructure:"metric"`
+
+	LogConfig LegacyLogConfig `mapstructure:"log"`
+}
+
+type LegacyLogConfig struct {
+	// For determining which attributes to use for log name
+	NameFields []string `mapstructure:"name_fields"`
 }
 
 func (cfg *LegacyConfig) Validate() error {
@@ -89,5 +96,6 @@ func toNewConfig(cfg *LegacyConfig) *Config {
 		newCfg.Config.MetricConfig.Prefix = cfg.MetricConfig.Prefix
 	}
 	newCfg.Config.MetricConfig.SkipCreateMetricDescriptor = cfg.MetricConfig.SkipCreateMetricDescriptor
+	newCfg.LogConfig.NameFields = cfg.LogConfig.NameFields
 	return newCfg
 }

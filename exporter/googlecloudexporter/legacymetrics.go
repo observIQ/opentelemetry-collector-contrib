@@ -49,11 +49,11 @@ func (me *metricsExporter) Shutdown(context.Context) error {
 	return me.mexporter.Close()
 }
 
-func setVersionInUserAgent(cfg *LegacyConfig, version string) {
+func legacySetVersionInUserAgent(cfg *LegacyConfig, version string) {
 	cfg.UserAgent = strings.ReplaceAll(cfg.UserAgent, "{{version}}", version)
 }
 
-func generateClientOptions(cfg *LegacyConfig) ([]option.ClientOption, error) {
+func legacyGenerateClientOptions(cfg *LegacyConfig) ([]option.ClientOption, error) {
 	var copts []option.ClientOption
 	// option.WithUserAgent is used by the Trace exporter, but not the Metric exporter (see comment below)
 	if cfg.UserAgent != "" {
@@ -90,7 +90,7 @@ func newLegacyGoogleCloudMetricsExporter(cfg *LegacyConfig, set component.Export
 		view.Register(viewPointCount)
 		view.Register(ocgrpc.DefaultClientViews...)
 	})
-	setVersionInUserAgent(cfg, set.BuildInfo.Version)
+	legacySetVersionInUserAgent(cfg, set.BuildInfo.Version)
 
 	// TODO:  For each ProjectID, create a different exporter
 	// or at least a unique Google Cloud client per ProjectID.
@@ -112,7 +112,7 @@ func newLegacyGoogleCloudMetricsExporter(cfg *LegacyConfig, set component.Export
 		options.UserAgent = cfg.UserAgent
 	}
 
-	copts, err := generateClientOptions(cfg)
+	copts, err := legacyGenerateClientOptions(cfg)
 	if err != nil {
 		return nil, err
 	}

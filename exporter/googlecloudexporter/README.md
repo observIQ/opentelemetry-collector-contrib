@@ -1,6 +1,6 @@
 # Google Cloud Exporter
 
-This exporter can be used to send metrics and traces to Google Cloud Monitoring and Trace (formerly known as Stackdriver) respectively.
+This exporter can be used to send logs, metrics, and traces to Google Cloud Logging, Monitoring,` and Trace (formerly known as Stackdriver) respectively.
 
 ## Getting started
 
@@ -60,6 +60,10 @@ These instructions are to get you up and running quickly with the GCP exporter i
           receivers: [otlp]
           processors: [memory_limiter, batch]
           exporters: [googlecloud, logging]
+        logs:
+          receivers: [otlp]
+          processors: [memeory_limiter, batch]
+          exporters: [googlecloud, logging]
     ```
 
 3.  **Set up credentials.**
@@ -105,7 +109,7 @@ These instructions are to get you up and running quickly with the GCP exporter i
 
     </details>
 
-5.  **Gather telemetry.** Run an application that can submit OTLP-formatted metrics and traces, and configure it to send them to `127.0.0.1:4317` (for gRPC) or `127.0.0.1:55681` (for HTTP).
+5.  **Gather telemetry.** Run an application that can submit OTLP-formatted logs, metrics, and traces, and configure it to send them to `127.0.0.1:4317` (for gRPC) or `127.0.0.1:55681` (for HTTP).
 
     <details>
       <summary>Alternatives</summary>
@@ -117,7 +121,7 @@ These instructions are to get you up and running quickly with the GCP exporter i
       *   Set up a receiver for some other protocol (such Prometheus, StatsD, Zipkin or Jaeger), and run an application that speaks one of those protocols.
     </details>
 
-6.  **View telemetry in GCP.** Use the GCP [metrics explorer](https://console.cloud.google.com/monitoring/metrics-explorer) and [trace overview](https://console.cloud.google.com/traces) to view your newly submitted telemetry.
+6.  **View telemetry in GCP.** Use the GCP [logs explorer](https://console.cloud.google.com/logs), [metrics explorer](https://console.cloud.google.com/monitoring/metrics-explorer), and [trace overview](https://console.cloud.google.com/traces) to view your newly submitted telemetry.
 
 ## Configuration reference
 
@@ -153,11 +157,17 @@ Additional configuration for the metric exporter:
 - `metric.resource_filters` (optional): If provided, resource attributes matching any filter will be included in metric labels. Defaults to empty, which won't include any additional resource labels.
   - `prefix`: Match resource keys by prefix
 
-Additional configuration added for the trace exporter:
+Additional configuration for the trace exporter:
 
 - `trace.endpoint` (optional): Endpoint where trace data is going to be sent to. Replaces `endpoint`.
 - `trace.use_insecure` (optional): If true. use gRPC as their communication transport. Only has effect if Endpoint is not "". Replaces `use_insecure`.
 - `trace.attribute_mappings` (optional): AttributeMappings determines how to map from OpenTelemetry attribute keys to Google Cloud Trace keys.  By default, it changes http and service keys so that they appear more prominently in the UI.
+
+Additional configuration for the log exporter:
+
+- `log.endpoint` (optional): Endpoint where log data is going to be sent to. Replaces `endpoint`.
+- `log.use_insecure` (optional): If true. use gRPC as their communication transport. Only has effect if Endpoint is not "". Replaces `use_insecure`.
+- `log.name_fields` (optional): NameFields is used to specify which nested attribute can be used for the log name. This uses simple JSON dot notation."
 
 Example:
 
@@ -190,7 +200,12 @@ exporters:
       create_metric_descriptor_buffer_size: 10
       resource_filters:
       - prefix: k8s.*
-
+    log:
+      endpoint: logging.googleapis.com
+      use_insecure: false
+      name_fields:
+        - field1
+        - field2.field3.field4
     sending_queue:
       enabled: true
       num_consumers: 2
@@ -247,6 +262,7 @@ If you disable the feature-gate, you can continue to set the legacy configuratio
     User should calculate this as `num_seconds * requests_per_second` where:
     - `num_seconds` is the number of seconds to buffer in case of a backend outage
     - `requests_per_second` is the average number of requests per seconds.
+- `log.name_fields` (optional): NameFields is used to specify which nested attribute can be used for the log name. This uses simple JSON dot notation."
 
 Note: These `retry_on_failure` and `sending_queue` are provided (and documented) by the [Exporter Helper](https://github.com/open-telemetry/opentelemetry-collector/tree/main/exporter/exporterhelper#configuration)
 

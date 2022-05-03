@@ -86,5 +86,8 @@ func TestLoadLegacyConfig(t *testing.T) {
 				Prefix:                     "prefix",
 				SkipCreateMetricDescriptor: true,
 			},
+			LogConfig: LegacyLogConfig{
+				NameFields: []string{"name1", "parent.name2"},
+			},
 		})
 }
