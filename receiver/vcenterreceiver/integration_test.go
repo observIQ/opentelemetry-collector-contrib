@@ -15,7 +15,7 @@
 //go:build integration
 // +build integration
 
-package vcenterreceiver // import github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver
+package vcenterreceiver // import github.com/observiq/opentelemetry-collector-contrib/receiver/vcenterreceiver
 
 import (
 	"context"
@@ -33,9 +33,9 @@ import (
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.uber.org/zap"
 
+	"github.com/observiq/opentelemetry-collector-contrib/receiver/vcenterreceiver/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/scrapertest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/scrapertest/golden"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver/internal/metadata"
 )
 
 func TestEndtoEnd_ESX(t *testing.T) {

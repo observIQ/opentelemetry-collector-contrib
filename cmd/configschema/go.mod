@@ -363,7 +363,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/syslogreceiver v0.50.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplogreceiver v0.50.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver v0.50.0 // indirect
-	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver v0.50.0 // indirect
+	github.com/observiq/opentelemetry-collector-contrib/receiver/vcenterreceiver v0.50.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver v0.50.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsperfcountersreceiver v0.50.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver v0.50.0 // indirect
@@ -792,7 +792,7 @@ replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplo
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver => ../../receiver/udplogreceiver
 
-replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver => ../../receiver/vcenterreceiver
+replace github.com/observiq/opentelemetry-collector-contrib/receiver/vcenterreceiver => ../../receiver/vcenterreceiver
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver => ../../receiver/wavefrontreceiver
 

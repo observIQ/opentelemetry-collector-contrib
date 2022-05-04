@@ -3,6 +3,7 @@ module github.com/open-telemetry/opentelemetry-collector-contrib
 go 1.17
 
 require (
+	github.com/observiq/opentelemetry-collector-contrib/receiver/vcenterreceiver v0.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/alibabacloudlogserviceexporter v0.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awscloudwatchlogsexporter v0.0.0-00010101000000-000000000000
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter v0.0.0-00010101000000-000000000000
@@ -122,7 +123,6 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/syslogreceiver v0.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplogreceiver v0.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver v0.50.0
-	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver v0.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver v0.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsperfcountersreceiver v0.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver v0.50.0
@@ -796,7 +796,7 @@ replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/tcplo
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/udplogreceiver => ./receiver/udplogreceiver
 
-replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver => ./receiver/vcenterreceiver
+replace github.com/observiq/opentelemetry-collector-contrib/receiver/vcenterreceiver => ./receiver/vcenterreceiver
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver => ./receiver/wavefrontreceiver
 
