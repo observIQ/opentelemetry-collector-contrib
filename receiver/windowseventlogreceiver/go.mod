@@ -7,7 +7,6 @@ require (
 	github.com/open-telemetry/opentelemetry-log-collection v0.29.2-0.20220504194202-c912ec5cdb77
 	github.com/stretchr/testify v1.7.1
 	go.opentelemetry.io/collector v0.49.0
-	golang.org/x/sys v0.0.0-20220406163625-3f8b81556e12
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -33,6 +32,7 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
+	golang.org/x/sys v0.0.0-20220406163625-3f8b81556e12 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	gonum.org/v1/gonum v0.11.0 // indirect
 	google.golang.org/genproto v0.0.0-20220218161850-94dd64e39d7c // indirect
