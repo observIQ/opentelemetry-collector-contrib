@@ -6,7 +6,7 @@ Supported pipeline types: logs
 
 > :construction: This receiver is in alpha and configuration fields are subject to change.
 
-### Configuration Fields
+### Configuration Fields 
 
 | Field           | Default                  | Description                                                                                                                    |
 | ---             | ---                      | ---                                                                                                                            |
