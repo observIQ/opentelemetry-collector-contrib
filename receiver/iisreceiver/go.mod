@@ -29,6 +29,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
 
-require go.uber.org/zap v1.21.0 // indirect
+require go.uber.org/zap v1.21.0
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/winperfcounters => ../../pkg/winperfcounters
