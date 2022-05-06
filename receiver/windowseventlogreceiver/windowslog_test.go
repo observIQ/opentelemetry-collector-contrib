@@ -112,7 +112,7 @@ func TestReadWindowsEventLogger(t *testing.T) {
 
 	record := records.At(0)
 	body := record.Body().MapVal().AsRaw()
-	require.Equal(t, []string{"Test log"}, body["event_data"])
+	require.Equal(t, "Test log", body["event_data"])
 
 	eventID := body["event_id"]
 	require.NotNil(t, eventID)
