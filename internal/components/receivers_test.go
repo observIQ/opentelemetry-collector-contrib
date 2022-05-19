@@ -52,6 +52,13 @@ func TestDefaultReceivers(t *testing.T) {
 		getConfigFn  getReceiverConfigFn
 	}{
 		{
+			receiver:     "active_directory_ds",
+			skipLifecyle: true, // Requires a running windows service
+		},
+		{
+			receiver: "apache",
+		},
+		{
 			receiver: "awscontainerinsightreceiver",
 			// TODO: skipped since it will only function in a container environment with procfs in expected location.
 			skipLifecyle: true,
@@ -66,6 +73,9 @@ func TestDefaultReceivers(t *testing.T) {
 		{
 			receiver:     "awsxray",
 			skipLifecyle: true, // Requires AWS endpoint to check identity to run
+		},
+		{
+			receiver: "bigip",
 		},
 		{
 			receiver: "carbon",
@@ -84,12 +94,18 @@ func TestDefaultReceivers(t *testing.T) {
 			receiver: "collectd",
 		},
 		{
+			receiver: "couchdb",
+		},
+		{
 			receiver:     "docker_stats",
 			skipLifecyle: true,
 		},
 		{
 			receiver:     "dotnet_diagnostics",
 			skipLifecyle: true, // Requires a running .NET process to examine
+		},
+		{
+			receiver: "elasticsearch",
 		},
 		{
 			receiver: "filelog",
@@ -153,10 +169,19 @@ func TestDefaultReceivers(t *testing.T) {
 			receiver: "memcached",
 		},
 		{
+			receiver: "mongodb",
+		},
+		{
 			receiver: "mongodbatlas",
 		},
 		{
 			receiver: "mysql",
+		},
+		{
+			receiver: "nginx",
+		},
+		{
+			receiver: "nsxt",
 		},
 		{
 			receiver:     "opencensus",
@@ -189,6 +214,9 @@ func TestDefaultReceivers(t *testing.T) {
 			skipLifecyle: true, // Requires running a subproccess that can not be easily set across platforms
 		},
 		{
+			receiver: "rabbitmq",
+		},
+		{
 			receiver: "receiver_creator",
 		},
 		{
@@ -199,6 +227,9 @@ func TestDefaultReceivers(t *testing.T) {
 		},
 		{
 			receiver: "sapm",
+		},
+		{
+			receiver: "saphana",
 		},
 		{
 			receiver: "signalfx",

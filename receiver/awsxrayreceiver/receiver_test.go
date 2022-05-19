@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint:errcheck
 package awsxrayreceiver
 
 import (
@@ -165,7 +166,6 @@ func TestTranslatorErrorsOut(t *testing.T) {
 
 	assert.Eventuallyf(t, func() bool {
 		logs := recordedLogs.All()
-		fmt.Println(logs)
 		return len(logs) > 0 && strings.Contains(logs[len(logs)-1].Message,
 			"X-Ray segment to OT traces conversion failed")
 	}, 10*time.Second, 5*time.Millisecond, "poller should log warning because consumer errored out")

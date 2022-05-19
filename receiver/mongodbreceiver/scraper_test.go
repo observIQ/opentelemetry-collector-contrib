@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint:errcheck
 package mongodbreceiver
 
 import (
@@ -24,8 +25,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
-	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/scrapererror"
 	"go.uber.org/zap"
 
@@ -40,6 +41,18 @@ func TestNewMongodbScraper(t *testing.T) {
 
 	scraper := newMongodbScraper(zap.NewNop(), cfg)
 	require.NotEmpty(t, scraper.config.hostlist())
+}
+
+func TestScraperLifecycle(t *testing.T) {
+	now := time.Now()
+	f := NewFactory()
+	cfg := f.CreateDefaultConfig().(*Config)
+
+	scraper := newMongodbScraper(zap.NewNop(), cfg)
+	require.NoError(t, scraper.start(context.Background(), componenttest.NewNopHost()))
+	require.NoError(t, scraper.shutdown(context.Background()))
+
+	require.Less(t, time.Since(now), 100*time.Millisecond, "component start and stop should be very fast")
 }
 
 func TestScrape(t *testing.T) {
@@ -120,8 +133,7 @@ func TestGlobalLockTimeOldFormat(t *testing.T) {
 	scraper.recordGlobalLockTime(now, doc, scrapererror.ScrapeErrors{})
 	expectedValue := (int64(116749+14340) / 1000)
 
-	metrics := pmetric.NewMetricSlice()
-	scraper.mb.EmitAdmin(metrics)
+	metrics := scraper.mb.Emit().ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics()
 	collectedValue := metrics.At(0).Sum().DataPoints().At(0).IntVal()
 	require.Equal(t, expectedValue, collectedValue)
 }
