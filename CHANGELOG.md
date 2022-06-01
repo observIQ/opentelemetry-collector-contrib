@@ -11,6 +11,8 @@
 
 ### 🚩 Deprecations 🚩
 
+- `couchbasereceiver`: Deprecate unfinished couchbase receiver ()
+
 ### 🚀 New components 🚀
 - `windowseventlogreceiver` Added implementation of Windows Event Log Receiver (#9228)
 - `vcenterreceiver`: Add metrics receiver for new vcenterreceiver component (#9224)

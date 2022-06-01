@@ -16,6 +16,7 @@ package couchbasereceiver // import "github.com/open-telemetry/opentelemetry-col
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
@@ -23,7 +24,10 @@ import (
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.uber.org/zap"
 )
+
+var once sync.Once
 
 const typeStr = "couchbase"
 
@@ -33,6 +37,12 @@ func NewFactory() component.ReceiverFactory {
 		typeStr,
 		createDefaultConfig,
 		component.WithMetricsReceiver(createMetricsReceiver))
+}
+
+func logDeprecation(logger *zap.Logger) {
+	once.Do(func() {
+		logger.Warn("couchbase receiver is deprecated and will be removed in future versions.")
+	})
 }
 
 func createDefaultConfig() config.Receiver {
@@ -49,5 +59,6 @@ func createDefaultConfig() config.Receiver {
 }
 
 func createMetricsReceiver(ctx context.Context, params component.ReceiverCreateSettings, rConf config.Receiver, consumer consumer.Metrics) (component.MetricsReceiver, error) {
+	logDeprecation(params.Logger)
 	return nil, nil
 }

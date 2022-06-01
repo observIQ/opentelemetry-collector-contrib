@@ -1,4 +1,6 @@
-# Couchbase Receiver
+# Deprecated Couchbase Receiver
+
+This receiver has been deprecated as it is unfinished and there is an alternative way to monitor Couchbase. See [#9254](https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/9254)
 
 This receiver fetches stats from a couchbase cluster using the following endpoints:
 - `/pools/default` [endpoint](https://docs.couchbase.com/server/6.5/rest-api/rest-cluster-details.html)
