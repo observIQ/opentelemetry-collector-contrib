@@ -4,19 +4,128 @@
 
 ### 🛑 Breaking changes 🛑
 
+- `jmxreceiver`: Remove properties & groovyscript parameters from JMX Receiver. Add ResourceAttributes & LogLevel parameter to supply some of the removed functionality with reduced attack surface (#9685)
+- `resourcedetectionprocessor`: 'gke' and 'gce' resource detectors are replaced with a single 'gcp' detector (#10347)
+- `pkg/stanza`: Removed reference to deprecated `ClusterName` (#10426)
+- `couchbasereceiver`: Fully removed unimplemented Couchbase receiver (#10482)
+
 ### 🚩 Deprecations 🚩
 
-- `exporter/azuremonitor`: Deprecate use of LogRecord.Name as the log envelope category name. There is no replacement.
 
 ### 🚀 New components 🚀
 
+- `flinkmetricsreceiver`: Add implementation of Flink Metric Receiver (#10121)
+- `windowseventlogreceiver` Added implementation of Windows Event Log Receiver (#9228)
+- `vcenterreceiver`: Add metrics receiver for new vcenterreceiver component (#9224)
+
 ### 💡 Enhancements 💡
 
+- `tailsamplingprocessor`: Add support for string invert matching to `and` policy (#9553)
+- `mezemoexporter`: Add user agent string to outgoing HTTP requests (#10470)
+- `transformprocessor`: Add functions for conversion of scalar metric types (`gauge_to_sum` and `sum_to_gauge`) (#10255)
+
+### 🧰 Bug fixes 🧰
+
+- `transformprocessor`: Fix issue where incorrect error was returned if a bad path was passed to a function (#10141)
+- `tanzuobservabilityexporter`: Improve how negative values in exponential histograms are handled. (#10135)
+- `dynatraceexporter`: Ensure min is always less than or equal to mean and max is always greater or equal to mean for histogram estimation. (#10257)
+- `resourcedetectionprocessor`: GCP resource detector now properly detects zone/region on GKE (#10347)
+
+## v0.52.0
+
+### 🛑 Breaking changes 🛑
+
+- `jmxreceiver`: Hash the jars provided to JMX Receiver and only allow if they match an approved list (#9687)
+- `jmxreceiver`: Remove properties & groovyscript parameters from JMX Receiver. Add ResourceAttributes & LogLevel parameter to supply some of the removed functionality with reduced attack surface (#9685)
+
+### 🚀 New components 🚀
+
+- `bigipreceiver`: Add implementation of F5 Big-IP Metric Receiver (#9680)
+- `expvarreceiver`: Initial work for a receiver designed to scrape `memstats` from Golang applications. (#9747)
+- `mezmoexporter`: Add implementation of Mezmo Log exporter (#9743)
+- `nsxtreceiver`: Added implementation of NSX-T Metric Receiver (#9568)
+- `expvarreceiver`: Add implementation of new receiver. (#10183)
+
+### 💡 Enhancements 💡
+
+- `transformprocessor`: Add transformation of metrics (#10100)
+- `transformprocessor`: Include transform processor in components (#10134)
+- `kubeletstatsreceiver`: Update receiver to use new Metrics Builder. All emitted metrics remain the same. (#9744)
+- `transformprocessor`: Add new `replace_match` and `replace_all_matches` functions (#10132)
+- `resourcedetectionprocessor`: Add "cname" and "lookup" hostname sources
+- `jmxreceiver`: Communicate with JMX metrics gatherer subprocess via properties file (#9685)
+
+### 🧰 Bug fixes 🧰
+
+- `datadogexporter`: add error checks for datadog exporter (#9964)
+- `datadogexporter`: Fix host aliases not being properly sent to the Datadog backend (#9748)
+- `groupbyattrsprocessor`: copied aggregationtemporality when grouping metrics. (#9088)
+- `jaeger`: Update OTLP-Jaeger translation of span events according to the OTel Spec: use `event` log field instead
+  of `message` to represent OTel Span Event Name (#10273)
+- `mongodbreceiver`: Fix issue where receiver startup could hang (#10111)
+- `transformprocessor`: Fix issue where metric.aggregation_temporality and metric.is_monotic were not actually gettable or settable (#10197)
+- `signalfxexporter`: Emit prometheus compatible histogram/summary to signalfx #10299
+  - This behavior can be reverted using the `exporter.signalfxexporter.PrometheusCompatible` featuregate.
+- `podmanreceiver`: Container Stats Error structure (#9397)
+- `pkg/stanza`: pipeline.Operators() will return a consistently ordered list of operators whenever possible (#9761)
+- `tanzuobservabilityexporter`: add  error checks for tanzuobservability exporter (#10188)
+
+## v0.51.0
+
+### 🛑 Breaking changes 🛑
+
+- `datadogexporter`: Replace HistogramMode defined as string with enum. (#9589)
+- `pkg/translator/signalfx`: Change signalfx translator to expose To/From translator structs. (#9740)
+- `transformprocessor`: Add parameter validation to `truncate_all` and `limit` functions.  The `limit` parameter can no longer be negative. (#9783)
+- `newrelicexporter` deleted. Use New Relic [native OTLP ingest](https://docs.newrelic.com/docs/more-integrations/open-source-telemetry-integrations/opentelemetry/opentelemetry-setup/) instead. (#9894)
+- `k8sclusterreceiver`: Removing `ClusterName` as per https://github.com/kubernetes/apimachinery/commit/430b920312ca0fa10eca95967764ff08f34083a3. (#9885)
+
+### 🚩 Deprecations 🚩
+
+- `exporter/azuremonitor`: Deprecate use of LogRecord.Name as the log envelope category name. There is no replacement. (#9258)
+- `processor/k8sattributes`: Deprecate use of k8s.cluster.name metadata parameter (obsolete) (#9968)
+
+### 🚀 New components 🚀
+
+- `schemaprocessor`: Starting the initial work to allow from translating from semantic convention to another (#8371)
+- `saphanareceiver`: Added implementation of SAP HANA Metric Receiver (#8827)
+- `logstransformprocessor`: Add implementation of Logs Transform Processor (#9335)
+
+### 💡 Enhancements 💡
+
+- `cmd/mdatagen`: Replace enum attributes values with typed constants (#9683)
+- `elasticsearchreceiver`: Update metrics scope name from `otelcol/elasticsearch`
+  to `otelcol/elasticsearchreceiver` (#9757)
 - `k8sclusterreceiver`: Validate that k8s API supports a resource before setting up a watcher for it (#9523)
+- `internal/stanza`: Add support for `remove` operator (#9524)
+- `k8sattributesprocessor`: Support regex capture groups in tag_name (#9525)
+- `mongoreceiver`: Update metrics scope name from `otelcol/mongodb` to `otelcol/mongodbreceiver` (#9759)
+- `transformprocessor`: Add new `truncation` function to allow truncating string values in maps such as `attributes` or `resource.attributes` (#9546)
+- `datadogexporter`: Add `api.fail_on_invalid_key` to fail fast if api key is invalid (#9426)
+- `transformprocessor`: Add support for functions to validate parameters (#9563)
+- `googlecloudexporter`: Add GCP cloud logging exporter (#9679)
+- `transformprocessor`: Add new `limit` function to allow limiting the number of items in a map, such as the number of attributes in `attributes` or `resource.attributes` (#9552)
+- `processor/attributes`: Support attributes set by server authenticator (#9420)
+- `datadogexporter`: Experimental support for Exponential Histograms with delta aggregation temporality (#8350)
 
 ### 🧰 Bug fixes 🧰
 
 - `k8sclusterreceiver`: Fix the receiver to work with 1.19 and 1.20 k8s API versions (#9523)
+- `azuremonitorexporter`: Fix log exporter bug related to incorrectly mapping SpanId (#9579)
+- `mysqlreceiver`: Fix attribute values mismatch with its definition (#9688)
+- `opencensusreceiver`: Do not report fatal error if err is server closed (#9559).
+- `sqlserverreceiver`: Fix the receiver to have integer types on metrics where applicable (#9601)
+- `prometheusreceiver`: Fix the memory issue introduced in the 0.49.0 release (#9718)
+- `couchdbreceiver`: Fix issue where the receiver would not respect custom metric settings (#9598)
+- `nginxreceiver`: Include nginxreceiver in components (#9572)
+- `pkg/translator/prometheusremotewrite`: Fix data race when used with other exporters (#9736)
+- `examples/demo`: fix baggage not work in trace demo app. (#9418)
+- `prometheusreceiver`: Handle the condition where `up` metric value is NaN (#9253)
+- `tanzuobservabilityexporter`: Make metrics stanza in config be optional (#9098)
+- `filelogreceiver`: Update Kubernetes examples to fix native OTel logs collection issue where 0 length logs cause errors (#9754)
+- `logstransformprocessor`: Resolve node ordering to fix intermittent failures (#9761)
+- `awsinsightreceiver`: Migrate from `ConfigMapsResourceLock` to `ConfigMapsLeasesResourceLock` as per https://github.com/kubernetes/client-go/commit/276ea3ed979947d7cdd4b3d708862245ddcd8883 (#9885)
+- `filelog`, `journald`, `syslog`, `tcplog`, `udplog`: Add support for []string type for converting log record entries (#9887)
 
 ## v0.50.0
 
@@ -27,11 +136,13 @@
 - `kafkametricsreceiver`: instrumentation name updated from `otelcol/kafkametrics` to `otelcol/kafkametricsreceiver` (#9406)
 - `kubeletstatsreceiver`: instrumentation name updated from `kubeletstats` to `otelcol/kubeletstatsreceiver` (#9400)
 - `datadogexporter`: Remove `GetHostTags` method from `TagsConfig` struct (#9423)
+- `googlecloudexporter`: Graduate the `exporter.googlecloud.OTLPDirect` feature-gate to Beta.  This includes changes to the configuration structure, and many changes to default behavior. (#9471)
 
 ### 🚩 Deprecations 🚩
 
 - `cumulativetodeltaprocessor`: Deprecated `metrics` configuration option in favor of `include` and `exclude` (#8952)
 - `datadogexporter`: Deprecate `metrics::report_quantiles` in favor of `metrics::summaries::mode` (#8846)
+- `datadogexporter`: Deprecate `traces.sample_rate` setting. It was never used anywhere. (#9771)
 
 ### 🚀 New components 🚀
 
@@ -49,8 +160,9 @@
 - `datadogexporter`: Update deprecation messages to reflect new deprecation plan (#9422)
 - `cmd/mdatagen`: Update generated functions to have simple parse function to handle string parsing consistently and limit code duplication across receivers (#7574)
 - `attributesprocessor`: Support filter by severity (#9132)
-- `processor/transform`: Add transformation of logs (#9368)
+- `transformprocessor`: Add transformation of logs (#9368)
 - `datadogexporter`: Add `metrics::summaries::mode` to specify export mode for summaries (#8846)
+- `prometheusreceiver`: Add resource attributes for kubernetes resource discovery labels (#9416)
 
 ### 🧰 Bug fixes 🧰
 
@@ -59,6 +171,8 @@
 - `resourcedetectionprocessor`: Wire docker detector (#9372)
 - `kafkametricsreceiver`: The kafkametricsreceiver was changed to connect to kafka during scrape, rather than startup. If kafka is unavailable the receiver will attempt to connect during subsequent scrapes until succcessful (#8817).
 - `datadogexporter`: Update Kubernetes example manifest to new executable name. (#9425).
+- `riakreceiver`: Fix issue where user configured metric settings were ignored. (#9561)
+- `sqlserverreceiver`: Update `sqlserver.transaction_log.growth.count` and `sqlserver.transaction_log.shrink.count` to be monotonic sums. (#9522)
 
 ## v0.49.0
 
@@ -66,7 +180,7 @@
 
 This release contains an issue in
 [Prometheus receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/prometheusreceiver)
-causing 30% memory consumption increase when there is a lot of target churn. The issue is currently being 
+causing 30% memory consumption increase when there is a lot of target churn. The issue is currently being
 investigated and will be fixed in one of the new releases. More details:
 https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/9278.
 
@@ -81,7 +195,7 @@ https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/9278.
 - `dynatraceexporter`: Make `serialization` package `/internal` (#9097)
 - `attributesprocessor`: Remove log names from filters (#9131)
 - `k8sclusterreceiver`: The `receiver.k8sclusterreceiver.reportCpuMetricsAsDouble` feature gate is now enabled by default (#9367)
-  - Users may have to update monitoring for a few Kubernetes cpu metrics, for 
+  - Users may have to update monitoring for a few Kubernetes cpu metrics, for
     more details see [feature-gate-configurations](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/k8sclusterreceiver#feature-gate-configurations).
 
 ### 🚩 Deprecations 🚩
@@ -794,7 +908,7 @@ https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/9278.
 - [`prometheus` exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/prometheusexporter) from core repository ([#3474](https://github.com/open-telemetry/opentelemetry-collector/issues/3474))
 - [`prometheusremotewrite` exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/prometheusremotewriteexporter) from core repository ([#3474](https://github.com/open-telemetry/opentelemetry-collector/issues/3474))
 - [`zipkin` exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/zipkinexporter) from core repository ([#3474](https://github.com/open-telemetry/opentelemetry-collector/issues/3474))
-- [`attribute` processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/attributeprocessor) from core repository ([#3474](https://github.com/open-telemetry/opentelemetry-collector/issues/3474))
+- [`attribute` processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/attributesprocessor) from core repository ([#3474](https://github.com/open-telemetry/opentelemetry-collector/issues/3474))
 - [`filter` processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/filterprocessor) from core repository ([#3474](https://github.com/open-telemetry/opentelemetry-collector/issues/3474))
 - [`probabilisticsampler` processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor) from core repository ([#3474](https://github.com/open-telemetry/opentelemetry-collector/issues/3474))
 - [`resource` processor](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/resourceprocessor) from core repository ([#3474](https://github.com/open-telemetry/opentelemetry-collector/issues/3474))
@@ -1347,7 +1461,7 @@ The OpenTelemetry Collector Contrib contains everything in the [opentelemetry-co
 ### 🚀 New components 🚀
 
 - `f5cloud` exporter to export metric, trace, and log data to F5 Cloud
-- `jmx` receiver to report metrics from a target MBean server in conjunction with the [JMX Metric Gatherer](https://github.com/open-telemetry/opentelemetry-java-contrib/blob/main/contrib/jmx-metrics/README.md)
+- `jmx` receiver to report metrics from a target MBean server in conjunction with the [JMX Metric Gatherer](https://github.com/open-telemetry/opentelemetry-java-contrib/blob/v1.0.0-alpha/contrib/jmx-metrics/README.md)
 
 ### 🛑 Breaking changes 🛑
 
@@ -1522,7 +1636,7 @@ The OpenTelemetry Collector Contrib contains everything in the [opentelemetry-co
 - Move signalfx correlation code out of `sapm` to `signalfxcorrelation` exporter (#1376)
 - Move Splunk specific utils outside of common (#1306)
 - `stackdriver` exporter:
-    - Config options `metric_prefix` & `skip_create_metric_descriptor` are now nested under `metric`, see [README](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/stackdriverexporter/README.md).
+    - Config options `metric_prefix` & `skip_create_metric_descriptor` are now nested under `metric`, see [README](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/v0.14.0/exporter/stackdriverexporter/README.md).
     - Trace status codes no longer reflect gRPC codes as per spec changes: open-telemetry/opentelemetry-specification#1067
 - `datadog` exporter: Remove option to change the namespace prefix (#1483)
 

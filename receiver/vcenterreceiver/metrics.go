@@ -21,12 +21,14 @@ import (
 	"github.com/vmware/govmomi/performance"
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/receiver/scrapererror"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver/internal/metadata"
 )
 
 func (v *vcenterMetricScraper) recordHostSystemMemoryUsage(
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	hs mo.HostSystem,
 ) {
 	s := hs.Summary
@@ -48,7 +50,7 @@ func (v *vcenterMetricScraper) recordHostSystemMemoryUsage(
 }
 
 func (v *vcenterMetricScraper) recordVMUsages(
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	vm mo.VirtualMachine,
 ) {
 	memUsage := vm.Summary.QuickStats.GuestMemoryUsage
@@ -59,8 +61,8 @@ func (v *vcenterMetricScraper) recordVMUsages(
 	diskUsed := vm.Summary.Storage.Committed
 	diskFree := vm.Summary.Storage.Uncommitted
 
-	v.mb.RecordVcenterVMDiskUsageDataPoint(now, diskUsed, "used")
-	v.mb.RecordVcenterVMDiskUsageDataPoint(now, diskFree, "total")
+	v.mb.RecordVcenterVMDiskUsageDataPoint(now, diskUsed, metadata.AttributeDiskStateUsed)
+	v.mb.RecordVcenterVMDiskUsageDataPoint(now, diskFree, metadata.AttributeDiskStateAvailable)
 	if diskFree != 0 {
 		diskUtilization := float64(diskUsed) / float64(diskFree) * 100
 		v.mb.RecordVcenterVMDiskUtilizationDataPoint(now, diskUtilization)
@@ -68,19 +70,19 @@ func (v *vcenterMetricScraper) recordVMUsages(
 }
 
 func (v *vcenterMetricScraper) recordDatastoreProperties(
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	ds mo.Datastore,
 ) {
 	s := ds.Summary
 	diskUsage := s.Capacity - s.FreeSpace
 	diskUtilization := float64(diskUsage) / float64(s.Capacity) * 100
-	v.mb.RecordVcenterDatastoreDiskUsageDataPoint(now, diskUsage, "used")
-	v.mb.RecordVcenterDatastoreDiskUsageDataPoint(now, s.Capacity, "total")
+	v.mb.RecordVcenterDatastoreDiskUsageDataPoint(now, diskUsage, metadata.AttributeDiskStateUsed)
+	v.mb.RecordVcenterDatastoreDiskUsageDataPoint(now, s.Capacity, metadata.AttributeDiskStateUsed)
 	v.mb.RecordVcenterDatastoreDiskUtilizationDataPoint(now, diskUtilization)
 }
 
 func (v *vcenterMetricScraper) recordResourcePool(
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	rp mo.ResourcePool,
 ) {
 	s := rp.Summary.GetResourcePoolSummary()
@@ -110,7 +112,9 @@ var hostPerfMetricList = []string{
 	"disk.deviceWriteLatency.average",
 	"disk.kernelReadLatency.average",
 	"disk.kernelWriteLatency.average",
+	"disk.maxTotalLatency.latest",
 	"disk.read.average",
+	"disk.write.average",
 }
 
 func (v *vcenterMetricScraper) recordHostPerformanceMetrics(
@@ -147,9 +151,11 @@ var vmPerfMetricList = []string{
 	"net.usage.average",
 
 	// disk metrics
-	"disk.write.average",
 	"disk.totalWriteLatency.average",
+	"disk.totalReadLatency.average",
+	"disk.maxTotalLatency.latest",
 	"virtualDisk.totalWriteLatency.average",
+	"virtualDisk.totalReadLatency.average",
 }
 
 func (v *vcenterMetricScraper) recordVMPerformance(
@@ -183,23 +189,27 @@ func (v *vcenterMetricScraper) processVMPerformanceMetrics(info *perfSampleResul
 				switch val.Name {
 				// Performance monitoring level 1 metrics
 				case "net.bytesTx.average":
-					v.mb.RecordVcenterVMNetworkThroughputDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "transmitted")
+					v.mb.RecordVcenterVMNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted)
 				case "net.bytesRx.average":
-					v.mb.RecordVcenterVMNetworkThroughputDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "received")
+					v.mb.RecordVcenterVMNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived)
 				case "net.usage.average":
-					v.mb.RecordVcenterVMNetworkUsageDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue)
+					v.mb.RecordVcenterVMNetworkUsageDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue)
 				case "net.packetsTx.summation":
-					v.mb.RecordVcenterVMNetworkPacketCountDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "transmitted")
+					v.mb.RecordVcenterVMNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted)
 				case "net.packetsRx.summation":
-					v.mb.RecordVcenterVMNetworkPacketCountDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "received")
+					v.mb.RecordVcenterVMNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived)
 
 				// Performance monitoring level 2 metrics required
-				case "disk.totalReadLatency.average", "virtualDisk.totalReadLatency.average":
-					v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "read")
-				case "disk.totalWriteLatency.average", "virtualDisk.totalWriteLatency.average":
-					v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "write")
-				case "disk.maxTotalLatency":
-					v.mb.RecordVcenterVMDiskLatencyMaxDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue)
+				case "disk.totalReadLatency.average":
+					v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead, metadata.AttributeDiskTypePhysical)
+				case "virtualDisk.totalReadLatency.average":
+					v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead, metadata.AttributeDiskTypeVirtual)
+				case "disk.totalWriteLatency.average":
+					v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite, metadata.AttributeDiskTypePhysical)
+				case "virtualDisk.totalWriteLatency.average":
+					v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite, metadata.AttributeDiskTypeVirtual)
+				case "disk.maxTotalLatency.latest":
+					v.mb.RecordVcenterVMDiskLatencyMaxDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue)
 				}
 			}
 		}
@@ -214,29 +224,33 @@ func (v *vcenterMetricScraper) processHostPerformance(metrics []performance.Enti
 				switch val.Name {
 				// Performance monitoring level 1 metrics
 				case "net.usage.average":
-					v.mb.RecordVcenterHostNetworkUsageDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue)
+					v.mb.RecordVcenterHostNetworkUsageDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue)
 				case "net.bytesTx.average":
-					v.mb.RecordVcenterHostNetworkThroughputDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "transmitted")
+					v.mb.RecordVcenterHostNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted)
 				case "net.bytesRx.average":
-					v.mb.RecordVcenterHostNetworkThroughputDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "received")
-				// case "net.bytesTx.average":
+					v.mb.RecordVcenterHostNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived)
 				case "net.packetsTx.summation":
-					v.mb.RecordVcenterHostNetworkPacketCountDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "transmitted")
+					v.mb.RecordVcenterHostNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted)
 				case "net.packetsRx.summation":
-					v.mb.RecordVcenterHostNetworkPacketCountDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "received")
+					v.mb.RecordVcenterHostNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived)
 
 				// Following requires performance level 2
 				case "net.errorsRx.summation":
-					v.mb.RecordVcenterHostNetworkPacketErrorsDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "received")
+					v.mb.RecordVcenterHostNetworkPacketErrorsDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived)
 				case "net.errorsTx.summation":
-					v.mb.RecordVcenterHostNetworkPacketErrorsDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "transmitted")
-
+					v.mb.RecordVcenterHostNetworkPacketErrorsDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted)
 				case "disk.totalWriteLatency.average":
-					v.mb.RecordVcenterHostDiskLatencyAvgDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "write")
+					v.mb.RecordVcenterHostDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite)
 				case "disk.totalReadLatency.average":
-					v.mb.RecordVcenterHostDiskLatencyAvgDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue, "write")
+					v.mb.RecordVcenterHostDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead)
 				case "disk.maxTotalLatency.latest":
-					v.mb.RecordVcenterHostDiskLatencyMaxDataPoint(pdata.NewTimestampFromTime(si.Timestamp), nestedValue)
+					v.mb.RecordVcenterHostDiskLatencyMaxDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue)
+
+				// Following requires performance level 4
+				case "disk.read.average":
+					v.mb.RecordVcenterHostDiskThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead)
+				case "disk.write.average":
+					v.mb.RecordVcenterHostDiskThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite)
 				}
 			}
 		}
@@ -259,7 +273,7 @@ var clientCacheHits = "clientCacheHits"
 var clientCacheHitRate = "clientCacheHitRate"
 
 func (v *vcenterMetricScraper) recordClusterVsanMetric(
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	metricID string,
 	val string,
 	errs *scrapererror.ScrapeErrors,
@@ -270,42 +284,42 @@ func (v *vcenterMetricScraper) recordClusterVsanMetric(
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterClusterVsanOperationsDataPoint(now, value, "read")
+			v.mb.RecordVcenterClusterVsanOperationsDataPoint(now, value, metadata.AttributeVsanOperationTypeRead)
 		}
 	case iopsWrite:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterClusterVsanOperationsDataPoint(now, value, "write")
+			v.mb.RecordVcenterClusterVsanOperationsDataPoint(now, value, metadata.AttributeVsanOperationTypeWrite)
 		}
 	case throughputRead:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterClusterVsanThroughputDataPoint(now, value, "read")
+			v.mb.RecordVcenterClusterVsanThroughputDataPoint(now, value, metadata.AttributeVsanThroughputDirectionRead)
 		}
 	case throughputWrite:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterClusterVsanThroughputDataPoint(now, value, "write")
+			v.mb.RecordVcenterClusterVsanThroughputDataPoint(now, value, metadata.AttributeVsanThroughputDirectionWrite)
 		}
 	case latencyAvgRead:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterClusterVsanLatencyAvgDataPoint(now, value, "read")
+			v.mb.RecordVcenterClusterVsanLatencyAvgDataPoint(now, value, metadata.AttributeVsanLatencyTypeRead)
 		}
 	case latencyAvgWrite:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterClusterVsanLatencyAvgDataPoint(now, value, "write")
+			v.mb.RecordVcenterClusterVsanLatencyAvgDataPoint(now, value, metadata.AttributeVsanLatencyTypeWrite)
 		}
 	case outstandingIO:
 		value, err := parseInt(val)
@@ -325,7 +339,7 @@ func (v *vcenterMetricScraper) recordClusterVsanMetric(
 }
 
 func (v *vcenterMetricScraper) recordHostVsanMetric(
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	metricID string,
 	val string,
 	errs *scrapererror.ScrapeErrors,
@@ -350,63 +364,63 @@ func (v *vcenterMetricScraper) recordHostVsanMetric(
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterHostVsanOperationsDataPoint(now, value, "read")
+			v.mb.RecordVcenterHostVsanOperationsDataPoint(now, value, metadata.AttributeVsanOperationTypeRead)
 		}
 	case iopsWrite:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterHostVsanOperationsDataPoint(now, value, "write")
+			v.mb.RecordVcenterHostVsanOperationsDataPoint(now, value, metadata.AttributeVsanOperationTypeWrite)
 		}
 	case iopsUnmap:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterHostVsanOperationsDataPoint(now, value, "unmap")
+			v.mb.RecordVcenterHostVsanOperationsDataPoint(now, value, metadata.AttributeVsanOperationTypeUnmap)
 		}
 	case throughputRead:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterHostVsanThroughputDataPoint(now, value, "read")
+			v.mb.RecordVcenterHostVsanThroughputDataPoint(now, value, metadata.AttributeVsanThroughputDirectionRead)
 		}
 	case throughputWrite:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterHostVsanThroughputDataPoint(now, value, "write")
+			v.mb.RecordVcenterHostVsanThroughputDataPoint(now, value, metadata.AttributeVsanThroughputDirectionWrite)
 		}
 	case throughputUnmap:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterHostVsanThroughputDataPoint(now, value, "unmap")
+			v.mb.RecordVcenterHostVsanThroughputDataPoint(now, value, metadata.AttributeVsanThroughputDirectionUnmap)
 		}
 	case latencyAvgRead:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterHostVsanLatencyAvgDataPoint(now, value, "read")
+			v.mb.RecordVcenterHostVsanLatencyAvgDataPoint(now, value, metadata.AttributeVsanLatencyTypeRead)
 		}
 	case latencyAvgWrite:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterHostVsanLatencyAvgDataPoint(now, value, "write")
+			v.mb.RecordVcenterHostVsanLatencyAvgDataPoint(now, value, metadata.AttributeVsanLatencyTypeWrite)
 		}
 	case latencyAvgUnmap:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterHostVsanLatencyAvgDataPoint(now, value, "unmap")
+			v.mb.RecordVcenterHostVsanLatencyAvgDataPoint(now, value, metadata.AttributeVsanLatencyTypeUnmap)
 		}
 	case outstandingIO:
 		value, err := parseInt(val)
@@ -426,7 +440,7 @@ func (v *vcenterMetricScraper) recordHostVsanMetric(
 }
 
 func (v *vcenterMetricScraper) recordVMVsanMetric(
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	metricID string,
 	val string,
 	errs *scrapererror.ScrapeErrors,
@@ -437,42 +451,42 @@ func (v *vcenterMetricScraper) recordVMVsanMetric(
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterVMVsanOperationsDataPoint(now, value, "read")
+			v.mb.RecordVcenterVMVsanOperationsDataPoint(now, value, metadata.AttributeVsanOperationTypeRead)
 		}
 	case iopsWrite:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterVMVsanOperationsDataPoint(now, value, "write")
+			v.mb.RecordVcenterVMVsanOperationsDataPoint(now, value, metadata.AttributeVsanOperationTypeWrite)
 		}
 	case throughputRead:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterVMVsanThroughputDataPoint(now, value, "read")
+			v.mb.RecordVcenterVMVsanThroughputDataPoint(now, value, metadata.AttributeVsanThroughputDirectionRead)
 		}
 	case throughputWrite:
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterVMVsanThroughputDataPoint(now, value, "write")
+			v.mb.RecordVcenterVMVsanThroughputDataPoint(now, value, metadata.AttributeVsanThroughputDirectionWrite)
 		}
 	case "latencyReadAvg":
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterVMVsanLatencyAvgDataPoint(now, value, "read")
+			v.mb.RecordVcenterVMVsanLatencyAvgDataPoint(now, value, metadata.AttributeVsanLatencyTypeRead)
 		}
 	case "latencyWriteAvg":
 		value, err := parseInt(val)
 		if err != nil {
 			errs.AddPartial(1, err)
 		} else {
-			v.mb.RecordVcenterVMVsanLatencyAvgDataPoint(now, value, "write")
+			v.mb.RecordVcenterVMVsanLatencyAvgDataPoint(now, value, metadata.AttributeVsanLatencyTypeWrite)
 		}
 	}
 }

@@ -28,7 +28,10 @@ import (
 	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/simulator"
 	"github.com/vmware/govmomi/vim25"
+<<<<<<< HEAD
 	_ "github.com/vmware/govmomi/vsan/simulator"
+=======
+>>>>>>> 90efffd0a7ee403579e5b196713c4ca73e3ebafe
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.uber.org/zap"
@@ -41,6 +44,7 @@ import (
 func TestEndtoEnd_ESX(t *testing.T) {
 	simulator.Test(func(ctx context.Context, c *vim25.Client) {
 		cfg := &Config{
+<<<<<<< HEAD
 			MetricsConfig: &MetricsConfig{
 				TLSClientSetting: configtls.TLSClientSetting{
 					Insecure: true,
@@ -51,12 +55,23 @@ func TestEndtoEnd_ESX(t *testing.T) {
 		s := session.NewManager(c)
 
 		scraper := newVmwareVcenterScraper(zap.NewNop(), cfg)
+=======
+			TLSClientSetting: configtls.TLSClientSetting{
+				Insecure: true,
+			},
+			Metrics: metadata.DefaultMetricsSettings(),
+		}
+		s := session.NewManager(c)
+
+		scraper := newVmwareVcenterScraper(zap.NewNop(), cfg, componenttest.NewNopReceiverCreateSettings())
+>>>>>>> 90efffd0a7ee403579e5b196713c4ca73e3ebafe
 		scraper.client.moClient = &govmomi.Client{
 			Client:         c,
 			SessionManager: s,
 		}
 		scraper.client.vimDriver = c
 		scraper.client.finder = find.NewFinder(c)
+<<<<<<< HEAD
 
 		rcvr := &vcenterReceiver{
 			config:  cfg,
@@ -78,6 +93,34 @@ func TestEndtoEnd_ESX(t *testing.T) {
 		require.NoError(t, err)
 
 		err = rcvr.Shutdown(ctx)
+=======
+		// Performance metrics rely on time based publishing so this is inherently flaky for an
+		// integration test, so setting the performance manager to nil to not attempt to compare
+		// performance metrcs. Coverage for this is encompassed in ./scraper_test.go
+		scraper.client.pm = nil
+		err := scraper.Start(ctx, componenttest.NewNopHost())
+		require.NoError(t, err)
+
+		metrics, err := scraper.scrape(ctx)
+		require.NoError(t, err)
+		require.NotEmpty(t, metrics)
+
+		// the vcsim will auto assign the VM to one of the listed hosts, so this is a way to ignore the host.name for those vm metrics
+		// please see #10129
+		for i := 0; i < metrics.ResourceMetrics().Len(); i++ {
+			if _, ok := metrics.ResourceMetrics().At(i).Resource().Attributes().Get("vcenter.host.name"); ok {
+				metrics.ResourceMetrics().At(i).Resource().Attributes().Remove("vcenter.host.name")
+				metrics.ResourceMetrics().At(i).Resource().Attributes().InsertString("vcenter.host.name", "DC0_C0_H0")
+			}
+		}
+
+		goldenPath := filepath.Join("testdata", "metrics", "integration-metrics.json")
+		expectedMetrics, err := golden.ReadMetrics(goldenPath)
+		require.NoError(t, err)
+		require.NoError(t, scrapertest.CompareMetrics(expectedMetrics, metrics, scrapertest.IgnoreMetricValues()))
+
+		err = scraper.Shutdown(ctx)
+>>>>>>> 90efffd0a7ee403579e5b196713c4ca73e3ebafe
 		require.NoError(t, err)
 	})
 }

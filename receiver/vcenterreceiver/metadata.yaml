@@ -1,4 +1,4 @@
-name: vmwarevcenterreceiver
+name: vcenterreceiver
 
 resource_attributes:
   vcenter.cluster.name:
@@ -27,6 +27,12 @@ attributes:
     enum:
       - available
       - used
+  disk_type:
+    description: The type of storage device that is being recorded.
+    type: string
+    enum:
+      - virtual
+      - physical
   host_effective:
     value: effective
     description: Whether the host is effective in the vCenter cluster.
@@ -34,7 +40,7 @@ attributes:
     enum:
       - "true"
       - "false"
-  latency_direction:
+  disk_direction:
     value: direction
     description: The direction of disk latency.
     enum:
@@ -67,6 +73,7 @@ attributes:
     enum:
       - read
       - write
+      - unmap
   vsan_operation_type:
     value: type
     description: The type of vSAN operation.
@@ -82,6 +89,7 @@ attributes:
     enum:
       - read
       - write
+      - unmap
 
 metrics:
   vcenter.cluster.cpu.limit:
@@ -96,15 +104,6 @@ metrics:
   vcenter.cluster.cpu.effective:
     enabled: true
     description: The effective CPU available to the cluster. This value excludes CPU from hosts in maintenance mode or are unresponsive.
-    unit: "{MHz}"
-    sum:
-      monotonic: false
-      value_type: int
-      aggregation: cumulative
-    attributes: []
-  vcenter.cluster.cpu.used:
-    enabled: true
-    description: The amount of CPU used by the cluster.
     unit: "{MHz}"
     sum:
       monotonic: false
@@ -235,21 +234,22 @@ metrics:
     attributes: []
   vcenter.host.disk.throughput:
     enabled: true
-    description: The throughput to the host system's disk.
-    unit: By/s
+    description: Average number of kilobytes read from the disk each second.
+    unit: "{KBy/s}"
     sum:
       monotonic: false
       value_type: int
       aggregation: cumulative
-    attributes: []
+    attributes: [disk_direction]
+    extended_documentation: As measured over the most recent 20s interval. Aggregated disk I/O rate. Requires Performance Level 4.
   vcenter.host.disk.latency.avg:
     enabled: true
     description: The latency of operations to the host system's disk.
     unit: ms
     gauge:
       value_type: int
-    attributes: [latency_direction]
-    extended_documentation: This latency is the sum of the device and kernel write latencies. Requires Performance Counter level 2 for metric to populate.
+    attributes: [disk_direction]
+    extended_documentation: This latency is the sum of the device and kernel read and write latencies. Requires Performance Counter level 2 for metric to populate.
   vcenter.host.disk.latency.max:
     enabled: true
     description: Highest latency value across all disks used by the host.
@@ -257,7 +257,7 @@ metrics:
     gauge:
       value_type: int
     attributes: []
-    extended_documentation: As measured over the most recent 20s interval.
+    extended_documentation: As measured over the most recent 20s interval. Requires Performance Level 3.
   vcenter.host.memory.utilization:
     enabled: true
     description: The percentage of the host system's memory capacity that is being utilized.
@@ -453,10 +453,10 @@ metrics:
   vcenter.vm.disk.latency.avg:
     enabled: true
     description: The latency of operations to the virtual machine's disk.
-    unit: µs
+    unit: ms
     gauge:
       value_type: int
-    attributes: [latency_direction]
+    attributes: [disk_direction, disk_type]
     extended_documentation: Requires Performance Counter level 2 for metric to populate. As measured over the most recent 20s interval.
   vcenter.vm.disk.latency.max:
     enabled: true

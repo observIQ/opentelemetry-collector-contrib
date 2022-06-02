@@ -16,20 +16,15 @@ package vcenterreceiver // import "github.com/open-telemetry/opentelemetry-colle
 
 import (
 	"context"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component/componenterror"
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 )
 
 func TestCreateMetricsReceiver(t *testing.T) {
-	f := vcenterReceiverFactory{
-		receivers:    make(map[*Config]*vcenterReceiver),
-		receiverLock: &sync.RWMutex{},
-	}
 	testCases := []struct {
 		desc   string
 		testFn func(t *testing.T)
@@ -38,7 +33,7 @@ func TestCreateMetricsReceiver(t *testing.T) {
 			desc: "Default config",
 			testFn: func(t *testing.T) {
 				t.Parallel()
-				_, err := f.createMetricsReceiver(
+				_, err := createMetricsReceiver(
 					context.Background(),
 					componenttest.NewNopReceiverCreateSettings(),
 					createDefaultConfig(),
@@ -51,7 +46,7 @@ func TestCreateMetricsReceiver(t *testing.T) {
 			desc: "Nil config",
 			testFn: func(t *testing.T) {
 				t.Parallel()
-				_, err := f.createMetricsReceiver(
+				_, err := createMetricsReceiver(
 					context.Background(),
 					componenttest.NewNopReceiverCreateSettings(),
 					nil,
@@ -64,59 +59,17 @@ func TestCreateMetricsReceiver(t *testing.T) {
 			desc: "Nil consumer",
 			testFn: func(t *testing.T) {
 				t.Parallel()
-				_, err := f.createMetricsReceiver(
+				_, err := createMetricsReceiver(
 					context.Background(),
 					componenttest.NewNopReceiverCreateSettings(),
 					createDefaultConfig(),
 					nil,
 				)
-				require.ErrorIs(t, err, componenterror.ErrNilNextConsumer)
+				require.ErrorIs(t, err, component.ErrNilNextConsumer)
 			},
 		},
 	}
 
-	for _, testCase := range testCases {
-		t.Run(testCase.desc, testCase.testFn)
-	}
-}
-
-func TestCreateLogsReceiver(t *testing.T) {
-	f := vcenterReceiverFactory{
-		receivers:    make(map[*Config]*vcenterReceiver),
-		receiverLock: &sync.RWMutex{},
-	}
-	testCases := []struct {
-		desc   string
-		testFn func(t *testing.T)
-	}{
-		{
-			desc: "Default config",
-			testFn: func(t *testing.T) {
-				t.Parallel()
-				_, err := f.createLogsReceiver(
-					context.Background(),
-					componenttest.NewNopReceiverCreateSettings(),
-					createDefaultConfig(),
-					consumertest.NewNop(),
-				)
-
-				require.NoError(t, err)
-			},
-		},
-		{
-			desc: "Nil config",
-			testFn: func(t *testing.T) {
-				t.Parallel()
-				_, err := f.createLogsReceiver(
-					context.Background(),
-					componenttest.NewNopReceiverCreateSettings(),
-					nil,
-					consumertest.NewNop(),
-				)
-				require.ErrorIs(t, err, errConfigNotVcenter)
-			},
-		},
-	}
 	for _, testCase := range testCases {
 		t.Run(testCase.desc, testCase.testFn)
 	}

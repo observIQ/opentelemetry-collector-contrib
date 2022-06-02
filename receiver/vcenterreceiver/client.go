@@ -38,10 +38,11 @@ type vcenterClient struct {
 	vsanDriver *vsan.Client
 	finder     *find.Finder
 	pc         *property.Collector
+	pm         *performance.Manager
 	cfg        *Config
 }
 
-func newVmwarevcenterClient(c *Config) *vcenterClient {
+func newVcenterClient(c *Config) *vcenterClient {
 	return &vcenterClient{
 		cfg: c,
 	}
@@ -57,16 +58,16 @@ func (vc *vcenterClient) EnsureConnection(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	client, err := govmomi.NewClient(ctx, sdkURL, vc.cfg.MetricsConfig.Insecure)
+	client, err := govmomi.NewClient(ctx, sdkURL, vc.cfg.Insecure)
 	if err != nil {
 		return fmt.Errorf("unable to connect to vSphere SDK on listed endpoint: %w", err)
 	}
-	tlsCfg, err := vc.cfg.MetricsConfig.LoadTLSConfig()
+	tlsCfg, err := vc.cfg.LoadTLSConfig()
 	if err != nil {
 		return err
 	}
 	client.DefaultTransport().TLSClientConfig = tlsCfg
-	user := url.UserPassword(vc.cfg.MetricsConfig.Username, vc.cfg.MetricsConfig.Password)
+	user := url.UserPassword(vc.cfg.Username, vc.cfg.Password)
 	err = client.Login(ctx, user)
 	if err != nil {
 		return fmt.Errorf("unable to login to vcenter sdk: %w", err)
@@ -75,6 +76,7 @@ func (vc *vcenterClient) EnsureConnection(ctx context.Context) error {
 	vc.vimDriver = client.Client
 	vc.pc = property.DefaultCollector(vc.vimDriver)
 	vc.finder = find.NewFinder(vc.vimDriver)
+	vc.pm = performance.NewManager(vc.vimDriver)
 	return nil
 }
 
@@ -101,7 +103,17 @@ func (vc *vcenterClient) connectVSAN(ctx context.Context) error {
 }
 
 // Clusters returns the clusterComputeResources of the vSphere SDK
-func (vc *vcenterClient) Clusters(ctx context.Context) ([]*object.ClusterComputeResource, error) {
+func (vc *vcenterClient) Datacenters(ctx context.Context) ([]*object.Datacenter, error) {
+	datacenters, err := vc.finder.DatacenterList(ctx, "*")
+	if err != nil {
+		return []*object.Datacenter{}, fmt.Errorf("unable to get datacenter lists: %w", err)
+	}
+	return datacenters, nil
+}
+
+// Clusters returns the clusterComputeResources of the vSphere SDK
+func (vc *vcenterClient) Clusters(ctx context.Context, datacenter *object.Datacenter) ([]*object.ClusterComputeResource, error) {
+	vc.finder = vc.finder.SetDatacenter(datacenter)
 	clusters, err := vc.finder.ClusterComputeResourceList(ctx, "*")
 	if err != nil {
 		return []*object.ClusterComputeResource{}, err
@@ -119,11 +131,11 @@ func (vc *vcenterClient) ResourcePools(ctx context.Context) ([]*object.ResourceP
 }
 
 func (vc *vcenterClient) VMs(ctx context.Context) ([]*object.VirtualMachine, error) {
-	rps, err := vc.finder.VirtualMachineList(ctx, "*")
+	vms, err := vc.finder.VirtualMachineList(ctx, "*")
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve resource pools: %w", err)
 	}
-	return rps, err
+	return vms, err
 }
 
 type perfSampleResult struct {
@@ -137,17 +149,19 @@ func (vc *vcenterClient) performanceQuery(
 	names []string,
 	objs []vt.ManagedObjectReference,
 ) (*perfSampleResult, error) {
-	mgr := performance.NewManager(vc.vimDriver)
-	mgr.Sort = true
-	sample, err := mgr.SampleByName(ctx, spec, names, objs)
+	if vc.pm == nil {
+		return &perfSampleResult{}, nil
+	}
+	vc.pm.Sort = true
+	sample, err := vc.pm.SampleByName(ctx, spec, names, objs)
 	if err != nil {
 		return nil, err
 	}
-	result, err := mgr.ToMetricSeries(ctx, sample)
+	result, err := vc.pm.ToMetricSeries(ctx, sample)
 	if err != nil {
 		return nil, err
 	}
-	counterInfoByName, err := mgr.CounterInfoByName(ctx)
+	counterInfoByName, err := vc.pm.CounterInfoByName(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -17,7 +17,6 @@ package vcenterreceiver // import "github.com/open-telemetry/opentelemetry-colle
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
@@ -33,58 +32,29 @@ const (
 	typeStr = "vcenter"
 )
 
-type vcenterReceiverFactory struct {
-	receivers    map[*Config]*vcenterReceiver
-	receiverLock *sync.RWMutex
-}
-
 // NewFactory returns the receiver factory for the vcenterreceiver
 func NewFactory() component.ReceiverFactory {
-	f := &vcenterReceiverFactory{
-		receivers:    make(map[*Config]*vcenterReceiver),
-		receiverLock: &sync.RWMutex{},
-	}
 	return component.NewReceiverFactory(
 		typeStr,
 		createDefaultConfig,
-		component.WithMetricsReceiver(f.createMetricsReceiver),
+		component.WithMetricsReceiver(createMetricsReceiver),
 	)
 }
 
 func createDefaultConfig() config.Receiver {
 	return &Config{
-		MetricsConfig: &MetricsConfig{
-			ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
-				ReceiverSettings:   config.NewReceiverSettings(config.NewComponentID(typeStr)),
-				CollectionInterval: 2 * time.Minute,
-			},
-			TLSClientSetting: configtls.TLSClientSetting{},
-			Settings:         metadata.DefaultMetricsSettings(),
+		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+			ReceiverSettings:   config.NewReceiverSettings(config.NewComponentID(typeStr)),
+			CollectionInterval: 2 * time.Minute,
 		},
+		TLSClientSetting: configtls.TLSClientSetting{},
+		Metrics:          metadata.DefaultMetricsSettings(),
 	}
-}
-
-func (f *vcenterReceiverFactory) ensureReceiver(params component.ReceiverCreateSettings, config config.Receiver) *vcenterReceiver {
-	f.receiverLock.RLock()
-	receiver := f.receivers[config.(*Config)]
-	f.receiverLock.RUnlock()
-	if receiver != nil {
-		return receiver
-	}
-	rconfig := config.(*Config)
-	receiver = &vcenterReceiver{
-		logger: params.Logger,
-		config: rconfig,
-	}
-	f.receiverLock.Lock()
-	f.receivers[config.(*Config)] = receiver
-	f.receiverLock.Unlock()
-	return receiver
 }
 
 var errConfigNotVcenter = errors.New("config was not an vcenter receiver config")
 
-func (f *vcenterReceiverFactory) createMetricsReceiver(
+func createMetricsReceiver(
 	_ context.Context,
 	params component.ReceiverCreateSettings,
 	rConf config.Receiver,
@@ -94,8 +64,7 @@ func (f *vcenterReceiverFactory) createMetricsReceiver(
 	if !ok {
 		return nil, errConfigNotVcenter
 	}
-	r := f.ensureReceiver(params, cfg)
-	vr := newVmwareVcenterScraper(params.Logger, cfg)
+	vr := newVmwareVcenterScraper(params.Logger, cfg, params)
 	scraper, err := scraperhelper.NewScraper(
 		typeStr,
 		vr.scrape,
@@ -106,30 +75,10 @@ func (f *vcenterReceiverFactory) createMetricsReceiver(
 		return nil, err
 	}
 
-	rcvr, err := scraperhelper.NewScraperControllerReceiver(
-		&cfg.MetricsConfig.ScraperControllerSettings,
+	return scraperhelper.NewScraperControllerReceiver(
+		&cfg.ScraperControllerSettings,
 		params,
 		consumer,
 		scraperhelper.AddScraper(scraper),
 	)
-	if err != nil {
-		return nil, err
-	}
-	r.scraper = rcvr
-	return r, nil
-}
-
-func (f *vcenterReceiverFactory) createLogsReceiver(
-	c context.Context,
-	params component.ReceiverCreateSettings,
-	rConf config.Receiver,
-	consumer consumer.Logs,
-) (component.LogsReceiver, error) {
-	cfg, ok := rConf.(*Config)
-	if !ok {
-		return nil, errConfigNotVcenter
-	}
-	rcvr := f.ensureReceiver(params, cfg)
-	rcvr.logsReceiver = newLogsReceiver(cfg, params, consumer)
-	return rcvr, nil
 }

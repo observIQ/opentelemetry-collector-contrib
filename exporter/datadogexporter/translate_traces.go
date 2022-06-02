@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint:gocritic
 package datadogexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter"
 
 import (
@@ -181,7 +182,7 @@ func resourceSpansToDatadogSpans(rs ptrace.ResourceSpans, hostname string, cfg *
 
 	for i := 0; i < ilss.Len(); i++ {
 		ils := ilss.At(i)
-		extractInstrumentationLibraryTags(ils.Scope(), datadogTags)
+		extractScopeTags(ils.Scope(), datadogTags)
 		spans := ils.Spans()
 		for j := 0; j < spans.Len(); j++ {
 			span := spanToDatadogSpan(spans.At(j), resourceServiceName, datadogTags, cfg, spanNameMap)
@@ -378,7 +379,7 @@ func extractDatadogServiceName(datadogTags map[string]string) string {
 	return serviceName
 }
 
-func extractInstrumentationLibraryTags(il pcommon.InstrumentationScope, datadogTags map[string]string) {
+func extractScopeTags(il pcommon.InstrumentationScope, datadogTags map[string]string) {
 	if ilName := il.Name(); ilName != "" {
 		datadogTags[conventions.OtelLibraryName] = ilName
 	}

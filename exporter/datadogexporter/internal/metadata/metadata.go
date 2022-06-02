@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint:gocritic
 package metadata // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/metadata"
 
 import (
@@ -87,7 +88,7 @@ type Meta struct {
 	SocketFqdn string `json:"socket-fqdn,omitempty"`
 
 	// HostAliases are other available host names
-	HostAliases []string `json:"host-aliases,omitempty"`
+	HostAliases []string `json:"host_aliases,omitempty"`
 }
 
 // metadataFromAttributes gets metadata info from attributes following

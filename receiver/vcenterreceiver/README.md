@@ -2,32 +2,22 @@
 
 This receiver fetches metrics from a vCenter or ESXi host running VMware vSphere APIs.
 
-Supported pipeline types: `metrics` and `logs`(not implemented quite yet)
+Supported pipeline types: `metrics`
 
-> :construction: This receiver is in **BETA**. Configuration fields and metric data model are subject to change.
+> :construction: This receiver is in **Alpha**. Configuration fields and metric data model are subject to change.
 
 ## Prerequisites
 
 This receiver has been built to support ESXi and vCenter versions:
 
+- 7.5
 - 7.0
 - 6.7
-- 7.5
 
-A “Read Only” user assigned to a vSphere with permissions to the vCenter server, cluster and all subsequent resources being monitored. Must be specified in order for the receiver to retrieve information about them.
+A “Read Only” user assigned to a vSphere with permissions to the vCenter server, cluster and all subsequent resources being monitored must be specified in order for the receiver to retrieve information about them.
 
 ## Configuration
 
-Configuration is split up into `metrics` and `logs`
-
-```yaml
-receivers:
-    vcenter:
-      metrics:
-      logs:
-```
-
-### Metrics Configuration
 
 | Parameter | Default | Type | Notes |
 | --- | --- | --- | --- |
@@ -42,12 +32,11 @@ receivers:
 ```yaml
 receivers:
   vcenter:
-    metrics:
-      endpoint: http://localhost:15672
-      username: otelu
-      password: $VCENTER_PASSWORD
-      collection_interval: 5m
-      settings: []
+    endpoint: http://localhost:15672
+    username: otelu
+    password: $VCENTER_PASSWORD
+    collection_interval: 5m
+    metrics: []
 ```
 
 The full list of settings exposed for this receiver are documented [here](./config.go) with detailed sample configurations [here](./testdata/config.yaml). TLS config is documented further under the [opentelemetry collector's configtls package](https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configtls/README.md).

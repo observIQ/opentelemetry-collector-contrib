@@ -24,7 +24,8 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vsan/types"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/scrapererror"
 	"go.uber.org/zap"
 
@@ -43,71 +44,95 @@ type vcenterMetricScraper struct {
 func newVmwareVcenterScraper(
 	logger *zap.Logger,
 	config *Config,
+	settings component.ReceiverCreateSettings,
 ) *vcenterMetricScraper {
-	client := newVmwarevcenterClient(config)
+	client := newVcenterClient(config)
 	return &vcenterMetricScraper{
 		client: client,
 		config: config,
 		logger: logger,
-		mb:     metadata.NewMetricsBuilder(config.MetricsConfig.Settings),
+		mb:     metadata.NewMetricsBuilder(config.Metrics, settings.BuildInfo),
 	}
 }
 
 func (v *vcenterMetricScraper) Start(ctx context.Context, _ component.Host) error {
-	return v.client.EnsureConnection(ctx)
+	connectErr := v.client.EnsureConnection(ctx)
+	// don't fail to start if we cannot establish connection, just log an error
+	if connectErr != nil {
+		v.logger.Error(fmt.Sprintf("unable to establish a connection to the vSphere SDK %s", connectErr.Error()))
+	}
+	return nil
 }
 
 func (v *vcenterMetricScraper) Shutdown(ctx context.Context) error {
 	return v.client.Disconnect(ctx)
 }
 
-func (v *vcenterMetricScraper) scrape(ctx context.Context) (pdata.Metrics, error) {
+func (v *vcenterMetricScraper) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	if v.client == nil {
-		v.client = newVmwarevcenterClient(v.config)
+		v.client = newVcenterClient(v.config)
 	}
 
 	// ensure connection before scraping
 	if err := v.client.EnsureConnection(ctx); err != nil {
-		return pdata.NewMetrics(), fmt.Errorf("unable to connect to vSphere SDK: %w", err)
+		return pmetric.NewMetrics(), fmt.Errorf("unable to connect to vSphere SDK: %w", err)
 	}
-
-	err := v.collectClusters(ctx)
+	err := v.collectDatacenters(ctx)
 	return v.mb.Emit(), err
 }
 
-func (v *vcenterMetricScraper) collectClusters(ctx context.Context) error {
+func (v *vcenterMetricScraper) collectDatacenters(ctx context.Context) error {
+	datacenters, err := v.client.Datacenters(ctx)
+	if err != nil {
+		return err
+	}
 	errs := &scrapererror.ScrapeErrors{}
+	for _, dc := range datacenters {
+		v.collectClusters(ctx, dc, errs)
+	}
+	return errs.Combine()
+}
 
-	clusters, err := v.client.Clusters(ctx)
+func (v *vcenterMetricScraper) collectClusters(ctx context.Context, datacenter *object.Datacenter, errs *scrapererror.ScrapeErrors) {
+	clusters, err := v.client.Clusters(ctx, datacenter)
 	if err != nil {
 		errs.Add(err)
-		return errs.Combine()
+		return
 	}
-	now := pdata.NewTimestampFromTime(time.Now())
+	now := pcommon.NewTimestampFromTime(time.Now())
 
 	for _, c := range clusters {
 		v.collectHosts(ctx, now, c, errs)
 		v.collectDatastores(ctx, now, c, errs)
-		v.collectVMs(ctx, now, c, errs)
-		v.collectCluster(ctx, now, c, errs)
+		poweredOnVMs, poweredOffVMs := v.collectVMs(ctx, now, c, errs)
+		v.collectCluster(ctx, now, c, poweredOnVMs, poweredOffVMs, errs)
 	}
 	v.collectResourcePools(ctx, now, errs)
-
-	return errs.Combine()
 }
 
 func (v *vcenterMetricScraper) collectCluster(
 	ctx context.Context,
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	c *object.ClusterComputeResource,
+	poweredOnVMs, poweredOffVMs int64,
 	errs *scrapererror.ScrapeErrors,
 ) {
+	v.mb.RecordVcenterClusterVMCountDataPoint(now, poweredOnVMs, metadata.AttributeVMCountPowerStateOn)
+	v.mb.RecordVcenterClusterVMCountDataPoint(now, poweredOffVMs, metadata.AttributeVMCountPowerStateOff)
+
 	var moCluster mo.ClusterComputeResource
-	c.Properties(ctx, c.Reference(), []string{"summary"}, &moCluster)
+	err := c.Properties(ctx, c.Reference(), []string{"summary"}, &moCluster)
+	if err != nil {
+		errs.AddPartial(1, err)
+		return
+	}
 	s := moCluster.Summary.GetComputeResourceSummary()
 	v.mb.RecordVcenterClusterCPULimitDataPoint(now, int64(s.TotalCpu))
-	v.mb.RecordVcenterClusterHostCountDataPoint(now, int64(s.NumHosts-s.NumEffectiveHosts), "false")
-	v.mb.RecordVcenterClusterHostCountDataPoint(now, int64(s.NumEffectiveHosts), "true")
+	v.mb.RecordVcenterClusterCPUEffectiveDataPoint(now, int64(s.EffectiveCpu))
+	v.mb.RecordVcenterClusterMemoryEffectiveDataPoint(now, s.EffectiveMemory)
+	v.mb.RecordVcenterClusterMemoryLimitDataPoint(now, s.TotalMemory)
+	v.mb.RecordVcenterClusterHostCountDataPoint(now, int64(s.NumHosts-s.NumEffectiveHosts), metadata.AttributeHostEffectiveFalse)
+	v.mb.RecordVcenterClusterHostCountDataPoint(now, int64(s.NumEffectiveHosts), metadata.AttributeHostEffectiveTrue)
 
 	mor := c.Reference()
 	csvs, err := v.client.VSANCluster(ctx, &mor, time.Now().UTC(), time.Now().UTC())
@@ -123,7 +148,7 @@ func (v *vcenterMetricScraper) collectCluster(
 
 func (v *vcenterMetricScraper) collectDatastores(
 	ctx context.Context,
-	colTime pdata.Timestamp,
+	colTime pcommon.Timestamp,
 	cluster *object.ClusterComputeResource,
 	errs *scrapererror.ScrapeErrors,
 ) {
@@ -134,17 +159,22 @@ func (v *vcenterMetricScraper) collectDatastores(
 	}
 
 	for _, ds := range datastores {
-		v.collectDatastore(ctx, colTime, ds)
+		v.collectDatastore(ctx, colTime, ds, errs)
 	}
 }
 
 func (v *vcenterMetricScraper) collectDatastore(
 	ctx context.Context,
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	ds *object.Datastore,
+	errs *scrapererror.ScrapeErrors,
 ) {
 	var moDS mo.Datastore
-	ds.Properties(ctx, ds.Reference(), []string{"summary", "name"}, &moDS)
+	err := ds.Properties(ctx, ds.Reference(), []string{"summary", "name"}, &moDS)
+	if err != nil {
+		errs.AddPartial(1, err)
+		return
+	}
 
 	v.recordDatastoreProperties(now, moDS)
 	v.mb.EmitForResource(
@@ -154,7 +184,7 @@ func (v *vcenterMetricScraper) collectDatastore(
 
 func (v *vcenterMetricScraper) collectHosts(
 	ctx context.Context,
-	colTime pdata.Timestamp,
+	colTime pcommon.Timestamp,
 	cluster *object.ClusterComputeResource,
 	errs *scrapererror.ScrapeErrors,
 ) {
@@ -164,16 +194,23 @@ func (v *vcenterMetricScraper) collectHosts(
 		return
 	}
 
+	mor := cluster.Reference()
+	csvs, err := v.client.VSANHosts(ctx, &mor, time.Now().UTC(), time.Now().UTC())
+	if err != nil {
+		errs.AddPartial(1, err)
+	}
+
 	for _, h := range hosts {
-		v.collectHost(ctx, colTime, h, cluster, errs)
+		v.collectHost(ctx, colTime, h, cluster, csvs, errs)
 	}
 }
 
 func (v *vcenterMetricScraper) collectHost(
 	ctx context.Context,
-	now pdata.Timestamp,
+	now pcommon.Timestamp,
 	host *object.HostSystem,
 	cluster *object.ClusterComputeResource,
+	vsanCsvs []types.VsanPerfEntityMetricCSV,
 	errs *scrapererror.ScrapeErrors,
 ) {
 	var hwSum mo.HostSystem
@@ -190,6 +227,10 @@ func (v *vcenterMetricScraper) collectHost(
 	}
 	v.recordHostSystemMemoryUsage(now, hwSum)
 	v.recordHostPerformanceMetrics(ctx, hwSum, errs)
+	entityRef := fmt.Sprintf("host-domclient:%v",
+		hwSum.Config.VsanHostConfig.ClusterInfo.NodeUuid,
+	)
+	v.addVSANMetrics(vsanCsvs, entityRef, hostType, errs)
 	v.mb.EmitForResource(
 		metadata.WithVcenterHostName(host.Name()),
 		metadata.WithVcenterClusterName(cluster.Name()),
@@ -198,7 +239,7 @@ func (v *vcenterMetricScraper) collectHost(
 
 func (v *vcenterMetricScraper) collectResourcePools(
 	ctx context.Context,
-	ts pdata.Timestamp,
+	ts pcommon.Timestamp,
 	errs *scrapererror.ScrapeErrors,
 ) {
 	rps, err := v.client.ResourcePools(ctx)
@@ -208,11 +249,15 @@ func (v *vcenterMetricScraper) collectResourcePools(
 	}
 	for _, rp := range rps {
 		var moRP mo.ResourcePool
-		rp.Properties(ctx, rp.Reference(), []string{
+		err = rp.Properties(ctx, rp.Reference(), []string{
 			"summary",
 			"summary.quickStats",
 			"name",
 		}, &moRP)
+		if err != nil {
+			errs.AddPartial(1, err)
+			continue
+		}
 		v.recordResourcePool(ts, moRP)
 		v.mb.EmitForResource(metadata.WithVcenterResourcePoolName(rp.Name()))
 	}
@@ -220,16 +265,15 @@ func (v *vcenterMetricScraper) collectResourcePools(
 
 func (v *vcenterMetricScraper) collectVMs(
 	ctx context.Context,
-	colTime pdata.Timestamp,
+	colTime pcommon.Timestamp,
 	cluster *object.ClusterComputeResource,
 	errs *scrapererror.ScrapeErrors,
-) {
+) (poweredOnVMs int64, poweredOffVMs int64) {
 	vms, err := v.client.VMs(ctx)
 	if err != nil {
 		errs.AddPartial(1, err)
 		return
 	}
-	poweredOffVMs := 0
 	for _, vm := range vms {
 		var moVM mo.VirtualMachine
 		err := vm.Properties(ctx, vm.Reference(), []string{
@@ -247,6 +291,8 @@ func (v *vcenterMetricScraper) collectVMs(
 
 		if string(moVM.Runtime.PowerState) == "poweredOff" {
 			poweredOffVMs++
+		} else {
+			poweredOnVMs++
 		}
 
 		host, err := vm.HostSystem(ctx)
@@ -260,7 +306,13 @@ func (v *vcenterMetricScraper) collectVMs(
 			return
 		}
 
-		v.collectVM(ctx, colTime, moVM, errs)
+		mor := cluster.Reference()
+		vsanCsvs, err := v.client.VSANVirtualMachines(ctx, &mor, time.Now().UTC(), time.Now().UTC())
+		if err != nil {
+			errs.AddPartial(1, err)
+		}
+
+		v.collectVM(ctx, colTime, moVM, vsanCsvs, errs)
 		v.mb.EmitForResource(
 			metadata.WithVcenterVMName(vm.Name()),
 			metadata.WithVcenterVMID(vmUUID),
@@ -268,19 +320,22 @@ func (v *vcenterMetricScraper) collectVMs(
 			metadata.WithVcenterHostName(hostname),
 		)
 	}
-
-	v.mb.RecordVcenterClusterVMCountDataPoint(colTime, int64(len(vms))-int64(poweredOffVMs), metadata.AttributeVMCountPowerState.On)
-	v.mb.RecordVcenterClusterVMCountDataPoint(colTime, int64(poweredOffVMs), metadata.AttributeVMCountPowerState.Off)
+	return poweredOnVMs, poweredOffVMs
 }
 
 func (v *vcenterMetricScraper) collectVM(
 	ctx context.Context,
-	colTime pdata.Timestamp,
+	colTime pcommon.Timestamp,
 	vm mo.VirtualMachine,
+	vsanCsvs []types.VsanPerfEntityMetricCSV,
 	errs *scrapererror.ScrapeErrors,
 ) {
 	v.recordVMUsages(colTime, vm)
 	v.recordVMPerformance(ctx, vm, errs)
+
+	vmUUID := vm.Config.InstanceUuid
+	entityRefID := fmt.Sprintf("virtual-machine:%s", vmUUID)
+	v.addVSANMetrics(vsanCsvs, entityRefID, vmType, errs)
 }
 
 type vsanType int
@@ -316,7 +371,7 @@ func (v *vcenterMetricScraper) addVSANMetrics(
 			continue
 		}
 
-		ts := pdata.NewTimestampFromTime(time)
+		ts := pcommon.NewTimestampFromTime(time)
 		for _, val := range r.Value {
 			values := strings.Split(val.Values, ",")
 			for _, value := range values {
