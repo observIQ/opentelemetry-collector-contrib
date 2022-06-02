@@ -4,26 +4,28 @@ go 1.17
 
 require (
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.11
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/collector v0.28.0
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/collector v0.30.2-0.20220512190557-875976f87023
 	github.com/census-instrumentation/opencensus-proto v0.3.0
-	github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.50.0
-	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/opencensus v0.50.0
+	github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.52.0
+	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/opencensus v0.52.0
 	github.com/stretchr/testify v1.7.1
 	go.opencensus.io v0.23.0
-	go.opentelemetry.io/collector v0.50.1-0.20220429151328-041f39835df7
-	go.opentelemetry.io/collector/pdata v0.50.1-0.20220429151328-041f39835df7
-	go.opentelemetry.io/collector/semconv v0.50.1-0.20220429151328-041f39835df7
+	go.opentelemetry.io/collector v0.52.0
+	go.opentelemetry.io/collector/pdata v0.52.0
+	go.opentelemetry.io/collector/semconv v0.52.0
 	google.golang.org/api v0.77.0
 	google.golang.org/genproto v0.0.0-20220421151946-72621c1f0bd3
-	google.golang.org/grpc v1.46.0
+	google.golang.org/grpc v1.46.2
 	google.golang.org/protobuf v1.28.0
 )
 
 require (
+	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.6.1 // indirect
 	cloud.google.com/go/monitoring v1.4.0 // indirect
 	cloud.google.com/go/trace v1.2.0 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.4.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.7.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.31.0 // indirect
 	github.com/aws/aws-sdk-go v1.44.5 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -35,11 +37,15 @@ require (
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/knadh/koanf v1.4.1 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/stretchr/objx v0.1.1 // indirect
 	go.opentelemetry.io/otel v1.7.0 // indirect
 	go.opentelemetry.io/otel/metric v0.30.0 // indirect
@@ -59,7 +65,6 @@ require (
 require (
 	cloud.google.com/go/logging v1.4.2
 	github.com/googleapis/gax-go/v2 v2.3.0
-	go.opentelemetry.io/collector/model v0.49.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
 )

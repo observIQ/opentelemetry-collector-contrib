@@ -15,36 +15,36 @@
 package googlecloudexporter
 
 import (
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/plog"
 	sev "google.golang.org/genproto/googleapis/logging/type"
 )
 
-var fastSev = map[pdata.SeverityNumber]sev.LogSeverity{
-	pdata.SeverityNumberFATAL:     sev.LogSeverity_CRITICAL,
-	pdata.SeverityNumberERROR:     sev.LogSeverity_ERROR,
-	pdata.SeverityNumberWARN:      sev.LogSeverity_WARNING,
-	pdata.SeverityNumberINFO:      sev.LogSeverity_INFO,
-	pdata.SeverityNumberDEBUG:     sev.LogSeverity_DEBUG,
-	pdata.SeverityNumberTRACE:     sev.LogSeverity_DEBUG,
-	pdata.SeverityNumberUNDEFINED: sev.LogSeverity_DEFAULT,
+var fastSev = map[plog.SeverityNumber]sev.LogSeverity{
+	plog.SeverityNumberFATAL:     sev.LogSeverity_CRITICAL,
+	plog.SeverityNumberERROR:     sev.LogSeverity_ERROR,
+	plog.SeverityNumberWARN:      sev.LogSeverity_WARNING,
+	plog.SeverityNumberINFO:      sev.LogSeverity_INFO,
+	plog.SeverityNumberDEBUG:     sev.LogSeverity_DEBUG,
+	plog.SeverityNumberTRACE:     sev.LogSeverity_DEBUG,
+	plog.SeverityNumberUNDEFINED: sev.LogSeverity_DEFAULT,
 }
 
 // convertSeverity converts from otel's severity to google's severity levels
-func convertSeverity(s pdata.SeverityNumber) sev.LogSeverity {
+func convertSeverity(s plog.SeverityNumber) sev.LogSeverity {
 	if logSev, ok := fastSev[s]; ok {
 		return logSev
 	}
 
 	switch {
-	case s >= pdata.SeverityNumberFATAL:
+	case s >= plog.SeverityNumberFATAL:
 		return sev.LogSeverity_CRITICAL
-	case s >= pdata.SeverityNumberERROR:
+	case s >= plog.SeverityNumberERROR:
 		return sev.LogSeverity_ERROR
-	case s >= pdata.SeverityNumberWARN:
+	case s >= plog.SeverityNumberWARN:
 		return sev.LogSeverity_WARNING
-	case s >= pdata.SeverityNumberINFO:
+	case s >= plog.SeverityNumberINFO:
 		return sev.LogSeverity_INFO
-	case s > pdata.SeverityNumberTRACE:
+	case s > plog.SeverityNumberTRACE:
 		return sev.LogSeverity_DEBUG
 	default:
 		return sev.LogSeverity_DEFAULT

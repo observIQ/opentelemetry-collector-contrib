@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/logging/v2"
 
@@ -33,12 +33,12 @@ func BenchmarkBuildRequest(b *testing.B) {
 		ProjectID:    "project",
 	}
 
-	logs := pdata.NewLogs()
-	resourceLogsSlice := pdata.NewResourceLogsSlice()
+	logs := plog.NewLogs()
+	resourceLogsSlice := plog.NewResourceLogsSlice()
 	resourceLogs := resourceLogsSlice.AppendEmpty()
-	scopeLogsSlice := pdata.NewScopeLogsSlice()
+	scopeLogsSlice := plog.NewScopeLogsSlice()
 	scopeLogs := scopeLogsSlice.AppendEmpty()
-	logRecordSlice := pdata.NewLogRecordSlice()
+	logRecordSlice := plog.NewLogRecordSlice()
 
 	for i := 0; i < 1000; i++ {
 		logRecord := logRecordSlice.AppendEmpty()
@@ -61,12 +61,12 @@ func BenchmarkBuildRequest(b *testing.B) {
 }
 
 func TestBuildRequest(t *testing.T) {
-	logs := pdata.NewLogs()
-	resourceLogsSlice := pdata.NewResourceLogsSlice()
+	logs := plog.NewLogs()
+	resourceLogsSlice := plog.NewResourceLogsSlice()
 	resourceLogs := resourceLogsSlice.AppendEmpty()
-	scopeLogsSlice := pdata.NewScopeLogsSlice()
+	scopeLogsSlice := plog.NewScopeLogsSlice()
 	scopeLogs := scopeLogsSlice.AppendEmpty()
-	logRecordSlice := pdata.NewLogRecordSlice()
+	logRecordSlice := plog.NewLogRecordSlice()
 
 	logRecordOne := logRecordSlice.AppendEmpty()
 	populateLogRecord(logRecordOne, "request 1")
@@ -108,12 +108,12 @@ func TestBuildRequest(t *testing.T) {
 }
 
 func TestImpossibleEntry(t *testing.T) {
-	logs := pdata.NewLogs()
-	resourceLogsSlice := pdata.NewResourceLogsSlice()
+	logs := plog.NewLogs()
+	resourceLogsSlice := plog.NewResourceLogsSlice()
 	resourceLogs := resourceLogsSlice.AppendEmpty()
-	scopeLogsSlice := pdata.NewScopeLogsSlice()
+	scopeLogsSlice := plog.NewScopeLogsSlice()
 	scopeLogs := scopeLogsSlice.AppendEmpty()
-	logRecordSlice := pdata.NewLogRecordSlice()
+	logRecordSlice := plog.NewLogRecordSlice()
 
 	logRecordOne := logRecordSlice.AppendEmpty()
 	populateLogRecord(logRecordOne, "Test Request")
@@ -138,7 +138,7 @@ func TestImpossibleEntry(t *testing.T) {
 	require.Len(t, requests, 0)
 }
 
-func populateLogRecord(logRecord pdata.LogRecord, data string) {
+func populateLogRecord(logRecord plog.LogRecord, data string) {
 	testhelpers.NewLogRecordBuilderWithLogRecord(logRecord).
 		WithBodyString(data).
 		WithTimeStamp().

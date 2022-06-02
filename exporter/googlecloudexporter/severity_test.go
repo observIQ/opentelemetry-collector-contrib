@@ -18,79 +18,79 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/plog"
 	sev "google.golang.org/genproto/googleapis/logging/type"
 )
 
 func TestConvertSeverity(t *testing.T) {
 	testCases := []struct {
 		name         string
-		origSeverity pdata.SeverityNumber
+		origSeverity plog.SeverityNumber
 		newSeverity  sev.LogSeverity
 	}{
 		{
 			name:         "original severity above FATAL",
-			origSeverity: pdata.SeverityNumberFATAL4,
+			origSeverity: plog.SeverityNumberFATAL4,
 			newSeverity:  sev.LogSeverity_CRITICAL,
 		},
 		{
 			name:         "original severity equals FATAL",
-			origSeverity: pdata.SeverityNumberFATAL,
+			origSeverity: plog.SeverityNumberFATAL,
 			newSeverity:  sev.LogSeverity_CRITICAL,
 		},
 		{
 			name:         "original severity above ERROR",
-			origSeverity: pdata.SeverityNumberERROR4,
+			origSeverity: plog.SeverityNumberERROR4,
 			newSeverity:  sev.LogSeverity_ERROR,
 		},
 		{
 			name:         "original severity equals ERROR",
-			origSeverity: pdata.SeverityNumberERROR,
+			origSeverity: plog.SeverityNumberERROR,
 			newSeverity:  sev.LogSeverity_ERROR,
 		},
 		{
 			name:         "original severity above WARN",
-			origSeverity: pdata.SeverityNumberWARN4,
+			origSeverity: plog.SeverityNumberWARN4,
 			newSeverity:  sev.LogSeverity_WARNING,
 		},
 		{
 			name:         "original severity equals WARN",
-			origSeverity: pdata.SeverityNumberWARN4,
+			origSeverity: plog.SeverityNumberWARN4,
 			newSeverity:  sev.LogSeverity_WARNING,
 		},
 		{
 			name:         "original severity above INFO",
-			origSeverity: pdata.SeverityNumberINFO4,
+			origSeverity: plog.SeverityNumberINFO4,
 			newSeverity:  sev.LogSeverity_INFO,
 		},
 		{
 			name:         "original severity equals INFO",
-			origSeverity: pdata.SeverityNumberINFO,
+			origSeverity: plog.SeverityNumberINFO,
 			newSeverity:  sev.LogSeverity_INFO,
 		},
 		{
 			name:         "original severity above DEBUG",
-			origSeverity: pdata.SeverityNumberDEBUG4,
+			origSeverity: plog.SeverityNumberDEBUG4,
 			newSeverity:  sev.LogSeverity_DEBUG,
 		},
 		{
 			name:         "original severity equals DEBUG",
-			origSeverity: pdata.SeverityNumberDEBUG,
+			origSeverity: plog.SeverityNumberDEBUG,
 			newSeverity:  sev.LogSeverity_DEBUG,
 		},
 		{
 			name:         "original severity above TRACE",
-			origSeverity: pdata.SeverityNumberTRACE4,
+			origSeverity: plog.SeverityNumberTRACE4,
 			newSeverity:  sev.LogSeverity_DEBUG,
 		},
 		{
 			name:         "original severity equals TRACE",
-			origSeverity: pdata.SeverityNumberTRACE,
+			origSeverity: plog.SeverityNumberTRACE,
 			newSeverity:  sev.LogSeverity_DEBUG,
 		},
 		{
 			name:         "original severity equals UNDEFINED",
-			origSeverity: pdata.SeverityNumberUNDEFINED,
+			origSeverity: plog.SeverityNumberUNDEFINED,
 			newSeverity:  sev.LogSeverity_DEFAULT,
 		},
 		{

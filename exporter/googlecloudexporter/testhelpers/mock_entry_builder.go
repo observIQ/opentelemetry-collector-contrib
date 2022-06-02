@@ -16,7 +16,7 @@ package testhelpers
 
 import (
 	mock "github.com/stretchr/testify/mock"
-	pdata "go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/plog"
 	logging "google.golang.org/genproto/googleapis/logging/v2"
 )
 
@@ -26,11 +26,11 @@ type MockEntryBuilder struct {
 }
 
 // Build provides a mock function with given fields: oLogRecord
-func (_m *MockEntryBuilder) Build(oLogRecord *pdata.LogRecord) (*logging.LogEntry, error) {
+func (_m *MockEntryBuilder) Build(oLogRecord *plog.LogRecord) (*logging.LogEntry, error) {
 	ret := _m.Called(oLogRecord)
 
 	var r0 *logging.LogEntry
-	if rf, ok := ret.Get(0).(func(*pdata.LogRecord) *logging.LogEntry); ok {
+	if rf, ok := ret.Get(0).(func(*plog.LogRecord) *logging.LogEntry); ok {
 		r0 = rf(oLogRecord)
 	} else {
 		if ret.Get(0) != nil {
@@ -39,7 +39,7 @@ func (_m *MockEntryBuilder) Build(oLogRecord *pdata.LogRecord) (*logging.LogEntr
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*pdata.LogRecord) error); ok {
+	if rf, ok := ret.Get(1).(func(*plog.LogRecord) error); ok {
 		r1 = rf(oLogRecord)
 	} else {
 		r1 = ret.Error(1)

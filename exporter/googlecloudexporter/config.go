@@ -26,7 +26,7 @@ import (
 // Config defines configuration for Google Cloud exporter.
 type Config struct {
 	config.ExporterSettings `mapstructure:",squash"`
-	collector.Config        `mapstructure:",squash"`
+	CollectorConfig         `mapstructure:",squash"`
 
 	// Timeout for all API calls. If not set, defaults to 12 seconds.
 	exporterhelper.TimeoutSettings `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
@@ -34,6 +34,14 @@ type Config struct {
 	exporterhelper.RetrySettings   `mapstructure:"retry_on_failure"`
 
 	LogConfig LogConfig `mapstructure:"log"`
+}
+
+// CollectorConfig defines configuration for Google Cloud exporter (not using theirs because conflict with LogConfig).
+type CollectorConfig struct {
+	ProjectID    string                 `mapstructure:"project"`
+	UserAgent    string                 `mapstructure:"user_agent"`
+	TraceConfig  collector.TraceConfig  `mapstructure:"trace"`
+	MetricConfig collector.MetricConfig `mapstructure:"metric"`
 }
 
 type LogConfig struct {
@@ -53,8 +61,32 @@ func (cfg *Config) Validate() error {
 	if err := cfg.ExporterSettings.Validate(); err != nil {
 		return fmt.Errorf("exporter settings are invalid :%w", err)
 	}
-	if err := collector.ValidateConfig(cfg.Config); err != nil {
+	googleConfig := convertToGoogleConfig(cfg.CollectorConfig)
+	if err := collector.ValidateConfig(googleConfig); err != nil {
 		return fmt.Errorf("googlecloud exporter settings are invalid :%w", err)
 	}
 	return nil
+}
+
+func convertToGoogleConfig(cfg CollectorConfig) collector.Config {
+	googleConfig := collector.Config{
+		ProjectID:    cfg.ProjectID,
+		UserAgent:    cfg.UserAgent,
+		TraceConfig:  cfg.TraceConfig,
+		MetricConfig: cfg.MetricConfig,
+		LogConfig:    collector.LogConfig{},
+	}
+
+	return googleConfig
+}
+
+func convertToCollectorConfig(cfg collector.Config) CollectorConfig {
+	collectorConfig := CollectorConfig{
+		ProjectID:    cfg.ProjectID,
+		UserAgent:    cfg.UserAgent,
+		TraceConfig:  cfg.TraceConfig,
+		MetricConfig: cfg.MetricConfig,
+	}
+
+	return collectorConfig
 }

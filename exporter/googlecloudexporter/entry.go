@@ -19,7 +19,8 @@ import (
 	"net/url"
 	"strings"
 
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/plog"
 	"google.golang.org/genproto/googleapis/logging/v2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -29,7 +30,7 @@ const defaultMaxEntrySize = 256000
 
 // EntryBuilder is an interface for building google cloud logging entries.
 type EntryBuilder interface {
-	Build(oLogRecord *pdata.LogRecord) (*logging.LogEntry, error)
+	Build(oLogRecord *plog.LogRecord) (*logging.LogEntry, error)
 }
 
 // GoogleEntryBuilder is used to build google cloud logging entries.
@@ -42,7 +43,7 @@ type GoogleEntryBuilder struct {
 
 // Build builds a google cloud logging entry from an OTEL log record.
 // Build will throw an error if the entry size is larger than the max entry size.
-func (g *GoogleEntryBuilder) Build(oLogRecord *pdata.LogRecord) (*logging.LogEntry, error) {
+func (g *GoogleEntryBuilder) Build(oLogRecord *plog.LogRecord) (*logging.LogEntry, error) {
 	logEntry := &logging.LogEntry{
 		Timestamp: timestamppb.New(oLogRecord.Timestamp().AsTime()),
 		Severity:  convertSeverity(oLogRecord.SeverityNumber()),
@@ -70,7 +71,7 @@ func (g *GoogleEntryBuilder) Build(oLogRecord *pdata.LogRecord) (*logging.LogEnt
 
 // setLogName sets the log name of the google log entry using the indicated attribute on the OTEL log record.
 // setLogName will return an error if the provided nameFields are impoperly formatted or don't point to a string.
-func (g *GoogleEntryBuilder) setLogName(oLogRecord *pdata.LogRecord, logEntry *logging.LogEntry) error {
+func (g *GoogleEntryBuilder) setLogName(oLogRecord *plog.LogRecord, logEntry *logging.LogEntry) error {
 	if g.NameFields == nil {
 		return nil
 	}
@@ -86,7 +87,7 @@ func (g *GoogleEntryBuilder) setLogName(oLogRecord *pdata.LogRecord, logEntry *l
 }
 
 // setTrace sets the trace of the google log entry using the equivalent field on the OTEL log record.
-func (g *GoogleEntryBuilder) setTrace(oLogRecord *pdata.LogRecord, logEntry *logging.LogEntry) {
+func (g *GoogleEntryBuilder) setTrace(oLogRecord *plog.LogRecord, logEntry *logging.LogEntry) {
 	if oLogRecord.TraceID().HexString() == "" {
 		return
 	}
@@ -95,7 +96,7 @@ func (g *GoogleEntryBuilder) setTrace(oLogRecord *pdata.LogRecord, logEntry *log
 }
 
 // setSpanID sets the span id of the google log entry using the equivalent field on the OTEL log record.
-func (g *GoogleEntryBuilder) setSpanID(oLogRecord *pdata.LogRecord, logEntry *logging.LogEntry) {
+func (g *GoogleEntryBuilder) setSpanID(oLogRecord *plog.LogRecord, logEntry *logging.LogEntry) {
 	if oLogRecord.SpanID().HexString() == "" {
 		return
 	}
@@ -104,7 +105,7 @@ func (g *GoogleEntryBuilder) setSpanID(oLogRecord *pdata.LogRecord, logEntry *lo
 }
 
 // setLabels sets the labels of the google log entry based on the supplied OTEL log record's attributes.
-func (g *GoogleEntryBuilder) setLabels(oLogRecord *pdata.LogRecord, logEntry *logging.LogEntry) {
+func (g *GoogleEntryBuilder) setLabels(oLogRecord *plog.LogRecord, logEntry *logging.LogEntry) {
 	attrs := oLogRecord.Attributes()
 	if attrs.Len() == 0 {
 		return
@@ -112,7 +113,7 @@ func (g *GoogleEntryBuilder) setLabels(oLogRecord *pdata.LogRecord, logEntry *lo
 
 	labels := make(map[string]string)
 
-	findAttrsForAttrMap := func(key string, value pdata.Value) bool {
+	findAttrsForAttrMap := func(key string, value pcommon.Value) bool {
 		for k, v := range retrieveNestedAttributes(key, value) {
 			labels[k] = v
 		}
@@ -126,15 +127,15 @@ func (g *GoogleEntryBuilder) setLabels(oLogRecord *pdata.LogRecord, logEntry *lo
 
 // setPayload sets the payload of the google log entry based on the supplied OTEL log record.
 // setPayload will throw an error if there is a problem converting the OTEL log record's body.
-func (g *GoogleEntryBuilder) setPayload(oLogRecord *pdata.LogRecord, logEntry *logging.LogEntry) error {
+func (g *GoogleEntryBuilder) setPayload(oLogRecord *plog.LogRecord, logEntry *logging.LogEntry) error {
 	switch oLogRecord.Body().Type() {
-	case pdata.ValueTypeString:
+	case pcommon.ValueTypeString:
 		logEntry.Payload = &logging.LogEntry_TextPayload{TextPayload: oLogRecord.Body().AsString()}
 		return nil
-	case pdata.ValueTypeBytes:
-		logEntry.Payload = &logging.LogEntry_TextPayload{TextPayload: string(oLogRecord.Body().BytesVal())}
+	case pcommon.ValueTypeBytes:
+		logEntry.Payload = &logging.LogEntry_TextPayload{TextPayload: string(oLogRecord.Body().MBytesVal())}
 		return nil
-	case pdata.ValueTypeMap:
+	case pcommon.ValueTypeMap:
 		structValue, err := convertToProto(oLogRecord.Body().MapVal().AsRaw())
 		if err != nil {
 			return fmt.Errorf("failed to convert record of type map[string]interface: %w", err)
@@ -155,7 +156,7 @@ func createLogName(projectID, name string) string {
 // findLogName traverses through the OTEL log record's attributes using the given name fields.
 // It returns the first matching value that can be converted to a string.
 // findLogName can throw an error if a given name field isn't in thet correct structure, or if it doesn't result in a string value.
-func findLogName(oLogRecord *pdata.LogRecord, nameFields []string) (string, error) {
+func findLogName(oLogRecord *plog.LogRecord, nameFields []string) (string, error) {
 	currAttr := oLogRecord.Attributes()
 
 	for _, nameField := range nameFields {
@@ -171,18 +172,18 @@ func findLogName(oLogRecord *pdata.LogRecord, nameFields []string) (string, erro
 
 			if i < len-1 {
 				switch nextAttr.Type() {
-				case pdata.ValueTypeMap:
+				case pcommon.ValueTypeMap:
 					currAttr = nextAttr.MapVal()
 				default:
-					return "", fmt.Errorf("key: %s value must be of type: %s but instead is: %s", nameFieldKey, pdata.ValueTypeMap, nextAttr.Type())
+					return "", fmt.Errorf("key: %s value must be of type: %s but instead is: %s", nameFieldKey, pcommon.ValueTypeMap, nextAttr.Type())
 				}
 			} else {
 				switch nextAttr.Type() {
-				case pdata.ValueTypeMap:
-					return "", fmt.Errorf("name value can't be of type: %s", pdata.ValueTypeMap)
+				case pcommon.ValueTypeMap:
+					return "", fmt.Errorf("name value can't be of type: %s", pcommon.ValueTypeMap)
 				default:
 					name := nextAttr.AsString()
-					currAttr.Delete(nameFieldKey)
+					currAttr.Remove(nameFieldKey)
 					return name, nil
 				}
 			}
@@ -194,12 +195,12 @@ func findLogName(oLogRecord *pdata.LogRecord, nameFields []string) (string, erro
 
 // retrieveNestedAttributes takes a given key and OTEL attribute value (from an AttributeMapValue)
 // and returns a list of all nested values within the attribute.
-func retrieveNestedAttributes(key string, value pdata.Value) map[string]string {
+func retrieveNestedAttributes(key string, value pcommon.Value) map[string]string {
 	nestedAttrs := make(map[string]string)
 
 	switch value.Type() {
-	case pdata.ValueTypeMap:
-		findAttrsForAttrMap := func(nestedKey string, nestedValue pdata.Value) bool {
+	case pcommon.ValueTypeMap:
+		findAttrsForAttrMap := func(nestedKey string, nestedValue pcommon.Value) bool {
 			for k, v := range retrieveNestedAttributes(key+"."+nestedKey, nestedValue) {
 				nestedAttrs[k] = v
 			}

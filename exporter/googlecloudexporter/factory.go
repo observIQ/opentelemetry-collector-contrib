@@ -67,7 +67,7 @@ func createDefaultConfig() config.Exporter {
 		TimeoutSettings:  exporterhelper.TimeoutSettings{Timeout: defaultTimeout},
 		RetrySettings:    exporterhelper.NewDefaultRetrySettings(),
 		QueueSettings:    exporterhelper.NewDefaultQueueSettings(),
-		Config:           collector.DefaultConfig(),
+		CollectorConfig:  convertToCollectorConfig(collector.DefaultConfig()),
 	}
 }
 
@@ -82,7 +82,7 @@ func createTracesExporter(
 	} else {
 		eCfg = cfg.(*Config)
 	}
-	tExp, err := collector.NewGoogleCloudTracesExporter(ctx, eCfg.Config, params.BuildInfo.Version, eCfg.Timeout)
+	tExp, err := collector.NewGoogleCloudTracesExporter(ctx, convertToGoogleConfig(eCfg.CollectorConfig), params.BuildInfo.Version, eCfg.Timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func createMetricsExporter(
 		return newLegacyGoogleCloudMetricsExporter(eCfg, params)
 	}
 	eCfg := cfg.(*Config)
-	mExp, err := collector.NewGoogleCloudMetricsExporter(ctx, eCfg.Config, params.TelemetrySettings.Logger, params.BuildInfo.Version, eCfg.Timeout)
+	mExp, err := collector.NewGoogleCloudMetricsExporter(ctx, convertToGoogleConfig(eCfg.CollectorConfig), params.TelemetrySettings.Logger, params.BuildInfo.Version, eCfg.Timeout)
 	if err != nil {
 		return nil, err
 	}

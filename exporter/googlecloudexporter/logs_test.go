@@ -19,13 +19,12 @@ import (
 	"net"
 	"testing"
 
-	"github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/collector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/plog"
 	"google.golang.org/genproto/googleapis/api/monitoredres"
 	"google.golang.org/genproto/googleapis/logging/v2"
 	"google.golang.org/grpc"
@@ -72,7 +71,7 @@ func TestGoogleCloudLogExport(t *testing.T) {
 		{
 			name: "Standard",
 			cfg: &Config{
-				Config: collector.Config{
+				CollectorConfig: CollectorConfig{
 					ProjectID: "idk",
 				},
 				ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
@@ -85,7 +84,7 @@ func TestGoogleCloudLogExport(t *testing.T) {
 		{
 			name: "Standard_WithoutSendingQueue",
 			cfg: &Config{
-				Config: collector.Config{
+				CollectorConfig: CollectorConfig{
 					ProjectID: "idk",
 				},
 				ExporterSettings: config.NewExporterSettings(config.NewComponentID(typeStr)),
@@ -120,12 +119,12 @@ func TestGoogleCloudLogExport(t *testing.T) {
 			require.NoError(t, err)
 			defer func() { require.NoError(t, le.Shutdown(context.Background())) }()
 
-			logs := pdata.NewLogs()
-			resourceLogsSlice := pdata.NewResourceLogsSlice()
+			logs := plog.NewLogs()
+			resourceLogsSlice := plog.NewResourceLogsSlice()
 			resourceLogs := resourceLogsSlice.AppendEmpty()
-			scopeLogsSlice := pdata.NewScopeLogsSlice()
+			scopeLogsSlice := plog.NewScopeLogsSlice()
 			scopeLogs := scopeLogsSlice.AppendEmpty()
-			logRecordSlice := pdata.NewLogRecordSlice()
+			logRecordSlice := plog.NewLogRecordSlice()
 
 			logRecordOne := logRecordSlice.AppendEmpty()
 			populateLogRecord(logRecordOne, "request 1")

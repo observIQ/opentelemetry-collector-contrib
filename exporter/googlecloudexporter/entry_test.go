@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/plog"
 	"google.golang.org/genproto/googleapis/logging/v2"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -30,7 +30,7 @@ import (
 func TestBuildEntry(t *testing.T) {
 	testCases := []struct {
 		name          string
-		otelRecord    *pdata.LogRecord
+		otelRecord    *plog.LogRecord
 		builder       GoogleEntryBuilder
 		expectedEntry *logging.LogEntry
 		expectedErr   string

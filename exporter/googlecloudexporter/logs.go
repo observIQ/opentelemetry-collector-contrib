@@ -24,7 +24,7 @@ import (
 	"go.opencensus.io/plugin/ocgrpc"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/zap"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -51,16 +51,16 @@ func setVersionInUserAgent(cfg *Config, version string) {
 func generateClientOptions(cfg *Config) ([]option.ClientOption, error) {
 	var copts []option.ClientOption
 	// option.WithUserAgent is used by the Trace exporter, but not the Metric exporter (see comment below)
-	if cfg.Config.UserAgent != "" {
-		copts = append(copts, option.WithUserAgent(cfg.Config.UserAgent))
+	if cfg.CollectorConfig.UserAgent != "" {
+		copts = append(copts, option.WithUserAgent(cfg.CollectorConfig.UserAgent))
 	}
 	if cfg.LogConfig.Endpoint != "" {
 		if cfg.LogConfig.UseInsecure {
 			// option.WithGRPCConn option takes precedent over all other supplied options so the
 			// following user agent will be used by both exporters if we reach this branch
 			var dialOpts []grpc.DialOption
-			if cfg.Config.UserAgent != "" {
-				dialOpts = append(dialOpts, grpc.WithUserAgent(cfg.Config.UserAgent))
+			if cfg.CollectorConfig.UserAgent != "" {
+				dialOpts = append(dialOpts, grpc.WithUserAgent(cfg.CollectorConfig.UserAgent))
 			}
 			conn, err := grpc.Dial(cfg.LogConfig.Endpoint, append(dialOpts, grpc.WithStatsHandler(&ocgrpc.ClientHandler{}), grpc.WithTransportCredentials(insecure.NewCredentials()))...)
 			if err != nil {
@@ -96,12 +96,12 @@ func newGoogleCloudLogsExporter(cfg *Config, set component.ExporterCreateSetting
 
 	entryBuilder := &GoogleEntryBuilder{
 		MaxEntrySize: defaultMaxEntrySize,
-		ProjectID:    cfg.Config.ProjectID,
+		ProjectID:    cfg.CollectorConfig.ProjectID,
 		NameFields:   cfg.LogConfig.NameFields,
 	}
 	requestBuilder := &GoogleRequestBuilder{
 		MaxRequestSize: defaultMaxRequestSize,
-		ProjectID:      cfg.Config.ProjectID,
+		ProjectID:      cfg.CollectorConfig.ProjectID,
 		EntryBuilder:   entryBuilder,
 		SugaredLogger:  set.Logger.Sugar(),
 	}
@@ -122,8 +122,8 @@ func newGoogleCloudLogsExporter(cfg *Config, set component.ExporterCreateSetting
 		exporterhelper.WithRetry(cfg.RetrySettings))
 }
 
-// pushLogs converts all pdata.Logs to google logging api format and creates them in google cloud
-func (le *logsExporter) pushLogs(ctx context.Context, logs pdata.Logs) error {
+// pushLogs converts all plog.Logs to google logging api format and creates them in google cloud
+func (le *logsExporter) pushLogs(ctx context.Context, logs plog.Logs) error {
 	len := logs.ResourceLogs().Len()
 	if len == 0 {
 		return nil

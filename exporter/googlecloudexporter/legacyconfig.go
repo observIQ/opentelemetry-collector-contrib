@@ -82,20 +82,20 @@ func toNewConfig(cfg *LegacyConfig) *Config {
 		TimeoutSettings:  cfg.TimeoutSettings,
 		QueueSettings:    cfg.QueueSettings,
 		RetrySettings:    cfg.RetrySettings,
-		Config:           collector.DefaultConfig(),
+		CollectorConfig:  convertToCollectorConfig(collector.DefaultConfig()),
 	}
-	newCfg.Config.ProjectID = cfg.ProjectID
-	newCfg.Config.UserAgent = cfg.UserAgent
-	newCfg.Config.MetricConfig.ClientConfig.Endpoint = cfg.Endpoint
-	newCfg.Config.TraceConfig.ClientConfig.Endpoint = cfg.Endpoint
-	newCfg.Config.MetricConfig.ClientConfig.UseInsecure = cfg.UseInsecure
-	newCfg.Config.TraceConfig.ClientConfig.UseInsecure = cfg.UseInsecure
-	newCfg.Config.MetricConfig.ClientConfig.GetClientOptions = cfg.GetClientOptions
-	newCfg.Config.TraceConfig.ClientConfig.GetClientOptions = cfg.GetClientOptions
+	newCfg.CollectorConfig.ProjectID = cfg.ProjectID
+	newCfg.CollectorConfig.UserAgent = cfg.UserAgent
+	newCfg.CollectorConfig.MetricConfig.ClientConfig.Endpoint = cfg.Endpoint
+	newCfg.CollectorConfig.TraceConfig.ClientConfig.Endpoint = cfg.Endpoint
+	newCfg.CollectorConfig.MetricConfig.ClientConfig.UseInsecure = cfg.UseInsecure
+	newCfg.CollectorConfig.TraceConfig.ClientConfig.UseInsecure = cfg.UseInsecure
+	newCfg.CollectorConfig.MetricConfig.ClientConfig.GetClientOptions = cfg.GetClientOptions
+	newCfg.CollectorConfig.TraceConfig.ClientConfig.GetClientOptions = cfg.GetClientOptions
 	if cfg.MetricConfig.Prefix != "" {
-		newCfg.Config.MetricConfig.Prefix = cfg.MetricConfig.Prefix
+		newCfg.CollectorConfig.MetricConfig.Prefix = cfg.MetricConfig.Prefix
 	}
-	newCfg.Config.MetricConfig.SkipCreateMetricDescriptor = cfg.MetricConfig.SkipCreateMetricDescriptor
+	newCfg.CollectorConfig.MetricConfig.SkipCreateMetricDescriptor = cfg.MetricConfig.SkipCreateMetricDescriptor
 	newCfg.LogConfig.NameFields = cfg.LogConfig.NameFields
 	return newCfg
 }

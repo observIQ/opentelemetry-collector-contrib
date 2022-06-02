@@ -53,20 +53,28 @@ func TestLoadConfig(t *testing.T) {
 
 	assert.Equal(t, len(cfg.Exporters), 2)
 
-	r0 := cfg.Exporters[config.NewComponentID(typeStr)]
-	assert.Equal(t, r0, factory.CreateDefaultConfig())
+	r0 := cfg.Exporters[config.NewComponentID(typeStr)].(*Config)
+	defaultConfig := factory.CreateDefaultConfig().(*Config)
+	defaultConfig.CollectorConfig.MetricConfig.GetMetricName = nil
+	r0.CollectorConfig.MetricConfig.GetMetricName = nil
+	defaultConfig.CollectorConfig.MetricConfig.MapMonitoredResource = nil
+	r0.CollectorConfig.MetricConfig.MapMonitoredResource = nil
+	assert.Equal(t, r0, defaultConfig)
 
 	r1 := cfg.Exporters[config.NewComponentIDWithName(typeStr, "customname")].(*Config)
+	r1.CollectorConfig.MetricConfig.GetMetricName = nil
+	r1.CollectorConfig.MetricConfig.MapMonitoredResource = nil
 	assert.Equal(t, r1,
 		&Config{
 			ExporterSettings: config.NewExporterSettings(config.NewComponentIDWithName(typeStr, "customname")),
 			TimeoutSettings: exporterhelper.TimeoutSettings{
 				Timeout: 20 * time.Second,
 			},
-			Config: collector.Config{
+			CollectorConfig: CollectorConfig{
 				ProjectID: "my-project",
 				UserAgent: "opentelemetry-collector-contrib {{version}}",
 				MetricConfig: collector.MetricConfig{
+					CumulativeNormalization:          true,
 					Prefix:                           "prefix",
 					SkipCreateMetricDescriptor:       true,
 					KnownDomains:                     []string{"googleapis.com", "kubernetes.io", "istio.io", "knative.dev"},

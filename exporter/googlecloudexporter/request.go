@@ -15,7 +15,7 @@
 package googlecloudexporter
 
 import (
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/api/monitoredres"
 	"google.golang.org/genproto/googleapis/logging/v2"
@@ -26,7 +26,7 @@ const defaultMaxRequestSize = 10000000
 
 // RequestBuilder is an interface for creating requests to the google logging API
 type RequestBuilder interface {
-	Build(resourceLogGroups *pdata.Logs) []*logging.WriteLogEntriesRequest
+	Build(resourceLogGroups *plog.Logs) []*logging.WriteLogEntriesRequest
 }
 
 // GoogleRequestBuilder builds google cloud logging requests
@@ -38,7 +38,7 @@ type GoogleRequestBuilder struct {
 }
 
 // Build builds a series of google write log entries requests from OTEL logs
-func (g *GoogleRequestBuilder) Build(logs *pdata.Logs) []*logging.WriteLogEntriesRequest {
+func (g *GoogleRequestBuilder) Build(logs *plog.Logs) []*logging.WriteLogEntriesRequest {
 	protoEntries := []*logging.LogEntry{}
 
 	resourceLogGroups := logs.ResourceLogs()
