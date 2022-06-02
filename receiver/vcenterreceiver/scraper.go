@@ -77,6 +77,8 @@ func (v *vcenterMetricScraper) scrape(ctx context.Context) (pmetric.Metrics, err
 	if err := v.client.EnsureConnection(ctx); err != nil {
 		return pmetric.NewMetrics(), fmt.Errorf("unable to connect to vSphere SDK: %w", err)
 	}
+
+	_ = v.client.connectVSAN(ctx)
 	err := v.collectDatacenters(ctx)
 	return v.mb.Emit(), err
 }
