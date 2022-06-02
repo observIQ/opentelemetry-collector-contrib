@@ -227,10 +227,10 @@ func (v *vcenterMetricScraper) collectHost(
 	}
 	v.recordHostSystemMemoryUsage(now, hwSum)
 	v.recordHostPerformanceMetrics(ctx, hwSum, errs)
-	entityRef := fmt.Sprintf("host-domclient:%v",
-		hwSum.Config.VsanHostConfig.ClusterInfo.NodeUuid,
-	)
-	v.addVSANMetrics(vsanCsvs, entityRef, hostType, errs)
+	if hwSum.Config.VsanHostConfig != nil {
+		entityRef := fmt.Sprintf("host-domclient:%v", hwSum.Config.VsanHostConfig.ClusterInfo.NodeUuid)
+		v.addVSANMetrics(vsanCsvs, entityRef, hostType, errs)
+	}
 	v.mb.EmitForResource(
 		metadata.WithVcenterHostName(host.Name()),
 		metadata.WithVcenterClusterName(cluster.Name()),
