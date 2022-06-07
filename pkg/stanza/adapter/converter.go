@@ -276,11 +276,12 @@ func (c *Converter) aggregationLoop(ctx context.Context) {
 
 func (c *Converter) flushLoop(ctx context.Context) {
 	defer c.wg.Done()
+	spanCtx, span := tracer.Tracer.Start(ctx, "flushLoop")
+	defer span.End()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	spanCtx, span := tracer.Tracer.Start(ctx, "flushLoop")
-	defer span.End()
 	for {
 		select {
 		case <-c.stopChan:
