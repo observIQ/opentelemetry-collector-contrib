@@ -22,10 +22,36 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/components"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/otelcontribcore"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/tracer"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func main() {
+	ctx := context.Background()
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	fmt.Println(projectID)
+	exporter, err := trace.New(trace.WithProjectID(projectID))
+	if err != nil {
+		log.Fatalf("texporter.NewExporter: %v", err)
+	}
+
+	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))
+	defer tp.ForceFlush(ctx)
+	otel.SetTracerProvider(tp)
+
+	tracer.Tracer = otel.GetTracerProvider().Tracer("otel-collector")
+	spanCtx, span := tracer.Tracer.Start(ctx, "main")
+	tracer.Context = spanCtx
+	defer span.End()
+
 	otelcontribcore.RunWithComponents(components.Components)
 }

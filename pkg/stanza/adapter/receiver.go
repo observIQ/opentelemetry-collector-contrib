@@ -25,10 +25,12 @@ import (
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/extension/experimental/storage"
 	"go.opentelemetry.io/collector/obsreport"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/pipeline"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/tracer"
 )
 
 type receiver struct {
@@ -43,6 +45,7 @@ type receiver struct {
 	converter     *Converter
 	logger        *zap.Logger
 	obsrecv       *obsreport.Receiver
+	span          trace.Span
 }
 
 // Ensure this receiver adheres to required interface
@@ -54,6 +57,9 @@ func (r *receiver) Start(ctx context.Context, host component.Host) error {
 	r.cancel = cancel
 	r.logger.Info("Starting stanza receiver")
 
+	spanCtx, span := tracer.Tracer.Start(rctx, "stanzaReceiver")
+	r.span = span
+
 	if setErr := r.setStorageClient(ctx, host); setErr != nil {
 		return fmt.Errorf("storage client: %s", setErr)
 	}
@@ -62,20 +68,20 @@ func (r *receiver) Start(ctx context.Context, host component.Host) error {
 		return fmt.Errorf("start stanza: %s", obsErr)
 	}
 
-	r.converter.Start()
+	r.converter.Start(ctx)
 
 	// Below we're starting 2 loops:
 	// * one which reads all the logs produced by the emitter and then forwards
 	//   them to converter
 	// ...
 	r.wg.Add(1)
-	go r.emitterLoop(rctx)
+	go r.emitterLoop(spanCtx)
 
 	// ...
 	// * second one which reads all the logs produced by the converter
 	//   (aggregated by Resource) and then calls consumer to consumer them.
 	r.wg.Add(1)
-	go r.consumerLoop(rctx)
+	go r.consumerLoop(spanCtx)
 
 	// Those 2 loops are started in separate goroutines because batching in
 	// the emitter loop can cause a flush, caused by either reaching the max
@@ -91,6 +97,8 @@ func (r *receiver) Start(ctx context.Context, host component.Host) error {
 // in converter.
 func (r *receiver) emitterLoop(ctx context.Context) {
 	defer r.wg.Done()
+	spanCtx, span := tracer.Tracer.Start(ctx, "emitterLoop")
+	defer span.End()
 
 	// Don't create done channel on every iteration.
 	doneChan := ctx.Done()
@@ -104,8 +112,9 @@ func (r *receiver) emitterLoop(ctx context.Context) {
 			if !ok {
 				continue
 			}
-
+			_, emitSpan := tracer.Tracer.Start(spanCtx, "emit")
 			r.converter.Batch(e)
+			emitSpan.End()
 		}
 	}
 }
@@ -113,6 +122,8 @@ func (r *receiver) emitterLoop(ctx context.Context) {
 // consumerLoop reads converter log entries and calls the consumer to consumer them.
 func (r *receiver) consumerLoop(ctx context.Context) {
 	defer r.wg.Done()
+	spanCtx, span := tracer.Tracer.Start(ctx, "consumerLoop")
+	defer span.End()
 
 	// Don't create done channel on every iteration.
 	doneChan := ctx.Done()
@@ -129,10 +140,14 @@ func (r *receiver) consumerLoop(ctx context.Context) {
 				continue
 			}
 			obsrecvCtx := r.obsrecv.StartLogsOp(ctx)
+
+			_, consumeSpan := tracer.Tracer.Start(spanCtx, "consumeLogs")
 			cErr := r.consumer.ConsumeLogs(ctx, pLogs)
 			if cErr != nil {
 				r.logger.Error("ConsumeLogs() failed", zap.Error(cErr))
 			}
+			consumeSpan.End()
+
 			r.obsrecv.EndLogsOp(obsrecvCtx, "stanza", pLogs.LogRecordCount(), cErr)
 		}
 	}
@@ -145,6 +160,7 @@ func (r *receiver) Shutdown(ctx context.Context) error {
 	r.converter.Stop()
 	r.cancel()
 	r.wg.Wait()
+	r.span.End()
 
 	clientErr := r.storageClient.Close(ctx)
 	return multierr.Combine(pipelineErr, clientErr)

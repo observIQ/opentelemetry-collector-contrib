@@ -29,9 +29,11 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/entry"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/tracer"
 )
 
 // Converter converts a batch of entry.Entry into plog.Logs aggregating translated
@@ -98,6 +100,7 @@ type Converter struct {
 	wg sync.WaitGroup
 
 	logger *zap.Logger
+	span   trace.Span
 }
 
 type ConverterOption interface {
@@ -140,19 +143,21 @@ func NewConverter(opts ...ConverterOption) *Converter {
 	return c
 }
 
-func (c *Converter) Start() {
+func (c *Converter) Start(ctx context.Context) {
 	c.logger.Debug("Starting log converter", zap.Int("worker_count", c.workerCount))
+	spanCtx, span := tracer.Tracer.Start(ctx, "converter")
+	c.span = span
 
 	for i := 0; i < c.workerCount; i++ {
 		c.wg.Add(1)
-		go c.workerLoop()
+		go c.workerLoop(spanCtx)
 	}
 
 	c.wg.Add(1)
-	go c.aggregationLoop()
+	go c.aggregationLoop(spanCtx)
 
 	c.wg.Add(1)
-	go c.flushLoop()
+	go c.flushLoop(spanCtx)
 }
 
 func (c *Converter) Stop() {
@@ -160,6 +165,7 @@ func (c *Converter) Stop() {
 		close(c.stopChan)
 		c.wg.Wait()
 		close(c.pLogsChan)
+		c.span.End()
 	})
 }
 
@@ -177,8 +183,10 @@ type workerItem struct {
 // workerLoop is responsible for obtaining log entries from Batch() calls,
 // converting them to plog.LogRecords and sending them together with the
 // associated Resource through the aggregationChan for aggregation.
-func (c *Converter) workerLoop() {
+func (c *Converter) workerLoop(ctx context.Context) {
 	defer c.wg.Done()
+	spanCtx, span := tracer.Tracer.Start(ctx, "workerLoop")
+	defer span.End()
 
 	for {
 
@@ -191,6 +199,7 @@ func (c *Converter) workerLoop() {
 				return
 			}
 
+			_, convertSpan := tracer.Tracer.Start(spanCtx, "convert")
 			workerItems := make([]workerItem, 0, len(entries))
 
 			for _, e := range entries {
@@ -202,19 +211,24 @@ func (c *Converter) workerLoop() {
 					LogRecord:  lr,
 				})
 			}
+			convertSpan.End()
 
+			_, sendSpan := tracer.Tracer.Start(spanCtx, "sendConverted")
 			select {
 			case c.aggregationChan <- workerItems:
 			case <-c.stopChan:
 			}
+			sendSpan.End()
 		}
 	}
 }
 
 // aggregationLoop is responsible for receiving the converted log entries and aggregating
 // them by Resource.
-func (c *Converter) aggregationLoop() {
+func (c *Converter) aggregationLoop(ctx context.Context) {
 	defer c.wg.Done()
+	spanCtx, span := tracer.Tracer.Start(ctx, "aggregationLoop")
+	defer span.End()
 
 	resourceIDToLogs := make(map[uint64]plog.Logs)
 
@@ -224,7 +238,7 @@ func (c *Converter) aggregationLoop() {
 			if !ok {
 				return
 			}
-
+			_, aggregateSpan := tracer.Tracer.Start(spanCtx, "aggregate")
 			for _, wi := range workerItems {
 				pLogs, ok := resourceIDToLogs[wi.ResourceID]
 				if ok {
@@ -253,29 +267,33 @@ func (c *Converter) aggregationLoop() {
 				c.flushChan <- pLogs
 				delete(resourceIDToLogs, r)
 			}
-
+			aggregateSpan.End()
 		case <-c.stopChan:
 			return
 		}
 	}
 }
 
-func (c *Converter) flushLoop() {
+func (c *Converter) flushLoop(ctx context.Context) {
 	defer c.wg.Done()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	spanCtx, span := tracer.Tracer.Start(ctx, "flushLoop")
+	defer span.End()
 	for {
 		select {
 		case <-c.stopChan:
 			return
 
 		case pLogs := <-c.flushChan:
+			_, flushSpan := tracer.Tracer.Start(spanCtx, "flush")
 			if err := c.flush(ctx, pLogs); err != nil {
 				c.logger.Debug("Problem sending log entries",
 					zap.Error(err),
 				)
 			}
+			flushSpan.End()
 		}
 	}
 }

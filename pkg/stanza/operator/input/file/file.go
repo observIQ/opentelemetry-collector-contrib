@@ -23,11 +23,13 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/entry"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/helper"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/tracer"
 )
 
 // Input is an operator that monitors files for entries
@@ -61,23 +63,27 @@ type Input struct {
 	wg         sync.WaitGroup
 	firstCheck bool
 	cancel     context.CancelFunc
+	span       trace.Span
 }
 
 // Start will start the file monitoring process
 func (f *Input) Start(persister operator.Persister) error {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(tracer.Context)
 	f.cancel = cancel
 	f.firstCheck = true
 
 	f.persister = persister
 
+	spanCtx, span := tracer.Tracer.Start(ctx, "fileInputOperator")
+	f.span = span
+
 	// Load offsets from disk
-	if err := f.loadLastPollFiles(ctx); err != nil {
+	if err := f.loadLastPollFiles(spanCtx); err != nil {
 		return fmt.Errorf("read known files from database: %s", err)
 	}
 
 	// Start polling goroutine
-	f.startPoller(ctx)
+	f.startPoller(spanCtx)
 
 	return nil
 }
@@ -92,6 +98,7 @@ func (f *Input) Stop() error {
 	}
 	f.knownFiles = nil
 	f.cancel = nil
+	f.span.End()
 	return nil
 }
 
@@ -118,6 +125,10 @@ func (f *Input) startPoller(ctx context.Context) {
 
 // poll checks all the watched paths for new entries
 func (f *Input) poll(ctx context.Context) {
+	spanCtx, span := tracer.Tracer.Start(ctx, "poll")
+	defer span.End()
+
+	_, matchSpan := tracer.Tracer.Start(spanCtx, "findMatches")
 	f.maxBatchFiles = f.MaxConcurrentFiles / 2
 	var matches []string
 	if len(f.queuedMatches) > f.maxBatchFiles {
@@ -143,8 +154,11 @@ func (f *Input) poll(ctx context.Context) {
 			}
 		}
 	}
+	matchSpan.End()
 
+	_, makeSpan := tracer.Tracer.Start(spanCtx, "makeReaders")
 	readers := f.makeReaders(matches)
+	makeSpan.End()
 	f.firstCheck = false
 
 	var wg sync.WaitGroup
@@ -152,14 +166,22 @@ func (f *Input) poll(ctx context.Context) {
 		wg.Add(1)
 		go func(r *Reader) {
 			defer wg.Done()
-			r.ReadToEnd(ctx)
+			r.ReadToEnd(spanCtx)
 		}(reader)
 	}
 	wg.Wait()
 
-	f.roller.roll(ctx, readers)
+	_, rollSpan := tracer.Tracer.Start(spanCtx, "roll")
+	f.roller.roll(spanCtx, readers)
+	rollSpan.End()
+
+	_, saveSpan := tracer.Tracer.Start(spanCtx, "saveCurrent")
 	f.saveCurrent(readers)
-	f.syncLastPollFiles(ctx)
+	saveSpan.End()
+
+	_, syncSpan := tracer.Tracer.Start(spanCtx, "syncLast")
+	f.syncLastPollFiles(spanCtx)
+	syncSpan.End()
 }
 
 // makeReaders takes a list of paths, then creates readers from each of those paths,

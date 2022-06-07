@@ -25,6 +25,7 @@ import (
 	"go.opentelemetry.io/collector/service"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/otelcontribcore/internal/version"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/tracer"
 )
 
 type ComponentsFunc func() (component.Factories, error)
@@ -48,7 +49,7 @@ func RunWithComponents(componentsFunc ComponentsFunc) {
 
 func runInteractive(params service.CollectorSettings) error {
 	cmd := service.NewCommand(params)
-	if err := cmd.Execute(); err != nil {
+	if err := cmd.ExecuteContext(tracer.Context); err != nil {
 		return fmt.Errorf("collector server run finished with error: %w", err)
 	}
 
