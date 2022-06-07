@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/transform"
@@ -117,8 +118,11 @@ func (r *Reader) InitializeOffset(startAtBeginning bool) error {
 
 // ReadToEnd will read until the end of the file
 func (r *Reader) ReadToEnd(ctx context.Context) {
+	var count float64
+
 	_, span := tracer.Tracer.Start(ctx, "readToEnd")
 	defer span.End()
+	defer span.SetAttributes(attribute.Float64("entries", count))
 
 	if _, err := r.file.Seek(r.Offset, 0); err != nil {
 		r.Errorw("Failed to seek", zap.Error(err))
@@ -146,6 +150,7 @@ func (r *Reader) ReadToEnd(ctx context.Context) {
 		if err := r.emit(ctx, scanner.Bytes()); err != nil {
 			r.Error("Failed to emit entry", zap.Error(err))
 		}
+		count++
 		r.Offset = scanner.Pos()
 	}
 }
