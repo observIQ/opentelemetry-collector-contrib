@@ -122,7 +122,6 @@ func (r *Reader) ReadToEnd(ctx context.Context) {
 
 	_, span := tracer.Tracer.Start(ctx, "readToEnd")
 	defer span.End()
-	defer span.SetAttributes(attribute.Float64("entries", count))
 
 	if _, err := r.file.Seek(r.Offset, 0); err != nil {
 		r.Errorw("Failed to seek", zap.Error(err))
@@ -153,6 +152,8 @@ func (r *Reader) ReadToEnd(ctx context.Context) {
 		count++
 		r.Offset = scanner.Pos()
 	}
+
+	span.SetAttributes(attribute.Float64("entries", count))
 }
 
 // Close will close the file
