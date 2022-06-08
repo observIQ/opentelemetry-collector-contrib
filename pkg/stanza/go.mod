@@ -12,6 +12,7 @@ require (
 	github.com/observiq/nanojack v0.0.0-20201106172433-343928847ebc
 	github.com/stretchr/testify v1.7.2
 	go.opentelemetry.io/collector v0.52.1-0.20220603175357-6fb884b2dbdc
+	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/tracer v0.52.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/exp v0.0.0-20200331195152-e8c3332aa8e5 // indirect
 	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad
@@ -84,3 +85,5 @@ require (
 )
 
 replace github.com/googleapis/gnostic v0.5.6 => github.com/googleapis/gnostic v0.5.5
+
+replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/tracer => ../tracer

@@ -3,6 +3,7 @@ module github.com/open-telemetry/opentelemetry-collector-contrib
 go 1.17
 
 require (
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.6.1
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/alibabacloudlogserviceexporter v0.52.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awscloudwatchlogsexporter v0.52.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter v0.52.0
@@ -62,6 +63,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/common v0.52.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.52.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza v0.52.0
+	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/tracer v0.52.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor v0.52.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/cumulativetodeltaprocessor v0.52.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatorateprocessor v0.52.0
@@ -144,6 +146,8 @@ require (
 	github.com/prometheus/prometheus v0.36.0
 	github.com/stretchr/testify v1.7.2
 	go.opentelemetry.io/collector v0.52.1-0.20220603175357-6fb884b2dbdc
+	go.opentelemetry.io/otel v1.7.0
+	go.opentelemetry.io/otel/sdk v1.7.0
 	go.uber.org/multierr v1.8.0
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
 )
@@ -183,7 +187,6 @@ require (
 	github.com/GehirnInc/crypt v0.0.0-20200316065508-bb7000b8a962 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v0.32.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/collector v0.30.2-0.20220512190557-875976f87023 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.6.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.30.1 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/ReneKroon/ttlcache/v2 v2.11.0 // indirect
@@ -489,10 +492,8 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.32.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.32.0 // indirect
 	go.opentelemetry.io/contrib/zpages v0.32.0 // indirect
-	go.opentelemetry.io/otel v1.7.0 // indirect
 	go.opentelemetry.io/otel/exporters/prometheus v0.30.0 // indirect
 	go.opentelemetry.io/otel/metric v0.30.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.7.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v0.30.0 // indirect
 	go.opentelemetry.io/otel/trace v1.7.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
@@ -703,6 +704,8 @@ replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/experiment
 replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/resourcetotelemetry => ./pkg/resourcetotelemetry
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza => ./pkg/stanza
+
+replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/tracer => ./pkg/tracer
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/jaeger => ./pkg/translator/jaeger
 
