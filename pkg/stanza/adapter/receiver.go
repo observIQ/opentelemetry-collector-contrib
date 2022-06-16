@@ -40,9 +40,10 @@ type receiver struct {
 	emitter       *LogEmitter
 	consumer      consumer.Logs
 	storageClient storage.Client
-	converter     *Converter
-	logger        *zap.Logger
-	obsrecv       *obsreport.Receiver
+	// converter     *Converter
+	converter *SimpleConverter
+	logger    *zap.Logger
+	obsrecv   *obsreport.Receiver
 }
 
 // Ensure this receiver adheres to required interface
@@ -68,8 +69,8 @@ func (r *receiver) Start(ctx context.Context, host component.Host) error {
 	// * one which reads all the logs produced by the emitter and then forwards
 	//   them to converter
 	// ...
-	r.wg.Add(1)
-	go r.emitterLoop(rctx)
+	// r.wg.Add(1)
+	// go r.emitterLoop(rctx)
 
 	// ...
 	// * second one which reads all the logs produced by the converter
@@ -90,24 +91,24 @@ func (r *receiver) Start(ctx context.Context, host component.Host) error {
 // emitterLoop reads the log entries produced by the emitter and batches them
 // in converter.
 func (r *receiver) emitterLoop(ctx context.Context) {
-	defer r.wg.Done()
+	// defer r.wg.Done()
 
-	// Don't create done channel on every iteration.
-	doneChan := ctx.Done()
-	for {
-		select {
-		case <-doneChan:
-			r.logger.Debug("Receive loop stopped")
-			return
+	// // Don't create done channel on every iteration.
+	// doneChan := ctx.Done()
+	// for {
+	// 	select {
+	// 	case <-doneChan:
+	// 		r.logger.Debug("Receive loop stopped")
+	// 		return
 
-		case e, ok := <-r.emitter.logChan:
-			if !ok {
-				continue
-			}
+	// 	case e, ok := <-r.emitter.logChan:
+	// 		if !ok {
+	// 			continue
+	// 		}
 
-			r.converter.Batch(e)
-		}
-	}
+	// 		// r.converter.Batch(e)
+	// 	}
+	// }
 }
 
 // consumerLoop reads converter log entries and calls the consumer to consumer them.

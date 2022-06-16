@@ -68,6 +68,13 @@ func LogEmitterWithLogger(logger *zap.SugaredLogger) LogEmitterOption {
 	})
 }
 
+// LogEmitterWithLogger returns an option that makes the LogEmitter use the specified logger
+func LogEmitterWithLogChanSize(size int) LogEmitterOption {
+	return LogEmitterOption(func(le *LogEmitter) {
+		le.logChan = make(chan []*entry.Entry, size)
+	})
+}
+
 // NewLogEmitter creates a new receiver output
 func NewLogEmitter(opts ...LogEmitterOption) *LogEmitter {
 	le := &LogEmitter{
@@ -115,7 +122,7 @@ func (e *LogEmitter) Stop() error {
 }
 
 // OutChannel returns the channel on which entries will be sent to.
-func (e *LogEmitter) OutChannel() <-chan []*entry.Entry {
+func (e *LogEmitter) OutChannel() chan []*entry.Entry {
 	return e.logChan
 }
 
