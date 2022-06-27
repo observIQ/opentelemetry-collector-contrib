@@ -7,7 +7,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/newrelic/newrelic-telemetry-sdk-go v0.8.1
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/opencensus v0.50.0
-	github.com/stretchr/testify v1.7.1
+	github.com/stretchr/testify v1.7.5
 	go.opencensus.io v0.23.0
 	go.opentelemetry.io/collector v0.50.1-0.20220429151328-041f39835df7
 	go.opentelemetry.io/collector/pdata v0.50.1-0.20220429151328-041f39835df7
@@ -39,7 +39,7 @@ require (
 	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad // indirect
 	golang.org/x/text v0.3.7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/opencensus => ../../pkg/translator/opencensus
