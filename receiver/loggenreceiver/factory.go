@@ -51,8 +51,7 @@ func createLogsReceiver(
 	cfg config.Receiver,
 	consumer consumer.Logs,
 ) (component.LogsReceiver, error) {
-	// rCfg := cfg.(*Config)
+	rCfg := cfg.(*Config)
 
-	// return newReceiver(params, rCfg, consumer, k8sInterface)
-	return nil, nil
+	return newReceiver(params, rCfg, consumer)
 }

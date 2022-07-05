@@ -73,6 +73,7 @@ func (l *logGenReceiver) generator(ctx context.Context) {
 		case <-ticker.C:
 			// Ensure we have generated enough logs for the emit Interval
 			for ld.LogRecordCount() < l.emitLogNum {
+				l.logger.Warn("logGen not ready", zap.Int("expected", l.emitLogNum), zap.Int("actual", ld.LogRecordCount()))
 				lr := sl.LogRecords().AppendEmpty()
 				lr.Body().SetStringVal(*l.logLine)
 				lr.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
