@@ -7,7 +7,7 @@ require (
 	github.com/stretchr/testify v1.7.1
 	go.opentelemetry.io/collector v0.50.1-0.20220429151328-041f39835df7
 	go.opentelemetry.io/collector/pdata v0.50.1-0.20220429151328-041f39835df7
-	go.uber.org/atomic v1.9.0
+	go.uber.org/atomic v1.10.0
 	go.uber.org/zap v1.21.0
 
 )
