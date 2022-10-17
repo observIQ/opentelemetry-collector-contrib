@@ -376,8 +376,8 @@ func (c *postgreSQLClient) getIndexStats(ctx context.Context, database string) (
 type bgStat struct {
 	checkpointsReq       int64
 	checkpointsScheduled int64
-	checkpointWriteTime  int64
-	checkpointSyncTime   int64
+	checkpointWriteTime  float64
+	checkpointSyncTime   float64
 	bgWrites             int64
 	backendWrites        int64
 	bufferBackendWrites  int64
@@ -404,7 +404,7 @@ func (c *postgreSQLClient) getBGWriterStats(ctx context.Context) (*bgStat, error
 	row := c.client.QueryRowContext(ctx, query)
 	var (
 		checkpointsReq, checkpointsScheduled               int64
-		checkpointSyncTime, checkpointWriteTime            int64
+		checkpointSyncTime, checkpointWriteTime            float64
 		bgWrites, bufferCheckpoints, bufferAllocated       int64
 		bufferBackendWrites, bufferFsyncWrites, maxWritten int64
 	)
@@ -458,9 +458,9 @@ func (c *postgreSQLClient) getReplicationStats(ctx context.Context) ([]replicati
 	query := `SELECT 
 	client_addr,
 	coalesce(pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn), 0) AS replication_bytes_pending,
-	write_lag,
-	flush_lag,
-	replay_lag
+	coalesce(write_lag, 0),
+	coalesce(flush_lag, 0),
+	coalesce(replay_lag, 0)
 	FROM pg_stat_replication;
 	`
 	rows, err := c.client.QueryContext(ctx, query)
