@@ -16,13 +16,13 @@ package vcenterreceiver // import github.com/open-telemetry/opentelemetry-collec
 
 import (
 	"context"
-	"go.opentelemetry.io/collector/config/configtls"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/config/configtls"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/scrapertest"

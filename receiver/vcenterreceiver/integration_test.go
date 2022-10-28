@@ -39,7 +39,11 @@ import (
 
 func TestEndtoEnd_ESX(t *testing.T) {
 	simulator.Test(func(ctx context.Context, c *vim25.Client) {
+		pw, _ := simulator.DefaultLogin.Password()
 		cfg := &Config{
+			Endpoint: c.URL().String(),
+			Username: simulator.DefaultLogin.Username(),
+			Password: pw,
 			TLSClientSetting: configtls.TLSClientSetting{
 				Insecure: true,
 			},
@@ -54,29 +58,22 @@ func TestEndtoEnd_ESX(t *testing.T) {
 		}
 		scraper.client.vimDriver = c
 		scraper.client.finder = find.NewFinder(c)
+		err := scraper.Start(ctx, componenttest.NewNopHost())
+		require.NoError(t, err)
+
 		// Performance metrics rely on time based publishing so this is inherently flaky for an
 		// integration test, so setting the performance manager to nil to not attempt to compare
 		// performance metrcs. Coverage for this is encompassed in ./scraper_test.go
 		scraper.client.pm = nil
-		err := scraper.Start(ctx, componenttest.NewNopHost())
-		require.NoError(t, err)
 
 		metrics, err := scraper.scrape(ctx)
 		require.NoError(t, err)
 		require.NotEmpty(t, metrics)
 
-		// the vcsim will auto assign the VM to one of the listed hosts, so this is a way to ignore the host.name for those vm metrics
-		// please see #10129
-		for i := 0; i < metrics.ResourceMetrics().Len(); i++ {
-			if val, ok := metrics.ResourceMetrics().At(i).Resource().Attributes().Get("vcenter.host.name"); ok {
-				val.SetStr("DC0_C0_H0")
-			}
-		}
-
 		goldenPath := filepath.Join("testdata", "metrics", "integration-metrics.json")
 		expectedMetrics, err := golden.ReadMetrics(goldenPath)
 		require.NoError(t, err)
-		require.NoError(t, scrapertest.CompareMetrics(expectedMetrics, metrics, scrapertest.IgnoreMetricValues()))
+		require.NoError(t, scrapertest.CompareMetrics(expectedMetrics, metrics, scrapertest.IgnoreMetricValues(), scrapertest.IgnoreResourceAttributeValue("vcenter.host.name")))
 
 		err = scraper.Shutdown(ctx)
 		require.NoError(t, err)
