@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/aws/aws-sdk-go v1.43.45
-	github.com/aws/aws-xray-sdk-go v1.7.0
+	github.com/aws/aws-xray-sdk-go v1.8.0
 )
 
 require (
@@ -14,7 +14,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.15.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/stretchr/testify v1.7.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.34.0 // indirect
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
@@ -24,5 +23,4 @@ require (
 	google.golang.org/grpc v1.46.0 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
