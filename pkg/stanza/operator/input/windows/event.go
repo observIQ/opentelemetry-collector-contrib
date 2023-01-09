@@ -18,6 +18,7 @@
 package windows // import "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/input/windows"
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -25,6 +26,8 @@ import (
 type Event struct {
 	handle uintptr
 }
+
+var errUnknownNextFrame = errors.New("the buffer size needed by the next frame of the 'EvtFormatMessage' syscall was 0, unable to determine size of next frame")
 
 // RenderSimple will render the event as EventXML without formatted info.
 func (e *Event) RenderSimple(buffer Buffer) (EventXML, error) {
@@ -34,6 +37,9 @@ func (e *Event) RenderSimple(buffer Buffer) (EventXML, error) {
 
 	bufferUsed, _, err := evtRender(0, e.handle, EvtRenderEventXML, buffer.SizeBytes(), buffer.FirstByte())
 	if err == ErrorInsufficientBuffer {
+		if *bufferUsed == 0 {
+			return EventXML{}, errUnknownNextFrame
+		}
 		buffer.UpdateSizeBytes(*bufferUsed)
 		return e.RenderSimple(buffer)
 	}
@@ -56,10 +62,13 @@ func (e *Event) RenderFormatted(buffer Buffer, publisher Publisher) (EventXML, e
 		return EventXML{}, fmt.Errorf("event handle does not exist")
 	}
 
-	var bufferUsed uint32
-	err := evtFormatMessage(publisher.handle, e.handle, 0, 0, 0, EvtFormatMessageXML, buffer.SizeWide(), buffer.FirstByte(), &bufferUsed)
+	bufferUsed, err := evtFormatMessage(publisher.handle, e.handle, 0, 0, 0, EvtFormatMessageXML, buffer.SizeWide(), buffer.FirstByte())
 	if err == ErrorInsufficientBuffer {
-		buffer.UpdateSizeWide(bufferUsed)
+		// if the buffer size needed by the 'EvtFormatMessage' syscall was 0, means we should not request more information
+		if *bufferUsed == 0 {
+			return EventXML{}, errUnknownNextFrame
+		}
+		buffer.UpdateSizeWide(*bufferUsed)
 		return e.RenderFormatted(buffer, publisher)
 	}
 
@@ -67,7 +76,7 @@ func (e *Event) RenderFormatted(buffer Buffer, publisher Publisher) (EventXML, e
 		return EventXML{}, fmt.Errorf("syscall to 'EvtFormatMessage' failed: %w", err)
 	}
 
-	bytes, err := buffer.ReadWideChars(bufferUsed)
+	bytes, err := buffer.ReadWideChars(*bufferUsed)
 	if err != nil {
 		return EventXML{}, fmt.Errorf("failed to read bytes from buffer: %w", err)
 	}
