@@ -264,8 +264,8 @@ github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+o
 github.com/klauspost/compress v1.15.9/go.mod h1:PhcZ0MbTNciWF3rruxRgKxI5NkcHHrHUDtV4Yw2GlzU=
 github.com/klauspost/compress v1.15.14 h1:i7WCKDToww0wA+9qrUZ1xOjp218vfFo3nTU6UHp+gOc=
 github.com/klauspost/compress v1.15.14/go.mod h1:QPwzmACJjUTFsnSHH934V6woptycfrDDJnH7hvFVbGM=
-github.com/knadh/koanf v1.4.4 h1:d2jY5nCCeoaiqvEKSBW9rEc93EfNy/XWgWsSB3j7JEA=
-github.com/knadh/koanf v1.4.4/go.mod h1:Hgyjp4y8v44hpZtPzs7JZfRAW5AhN7KfZcwv1RYggDs=
+github.com/knadh/koanf v1.5.0 h1:q2TSd/3Pyc/5yP9ldIrSdIz26MCcyNQzW0pEAugLPNs=
+github.com/knadh/koanf v1.5.0/go.mod h1:Hgyjp4y8v44hpZtPzs7JZfRAW5AhN7KfZcwv1RYggDs=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
 github.com/konsorten/go-windows-terminal-sequences v1.0.3/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
 github.com/kr/fs v0.1.0/go.mod h1:FFnZGqtBN9Gxj7eW1uZ42v5BccTP0vu6NEaFoC2HwRg=
@@ -425,12 +425,12 @@ go.opentelemetry.io/collector v0.69.0 h1:Uc/bFNtNroTlEPoQywBkngDx0GbHCF+GNPTA1PL
 go.opentelemetry.io/collector v0.69.0/go.mod h1:JX0pTJLRO3MO3+EXZ7ab9vfm3YupLQGt5ZwjiFKU+NE=
 go.opentelemetry.io/collector/component v0.69.0 h1:CKN4fVjnSuMtlDQzOF9Fw0I4s8g506Tz/yZnNqLBtNs=
 go.opentelemetry.io/collector/component v0.69.0/go.mod h1:xvnVIRQ5jSq5DZ0vHID2HRnC2H0AgZeohMy2BZm7u/Y=
-go.opentelemetry.io/collector/confmap v0.69.0 h1:DLEmEipNKUg1HDIKMQrNPfsGblCOjD6+K+svr9gK/0g=
-go.opentelemetry.io/collector/confmap v0.69.0/go.mod h1:gvG/g1eSLVHGKbRmn91g7ukfLuBx36hbuMf/ecpSzlE=
+go.opentelemetry.io/collector/confmap v0.71.0 h1:SCVgn67jH0bNAiScx4CFx7tKpH0UfP8XQAOuH7EMPZQ=
+go.opentelemetry.io/collector/confmap v0.71.0/go.mod h1:cVHgj/wFAMq9qktwQb6iJbGkb2jdaDhZryRxdWIA9L8=
 go.opentelemetry.io/collector/consumer v0.69.0 h1:wrj3t+jTZ6kyUk/6lVQ56VslWIWPCri2KoWKv1JcbTw=
 go.opentelemetry.io/collector/consumer v0.69.0/go.mod h1:xpMylJopbVVmQcF7XE0RATW3cC/B6PfAQtXkLIdlJsA=
-go.opentelemetry.io/collector/featuregate v0.69.0 h1:TI6zcWszEbAP1UGyVIWFDKoltaPx4VprjGbd5jsDBj8=
-go.opentelemetry.io/collector/featuregate v0.69.0/go.mod h1:tewuFKJYalWBU0bmNKg++MC1ipINXUr6szYzOw2p1GI=
+go.opentelemetry.io/collector/featuregate v0.71.0 h1:X/OOapj8La0q/D4bBWIYYNBbkXOD71+RrdrYv+ipNuE=
+go.opentelemetry.io/collector/featuregate v0.71.0/go.mod h1:ih+oCwrHW3bLac/qnPUzes28yDCDmh8WzsAKKauwCYI=
 go.opentelemetry.io/collector/pdata v1.0.0-rc3.0.20230109164642-7d168dd20efd h1:Mv0AhUDD10YS9620bxXBf0zoTkQjwANcaqWJyxr88ks=
 go.opentelemetry.io/collector/pdata v1.0.0-rc3.0.20230109164642-7d168dd20efd/go.mod h1:NggifanH3PY9reO9gUtcP8IqNpAabT+aDOCFZoIa7Ts=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.37.0 h1:+uFejS4DCfNH6d3xODVIGsdhzgzhh45p9gpbHQMbdZI=
