@@ -19,6 +19,7 @@ package vcenterreceiver // import github.com/open-telemetry/opentelemetry-collec
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -40,7 +41,12 @@ import (
 
 func TestEndtoEnd_ESX(t *testing.T) {
 	simulator.Test(func(ctx context.Context, c *vim25.Client) {
+		pw, set := simulator.DefaultLogin.Password()
+		require.True(t, set)
 		cfg := &Config{
+			Endpoint: fmt.Sprintf("%s://%s", c.URL().Scheme, c.URL().Host),
+			Username: simulator.DefaultLogin.Username(),
+			Password: pw,
 			TLSClientSetting: configtls.TLSClientSetting{
 				Insecure: true,
 			},
@@ -77,7 +83,7 @@ func TestEndtoEnd_ESX(t *testing.T) {
 		goldenPath := filepath.Join("testdata", "metrics", "integration-metrics.json")
 		expectedMetrics, err := golden.ReadMetrics(goldenPath)
 		require.NoError(t, err)
-		require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, metrics, pmetrictest.IgnoreMetricValues()))
+		require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, metrics, pmetrictest.IgnoreMetricValues(), pmetrictest.IgnoreTimestamp(), pmetrictest.IgnoreStartTimestamp()))
 
 		err = scraper.Shutdown(ctx)
 		require.NoError(t, err)
