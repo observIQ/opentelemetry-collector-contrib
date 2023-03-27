@@ -1,0 +1,31 @@
+default:
+all_set:
+  metrics:
+    flume.channel_size:
+      enabled: true
+    flume.connection_closed_count:
+      enabled: true
+    flume.connection_created_count:
+      enabled: true
+    flume.event_accepted_count:
+      enabled: true
+    flume.event_put_success_count:
+      enabled: true
+    flume.event_take_success_count:
+      enabled: true
+  resource_attributes:
+none_set:
+  metrics:
+    flume.channel_size:
+      enabled: false
+    flume.connection_closed_count:
+      enabled: false
+    flume.connection_created_count:
+      enabled: false
+    flume.event_accepted_count:
+      enabled: false
+    flume.event_put_success_count:
+      enabled: false
+    flume.event_take_success_count:
+      enabled: false
+  resource_attributes:

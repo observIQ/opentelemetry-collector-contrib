@@ -187,6 +187,9 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowsperfcountersreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zookeeperreceiver"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/flumereceiver"
+
+
 )
 
 func Components() (otelcol.Factories, error) {
@@ -300,6 +303,7 @@ func Components() (otelcol.Factories, error) {
 		udplogreceiver.NewFactory(),
 		vcenterreceiver.NewFactory(),
 		zipkinreceiver.NewFactory(),
+    flumereceiver.NewFactory(),
 	}
 	factories.Receivers, err = receiver.MakeFactoryMap(receivers...)
 	if err != nil {

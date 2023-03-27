@@ -1027,11 +1027,24 @@ replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipki
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zookeeperreceiver => ./receiver/zookeeperreceiver
 
+replace github.com/open-telemetry/opentelemetry-collector-contrib/receiver/flumereceiver => ./receiver/flumereceiver
+
+
+
+
+// see https://github.com/google/gnostic/issues/262
+replace github.com/googleapis/gnostic v0.5.6 => github.com/googleapis/gnostic v0.5.5
+
+
+
+
 // see https://github.com/google/gnostic/issues/262
 replace github.com/googleapis/gnostic v0.5.6 => github.com/googleapis/gnostic v0.5.5
 
 // see https://github.com/open-telemetry/opentelemetry-collector-contrib/pull/12322#issuecomment-1185029670
 replace github.com/docker/go-connections v0.4.1-0.20210727194412-58542c764a11 => github.com/docker/go-connections v0.4.0
+
+
 
 retract (
 	v0.65.0
