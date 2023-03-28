@@ -1,7 +1,18 @@
 package apachepulsarreceiver
 
 import (
-	"errors"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
+	"go.uber.org/zap"
 )
 
 const (
@@ -10,7 +21,7 @@ const (
 
 func TestGetTenants(t *testing.t) {
 	testCases := []struct {
-		desc string
+		desc     string
 		testFunc func(*testing.T)
 	}{
 		{
@@ -37,9 +48,8 @@ func TestGetTenants(t *testing.t) {
 				tenants, err := tc.GetTenants(context.Background())
 				require.NoError(t, err)
 				require.Equal(t, expected, tenants)
-			}
-		}
-
+			},
+		},
 	}
 }
 

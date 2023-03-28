@@ -1,15 +1,14 @@
 package apachepulsarreceiver
 
 import (
-	"fmt"
-	"net/http"
-
+	pulsarctl "github.com/streamnative/pulsarctl/pkg/pulsar"
+	"github.com/streamnative/pulsarctl/pkg/pulsar/common"
 	"go.opentelemetry.io/collector/component"
 	"go.uber.org/zap"
 )
 
 type client interface {
-	GetTenants()
+	GetTenants() ([]string, error)
 	// GetNameSpaces(tenant string)
 	// GetTopics()
 	// GetTopicStats()
@@ -18,32 +17,30 @@ type client interface {
 }
 
 type apachePulsarClient struct {
-	client       *http.Client
+	client       pulsarctl.Client
 	hostEndpoint string
 	logger       *zap.Logger
 }
 
 func newClient(cfg *Config, host component.Host, settings component.TelemetrySettings, logger *zap.Logger) (client, error) {
-	httpClient, err := cfg.ToClient(host, settings)
+	client, err := pulsarctl.New(&common.Config{
+		WebServiceURL: cfg.Endpoint,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP Client: %w", err)
+		return nil, err
 	}
 
 	return &apachePulsarClient{
-		client:       httpClient,
+		client:       client,
 		hostEndpoint: cfg.Endpoint,
 		logger:       logger,
 	}, nil
 }
 
-func (c *apachePulsarClient) GetTenants() {
+func (c *apachePulsarClient) GetTenants() ([]string, error) {
 	// tenants.List() returns a slice of strings and an error
-	tenants, err := pulsarctl.tenants.List()
-	if err != nil {
-		return err, err.Error
-	} else {
-		return tenants
-	}
+	tenants := c.client.Tenants()
+	return tenants.List()
 }
 
 // func (c *apachePulsarClient) GetNameSpaces(tenant string) {

@@ -1,21 +1,23 @@
-defualt:
+default:
 all_set:
   metrics:
-    topic.msgincount:
+    topic.avgmsgsize:
       enabled: true
     topic.backlogsize:
       enabled: true
+    topic.msgincount:
+      enabled: true
     topic.sub.unackedmsgs:
       enabled: true
+  resource_attributes:
+none_set:
+  metrics:
     topic.avgmsgsize:
-      enabled: true
-  none_set:
-    metrics:
-    topic.msgincount:
       enabled: false
     topic.backlogsize:
       enabled: false
+    topic.msgincount:
+      enabled: false
     topic.sub.unackedmsgs:
       enabled: false
-    topic.avgmsgsize:
-      enabled: false
+  resource_attributes:
