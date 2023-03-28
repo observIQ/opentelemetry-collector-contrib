@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	typeStr   = "pulsar"
+	typeStr   = "apachepulsar"
 	stability = component.StabilityLevelDevelopment
 )
 

@@ -1,0 +1,21 @@
+defualt:
+all_set:
+  metrics:
+    topic.msgincount:
+      enabled: true
+    topic.backlogsize:
+      enabled: true
+    topic.sub.unackedmsgs:
+      enabled: true
+    topic.avgmsgsize:
+      enabled: true
+  none_set:
+    metrics:
+    topic.msgincount:
+      enabled: false
+    topic.backlogsize:
+      enabled: false
+    topic.sub.unackedmsgs:
+      enabled: false
+    topic.avgmsgsize:
+      enabled: false
