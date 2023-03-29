@@ -1,19 +1,27 @@
 package apachepulsarreceiver
 
 import (
+	"errors"
+	"fmt"
+
 	pulsarctl "github.com/streamnative/pulsarctl/pkg/pulsar"
 	"github.com/streamnative/pulsarctl/pkg/pulsar/common"
+	utils "github.com/streamnative/pulsarctl/pkg/pulsar/utils"
 	"go.opentelemetry.io/collector/component"
 	"go.uber.org/zap"
 )
 
+var (
+	errEmptyParam         = errors.New(`cannot perform this operation on an empty array`)
+	errTopicNameNotFound  = errors.New(`could not find topic name for a topic`)
+	errTopicStatsNotFound = errors.New(`error occurred while fetching stats for a topic`)
+)
+
 type client interface {
 	GetTenants() ([]string, error)
-	// GetNameSpaces(tenant string)
-	// GetTopics()
-	// GetTopicStats()
-	// Connect() error
-	// Close() error
+	GetNameSpaces(tenants []string) ([]string, error)
+	GetTopics(namespaces []string) ([]string, error)
+	GetTopicStats(topics []string) ([]utils.TopicStats, error)
 }
 
 type apachePulsarClient struct {
@@ -43,30 +51,50 @@ func (c *apachePulsarClient) GetTenants() ([]string, error) {
 	return tenants.List()
 }
 
-// func (c *apachePulsarClient) GetNameSpaces(tenant string) {
-// 	// GetNamespaces(tenant string) returns a list of all namespaces for a given tenant
-// 	namespaces := pulsar.GetNameSpaces(tenants[0])
+func (c *apachePulsarClient) GetNameSpaces(tenants []string) ([]string, error) {
+	namespaceInterface := c.client.Namespaces()
+	var namespaces = []string{}
+	for i := range tenants {
+		// GetNamespaces(tenant string) returns a list of all namespaces for a given tenant
+		tenantNamespaces, err := namespaceInterface.GetNamespaces(tenants[i])
+		if err != nil {
+			return nil, err
+		}
+		namespaces = append(namespaces, tenantNamespaces...)
+	}
+	return namespaces, nil
+}
 
-// 	// namespace.List(namespace string) returns a list of topics under a given namespace
-// 	topics := pulsar.namespace.List(namespaces[0])
+func (c *apachePulsarClient) GetTopics(namespaces []string) ([]string, error) {
+	namespaceInterface := c.client.Namespaces()
+	var topics = []string{}
+	// namespace.GetTopics(namespace string) returns a list of topics under a given namespace
+	for i := range namespaces {
+		namespaceTopics, err := namespaceInterface.GetTopics(namespaces[i])
+		if err != nil {
+			return nil, err
+		}
+		topics = append(topics, namespaceTopics...)
+	}
+	return topics, nil
+}
 
-// 	// topic.GetStats(utils.TopicName) returns the stats for a topic
-// 	stats := topics[0].GetStats(topics[0].TopicName)
+func (c *apachePulsarClient) GetTopicStats(topics []string) ([]utils.TopicStats, error) {
+	topicInterface := c.client.Topics()
+	var statsList = []utils.TopicStats{}
+	for i := range topics {
+		name, err := utils.GetTopicName(topics[i])
+		if err != nil {
+			return nil, errTopicNameNotFound
+		}
+		// topic.GetStats(utils.TopicName) returns the stats for a topic
+		stats, err := topicInterface.GetStats(*name)
+		if err != nil {
+			return nil, errTopicStatsNotFound
+		}
+		fmt.Println(stats)
 
-// 	fmt.Println(stats)
-// }
-
-// func (c *apachePulsarClient) GetTopics() {
-
-// }
-
-// func (c *apachePulsarClient) GetTopicStats() {
-
-// }
-
-// func (c *apachePulsarClient) Connect() {
-// }
-
-// func (c *apachePulsarClient) Close() {
-
-// }
+		statsList = append(statsList, stats)
+	}
+	return statsList, nil
+}
