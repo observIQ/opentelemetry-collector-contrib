@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	defaultCollectionInterval = 60 * time.Second
+	defaultCollectionInterval = 15 * time.Second
 	defaultEndpoint           = "http://localhost:8080"
 )
 

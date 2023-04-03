@@ -4,7 +4,7 @@ receivers:
     collection_interval: 15s
 exporters:
   file:
-    path: "metrics_output.json"
+    path: ./metrics_output.json
 
 service:
   pipelines:

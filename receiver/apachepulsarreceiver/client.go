@@ -38,8 +38,6 @@ type client interface {
 	GetTopicStats(topics []string) (map[*utils.TopicName]utils.TopicStats, error)
 }
 
-// TODO: ask about purpose of the scraper
-
 type apachePulsarClient struct {
 	client       pulsarctl.Client
 	hostEndpoint string
