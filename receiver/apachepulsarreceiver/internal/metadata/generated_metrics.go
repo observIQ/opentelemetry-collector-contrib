@@ -34,8 +34,7 @@ func (ms *MetricSettings) Unmarshal(parser *confmap.Conf) error {
 // MetricsSettings provides settings for apachepulsarreceiver metrics.
 type MetricsSettings struct {
 	TopicAvgmsgsize     MetricSettings `mapstructure:"topic.avgmsgsize"`
-	TopicBacklogsize    MetricSettings `mapstructure:"topic.backlogsize"`
-	TopicMsgincount     MetricSettings `mapstructure:"topic.msgincount"`
+	TopicMsginrate      MetricSettings `mapstructure:"topic.msginrate"`
 	TopicSubUnackedmsgs MetricSettings `mapstructure:"topic.sub.unackedmsgs"`
 }
 
@@ -44,10 +43,7 @@ func DefaultMetricsSettings() MetricsSettings {
 		TopicAvgmsgsize: MetricSettings{
 			Enabled: true,
 		},
-		TopicBacklogsize: MetricSettings{
-			Enabled: true,
-		},
-		TopicMsgincount: MetricSettings{
+		TopicMsginrate: MetricSettings{
 			Enabled: true,
 		},
 		TopicSubUnackedmsgs: MetricSettings{
@@ -81,9 +77,10 @@ func (m *metricTopicAvgmsgsize) init() {
 	m.data.SetDescription("average size of messages in the last interval")
 	m.data.SetUnit("bytes")
 	m.data.SetEmptyGauge()
+	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
 }
 
-func (m *metricTopicAvgmsgsize) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
+func (m *metricTopicAvgmsgsize) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
 	}
@@ -91,6 +88,7 @@ func (m *metricTopicAvgmsgsize) recordDataPoint(start pcommon.Timestamp, ts pcom
 	dp.SetStartTimestamp(start)
 	dp.SetTimestamp(ts)
 	dp.SetIntValue(val)
+	dp.Attributes().PutStr("topic_name", topicNameAttributeValue)
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
@@ -118,74 +116,24 @@ func newMetricTopicAvgmsgsize(settings MetricSettings) metricTopicAvgmsgsize {
 	return m
 }
 
-type metricTopicBacklogsize struct {
+type metricTopicMsginrate struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
 	capacity int            // max observed number of data points added to the metric.
 }
 
-// init fills topic.backlogsize metric with initial data.
-func (m *metricTopicBacklogsize) init() {
-	m.data.SetName("topic.backlogsize")
-	m.data.SetDescription("total unconsumed message data")
-	m.data.SetUnit("bytes")
-	m.data.SetEmptySum()
-	m.data.Sum().SetIsMonotonic(false)
-	m.data.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
-}
-
-func (m *metricTopicBacklogsize) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
-	if !m.settings.Enabled {
-		return
-	}
-	dp := m.data.Sum().DataPoints().AppendEmpty()
-	dp.SetStartTimestamp(start)
-	dp.SetTimestamp(ts)
-	dp.SetIntValue(val)
-}
-
-// updateCapacity saves max length of data point slices that will be used for the slice capacity.
-func (m *metricTopicBacklogsize) updateCapacity() {
-	if m.data.Sum().DataPoints().Len() > m.capacity {
-		m.capacity = m.data.Sum().DataPoints().Len()
-	}
-}
-
-// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
-func (m *metricTopicBacklogsize) emit(metrics pmetric.MetricSlice) {
-	if m.settings.Enabled && m.data.Sum().DataPoints().Len() > 0 {
-		m.updateCapacity()
-		m.data.MoveTo(metrics.AppendEmpty())
-		m.init()
-	}
-}
-
-func newMetricTopicBacklogsize(settings MetricSettings) metricTopicBacklogsize {
-	m := metricTopicBacklogsize{settings: settings}
-	if settings.Enabled {
-		m.data = pmetric.NewMetric()
-		m.init()
-	}
-	return m
-}
-
-type metricTopicMsgincount struct {
-	data     pmetric.Metric // data buffer for generated metric.
-	settings MetricSettings // metric settings provided by user.
-	capacity int            // max observed number of data points added to the metric.
-}
-
-// init fills topic.msgincount metric with initial data.
-func (m *metricTopicMsgincount) init() {
-	m.data.SetName("topic.msgincount")
-	m.data.SetDescription("number of messages published for a topic (in the last interval?)")
+// init fills topic.msginrate metric with initial data.
+func (m *metricTopicMsginrate) init() {
+	m.data.SetName("topic.msginrate")
+	m.data.SetDescription("number of messages published for a topic in the last interval")
 	m.data.SetUnit("{messages}")
 	m.data.SetEmptySum()
 	m.data.Sum().SetIsMonotonic(false)
-	m.data.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityDelta)
+	m.data.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
-func (m *metricTopicMsgincount) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
+func (m *metricTopicMsginrate) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
 	}
@@ -193,17 +141,18 @@ func (m *metricTopicMsgincount) recordDataPoint(start pcommon.Timestamp, ts pcom
 	dp.SetStartTimestamp(start)
 	dp.SetTimestamp(ts)
 	dp.SetIntValue(val)
+	dp.Attributes().PutStr("topic_name", topicNameAttributeValue)
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
-func (m *metricTopicMsgincount) updateCapacity() {
+func (m *metricTopicMsginrate) updateCapacity() {
 	if m.data.Sum().DataPoints().Len() > m.capacity {
 		m.capacity = m.data.Sum().DataPoints().Len()
 	}
 }
 
 // emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
-func (m *metricTopicMsgincount) emit(metrics pmetric.MetricSlice) {
+func (m *metricTopicMsginrate) emit(metrics pmetric.MetricSlice) {
 	if m.settings.Enabled && m.data.Sum().DataPoints().Len() > 0 {
 		m.updateCapacity()
 		m.data.MoveTo(metrics.AppendEmpty())
@@ -211,8 +160,8 @@ func (m *metricTopicMsgincount) emit(metrics pmetric.MetricSlice) {
 	}
 }
 
-func newMetricTopicMsgincount(settings MetricSettings) metricTopicMsgincount {
-	m := metricTopicMsgincount{settings: settings}
+func newMetricTopicMsginrate(settings MetricSettings) metricTopicMsginrate {
+	m := metricTopicMsginrate{settings: settings}
 	if settings.Enabled {
 		m.data = pmetric.NewMetric()
 		m.init()
@@ -234,9 +183,10 @@ func (m *metricTopicSubUnackedmsgs) init() {
 	m.data.SetEmptySum()
 	m.data.Sum().SetIsMonotonic(false)
 	m.data.Sum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
-func (m *metricTopicSubUnackedmsgs) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
+func (m *metricTopicSubUnackedmsgs) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
 	}
@@ -244,6 +194,7 @@ func (m *metricTopicSubUnackedmsgs) recordDataPoint(start pcommon.Timestamp, ts 
 	dp.SetStartTimestamp(start)
 	dp.SetTimestamp(ts)
 	dp.SetIntValue(val)
+	dp.Attributes().PutStr("topic_name", topicNameAttributeValue)
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
@@ -287,8 +238,7 @@ type MetricsBuilder struct {
 	buildInfo                  component.BuildInfo // contains version information
 	resourceAttributesSettings ResourceAttributesSettings
 	metricTopicAvgmsgsize      metricTopicAvgmsgsize
-	metricTopicBacklogsize     metricTopicBacklogsize
-	metricTopicMsgincount      metricTopicMsgincount
+	metricTopicMsginrate       metricTopicMsginrate
 	metricTopicSubUnackedmsgs  metricTopicSubUnackedmsgs
 }
 
@@ -323,8 +273,7 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		buildInfo:                  settings.BuildInfo,
 		resourceAttributesSettings: mbc.ResourceAttributes,
 		metricTopicAvgmsgsize:      newMetricTopicAvgmsgsize(mbc.Metrics.TopicAvgmsgsize),
-		metricTopicBacklogsize:     newMetricTopicBacklogsize(mbc.Metrics.TopicBacklogsize),
-		metricTopicMsgincount:      newMetricTopicMsgincount(mbc.Metrics.TopicMsgincount),
+		metricTopicMsginrate:       newMetricTopicMsginrate(mbc.Metrics.TopicMsginrate),
 		metricTopicSubUnackedmsgs:  newMetricTopicSubUnackedmsgs(mbc.Metrics.TopicSubUnackedmsgs),
 	}
 	for _, op := range options {
@@ -379,8 +328,7 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	ils.Scope().SetVersion(mb.buildInfo.Version)
 	ils.Metrics().EnsureCapacity(mb.metricsCapacity)
 	mb.metricTopicAvgmsgsize.emit(ils.Metrics())
-	mb.metricTopicBacklogsize.emit(ils.Metrics())
-	mb.metricTopicMsgincount.emit(ils.Metrics())
+	mb.metricTopicMsginrate.emit(ils.Metrics())
 	mb.metricTopicSubUnackedmsgs.emit(ils.Metrics())
 
 	for _, op := range rmo {
@@ -403,23 +351,18 @@ func (mb *MetricsBuilder) Emit(rmo ...ResourceMetricsOption) pmetric.Metrics {
 }
 
 // RecordTopicAvgmsgsizeDataPoint adds a data point to topic.avgmsgsize metric.
-func (mb *MetricsBuilder) RecordTopicAvgmsgsizeDataPoint(ts pcommon.Timestamp, val int64) {
-	mb.metricTopicAvgmsgsize.recordDataPoint(mb.startTime, ts, val)
+func (mb *MetricsBuilder) RecordTopicAvgmsgsizeDataPoint(ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
+	mb.metricTopicAvgmsgsize.recordDataPoint(mb.startTime, ts, val, topicNameAttributeValue)
 }
 
-// RecordTopicBacklogsizeDataPoint adds a data point to topic.backlogsize metric.
-func (mb *MetricsBuilder) RecordTopicBacklogsizeDataPoint(ts pcommon.Timestamp, val int64) {
-	mb.metricTopicBacklogsize.recordDataPoint(mb.startTime, ts, val)
-}
-
-// RecordTopicMsgincountDataPoint adds a data point to topic.msgincount metric.
-func (mb *MetricsBuilder) RecordTopicMsgincountDataPoint(ts pcommon.Timestamp, val int64) {
-	mb.metricTopicMsgincount.recordDataPoint(mb.startTime, ts, val)
+// RecordTopicMsginrateDataPoint adds a data point to topic.msginrate metric.
+func (mb *MetricsBuilder) RecordTopicMsginrateDataPoint(ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
+	mb.metricTopicMsginrate.recordDataPoint(mb.startTime, ts, val, topicNameAttributeValue)
 }
 
 // RecordTopicSubUnackedmsgsDataPoint adds a data point to topic.sub.unackedmsgs metric.
-func (mb *MetricsBuilder) RecordTopicSubUnackedmsgsDataPoint(ts pcommon.Timestamp, val int64) {
-	mb.metricTopicSubUnackedmsgs.recordDataPoint(mb.startTime, ts, val)
+func (mb *MetricsBuilder) RecordTopicSubUnackedmsgsDataPoint(ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
+	mb.metricTopicSubUnackedmsgs.recordDataPoint(mb.startTime, ts, val, topicNameAttributeValue)
 }
 
 // Reset resets metrics builder to its initial state. It should be used when external metrics source is restarted,

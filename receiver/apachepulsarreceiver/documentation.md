@@ -20,21 +20,25 @@ average size of messages in the last interval
 | ---- | ----------- | ---------- |
 | bytes | Gauge | Int |
 
-### topic.backlogsize
+#### Attributes
 
-total unconsumed message data
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| topic_name | the name of the topic that the metric comes from | Any Str |
 
-| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
-| ---- | ----------- | ---------- | ----------------------- | --------- |
-| bytes | Sum | Int | Cumulative | false |
+### topic.msginrate
 
-### topic.msgincount
-
-number of messages published for a topic (in the last interval?)
+number of messages published for a topic in the last interval
 
 | Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
 | ---- | ----------- | ---------- | ----------------------- | --------- |
-| {messages} | Sum | Int | Delta | false |
+| {messages} | Sum | Int | Cumulative | false |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| topic_name | the name of the topic that the metric comes from | Any Str |
 
 ### topic.sub.unackedmsgs
 
@@ -43,3 +47,9 @@ number of unacknowledged messages for a subscription
 | Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
 | ---- | ----------- | ---------- | ----------------------- | --------- |
 | {messages} | Sum | Int | Cumulative | false |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| topic_name | the name of the topic that the metric comes from | Any Str |

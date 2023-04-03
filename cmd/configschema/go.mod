@@ -114,7 +114,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.74.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/activedirectorydsreceiver v0.74.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/aerospikereceiver v0.74.0 // indirect
-	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/apachepulsarreceiver v0.0.0-00010101000000-000000000000 // indirect
+	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/apachepulsarreceiver v0.74.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/apachereceiver v0.74.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscloudwatchreceiver v0.74.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscontainerinsightreceiver v0.74.0 // indirect
@@ -196,6 +196,7 @@ require (
 	github.com/panta/machineid v1.0.2 // indirect
 	github.com/samber/lo v1.37.0 // indirect
 	github.com/signalfx/signalfx-agent/pkg/apm v0.0.0-20230214151822-6a6813cf5bf1 // indirect
+	github.com/streamnative/pulsarctl v0.4.3-0.20230131034553-1b71e953e372 // indirect
 	go.opentelemetry.io/collector/exporter v0.74.0 // indirect
 	go.opentelemetry.io/collector/receiver v0.74.0 // indirect
 )

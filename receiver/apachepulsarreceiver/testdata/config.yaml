@@ -1,0 +1,13 @@
+# ./bin/otelcontribcol_darwin_arm64 --config ./receiver/apachepulsarreceiver/testdata/config.yaml
+receivers:
+  apachepulsar:
+    collection_interval: 15s
+exporters:
+  file:
+    path: "metrics_output.json"
+
+service:
+  pipelines:
+    metrics:
+      receivers: [apachepulsar]
+      exporters: [file]

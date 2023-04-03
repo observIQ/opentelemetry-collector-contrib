@@ -677,6 +677,11 @@ updates:
     schedule:
       interval: "weekly"
       day: "wednesday"
+  - package-ecosystem:
+    directory: "/receiver/apachepulsarreceiver"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
   - package-ecosystem: "gomod"
     directory: "/receiver/apachereceiver"
     schedule:

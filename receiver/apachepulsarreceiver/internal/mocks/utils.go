@@ -12,5 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package apachepulsarreceiver // comment so save doesn't get rid of this line
-// why does this file exist?
+package mocks
+
+import (
+	utils "github.com/streamnative/pulsarctl/pkg/pulsar/utils"
+	mock "github.com/stretchr/testify/mock"
+)
+
+type MockUtils struct {
+	mock.Mock
+}
+
+func (_m *MockUtils) GetTopicName(name string) (*utils.TopicName, error) {
+	ret := _m.Called()
+
+	var r0 utils.TopicName
+	if rf, ok := ret.Get(0).(func() utils.TopicName); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(utils.TopicName)
+		}
+	}
+
+	return &r0, nil
+}

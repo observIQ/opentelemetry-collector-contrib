@@ -196,8 +196,8 @@ func (_m *MockNamespaces) DeleteNamespaceBundle(namespace string, bundleRange st
 	return r0
 }
 
-// GetAntiAffinityMockNamespaces provides a mock function with given fields: tenant, cluster, namespaceAntiAffinityGroup
-func (_m *MockNamespaces) GetAntiAffinityMockNamespaces(tenant string, cluster string, namespaceAntiAffinityGroup string) ([]string, error) {
+// GetAntiAffinityNamespaces provides a mock function with given fields: tenant, cluster, namespaceAntiAffinityGroup
+func (_m *MockNamespaces) GetAntiAffinityNamespaces(tenant string, cluster string, namespaceAntiAffinityGroup string) ([]string, error) {
 	ret := _m.Called(tenant, cluster, namespaceAntiAffinityGroup)
 
 	var r0 []string
@@ -494,8 +494,8 @@ func (_m *MockNamespaces) GetNamespaceReplicationClusters(namespace string) ([]s
 	return r0, r1
 }
 
-// GetMockNamespaces provides a mock function with given fields: tenant
-func (_m *MockNamespaces) GetMockNamespaces(tenant string) ([]string, error) {
+// GetNamespaces provides a mock function with given fields: tenant
+func (_m *MockNamespaces) GetNamespaces(tenant string) ([]string, error) {
 	ret := _m.Called(tenant)
 
 	var r0 []string

@@ -3,9 +3,7 @@ all_set:
   metrics:
     topic.avgmsgsize:
       enabled: true
-    topic.backlogsize:
-      enabled: true
-    topic.msgincount:
+    topic.msginrate:
       enabled: true
     topic.sub.unackedmsgs:
       enabled: true
@@ -14,9 +12,7 @@ none_set:
   metrics:
     topic.avgmsgsize:
       enabled: false
-    topic.backlogsize:
-      enabled: false
-    topic.msgincount:
+    topic.msginrate:
       enabled: false
     topic.sub.unackedmsgs:
       enabled: false

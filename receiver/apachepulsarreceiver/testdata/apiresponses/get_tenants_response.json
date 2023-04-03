@@ -1,5 +1,0 @@
-{
-  "cluster.tenants": {
-    "value": ["public", "pulsar"]
-  }
-}

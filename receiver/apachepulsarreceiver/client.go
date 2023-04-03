@@ -1,3 +1,17 @@
+// Copyright The OpenTelemetry Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package apachepulsarreceiver
 
 import (
@@ -13,7 +27,7 @@ import (
 
 var (
 	errEmptyParam         = errors.New(`cannot perform this operation on an empty array`)
-	errTopicNameNotFound  = errors.New(`could not find topic name for a topic`)
+	errTopicNameNotFound  = errors.New(`could not find topic name`)
 	errTopicStatsNotFound = errors.New(`error occurred while fetching stats for a topic`)
 )
 
@@ -21,8 +35,10 @@ type client interface {
 	GetTenants() ([]string, error)
 	GetNameSpaces(tenants []string) ([]string, error)
 	GetTopics(namespaces []string) ([]string, error)
-	GetTopicStats(topics []string) ([]utils.TopicStats, error)
+	GetTopicStats(topics []string) (map[*utils.TopicName]utils.TopicStats, error)
 }
+
+// TODO: ask about purpose of the scraper
 
 type apachePulsarClient struct {
 	client       pulsarctl.Client
@@ -52,6 +68,9 @@ func (c *apachePulsarClient) GetTenants() ([]string, error) {
 }
 
 func (c *apachePulsarClient) GetNameSpaces(tenants []string) ([]string, error) {
+	if len(tenants) == 0 {
+		return nil, errEmptyParam
+	}
 	namespaceInterface := c.client.Namespaces()
 	var namespaces = []string{}
 	for i := range tenants {
@@ -66,6 +85,9 @@ func (c *apachePulsarClient) GetNameSpaces(tenants []string) ([]string, error) {
 }
 
 func (c *apachePulsarClient) GetTopics(namespaces []string) ([]string, error) {
+	if len(namespaces) == 0 {
+		return nil, errEmptyParam
+	}
 	namespaceInterface := c.client.Namespaces()
 	var topics = []string{}
 	// namespace.GetTopics(namespace string) returns a list of topics under a given namespace
@@ -75,17 +97,22 @@ func (c *apachePulsarClient) GetTopics(namespaces []string) ([]string, error) {
 			return nil, err
 		}
 		topics = append(topics, namespaceTopics...)
+
 	}
 	return topics, nil
 }
 
-func (c *apachePulsarClient) GetTopicStats(topics []string) ([]utils.TopicStats, error) {
+func (c *apachePulsarClient) GetTopicStats(topics []string) (map[*utils.TopicName]utils.TopicStats, error) {
+	if len(topics) == 0 {
+		return nil, errEmptyParam
+	}
 	topicInterface := c.client.Topics()
 	var statsList = []utils.TopicStats{}
+	var topicStats = map[*utils.TopicName]utils.TopicStats{}
 	for i := range topics {
 		name, err := utils.GetTopicName(topics[i])
 		if err != nil {
-			return nil, errTopicNameNotFound
+			return nil, err
 		}
 		// topic.GetStats(utils.TopicName) returns the stats for a topic
 		stats, err := topicInterface.GetStats(*name)
@@ -94,7 +121,8 @@ func (c *apachePulsarClient) GetTopicStats(topics []string) ([]utils.TopicStats,
 		}
 		fmt.Println(stats)
 
+		topicStats[name] = stats
 		statsList = append(statsList, stats)
 	}
-	return statsList, nil
+	return topicStats, nil
 }

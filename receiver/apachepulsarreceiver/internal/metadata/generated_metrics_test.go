@@ -60,19 +60,15 @@ func TestMetricsBuilder(t *testing.T) {
 
 			defaultMetricsCount++
 			allMetricsCount++
-			mb.RecordTopicAvgmsgsizeDataPoint(ts, 1)
+			mb.RecordTopicAvgmsgsizeDataPoint(ts, 1, "attr-val")
 
 			defaultMetricsCount++
 			allMetricsCount++
-			mb.RecordTopicBacklogsizeDataPoint(ts, 1)
+			mb.RecordTopicMsginrateDataPoint(ts, 1, "attr-val")
 
 			defaultMetricsCount++
 			allMetricsCount++
-			mb.RecordTopicMsgincountDataPoint(ts, 1)
-
-			defaultMetricsCount++
-			allMetricsCount++
-			mb.RecordTopicSubUnackedmsgsDataPoint(ts, 1)
+			mb.RecordTopicSubUnackedmsgsDataPoint(ts, 1, "attr-val")
 
 			metrics := mb.Emit()
 
@@ -111,13 +107,16 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, ts, dp.Timestamp())
 					assert.Equal(t, pmetric.NumberDataPointValueTypeInt, dp.ValueType())
 					assert.Equal(t, int64(1), dp.IntValue())
-				case "topic.backlogsize":
-					assert.False(t, validatedMetrics["topic.backlogsize"], "Found a duplicate in the metrics slice: topic.backlogsize")
-					validatedMetrics["topic.backlogsize"] = true
+					attrVal, ok := dp.Attributes().Get("topic_name")
+					assert.True(t, ok)
+					assert.EqualValues(t, "attr-val", attrVal.Str())
+				case "topic.msginrate":
+					assert.False(t, validatedMetrics["topic.msginrate"], "Found a duplicate in the metrics slice: topic.msginrate")
+					validatedMetrics["topic.msginrate"] = true
 					assert.Equal(t, pmetric.MetricTypeSum, ms.At(i).Type())
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
-					assert.Equal(t, "total unconsumed message data", ms.At(i).Description())
-					assert.Equal(t, "bytes", ms.At(i).Unit())
+					assert.Equal(t, "number of messages published for a topic in the last interval", ms.At(i).Description())
+					assert.Equal(t, "{messages}", ms.At(i).Unit())
 					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
@@ -125,20 +124,9 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, ts, dp.Timestamp())
 					assert.Equal(t, pmetric.NumberDataPointValueTypeInt, dp.ValueType())
 					assert.Equal(t, int64(1), dp.IntValue())
-				case "topic.msgincount":
-					assert.False(t, validatedMetrics["topic.msgincount"], "Found a duplicate in the metrics slice: topic.msgincount")
-					validatedMetrics["topic.msgincount"] = true
-					assert.Equal(t, pmetric.MetricTypeSum, ms.At(i).Type())
-					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
-					assert.Equal(t, "number of messages published for a topic (in the last interval?)", ms.At(i).Description())
-					assert.Equal(t, "{messages}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
-					assert.Equal(t, pmetric.AggregationTemporalityDelta, ms.At(i).Sum().AggregationTemporality())
-					dp := ms.At(i).Sum().DataPoints().At(0)
-					assert.Equal(t, start, dp.StartTimestamp())
-					assert.Equal(t, ts, dp.Timestamp())
-					assert.Equal(t, pmetric.NumberDataPointValueTypeInt, dp.ValueType())
-					assert.Equal(t, int64(1), dp.IntValue())
+					attrVal, ok := dp.Attributes().Get("topic_name")
+					assert.True(t, ok)
+					assert.EqualValues(t, "attr-val", attrVal.Str())
 				case "topic.sub.unackedmsgs":
 					assert.False(t, validatedMetrics["topic.sub.unackedmsgs"], "Found a duplicate in the metrics slice: topic.sub.unackedmsgs")
 					validatedMetrics["topic.sub.unackedmsgs"] = true
@@ -153,6 +141,9 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, ts, dp.Timestamp())
 					assert.Equal(t, pmetric.NumberDataPointValueTypeInt, dp.ValueType())
 					assert.Equal(t, int64(1), dp.IntValue())
+					attrVal, ok := dp.Attributes().Get("topic_name")
+					assert.True(t, ok)
+					assert.EqualValues(t, "attr-val", attrVal.Str())
 				}
 			}
 		})

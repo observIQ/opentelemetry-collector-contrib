@@ -4,25 +4,23 @@ status:
   type: receiver
   stability: development
   pipelines: [metrics]
-  # distribution: [contrib]
+  distribution: [contrib]
+
+attributes:
+  topic_name:
+    description: the name of the topic that the metric comes from
+    type: string
 
 metrics:
-  topic.msgincount:
-    description: number of messages published for a topic (in the last interval?)
+  topic.msginrate:
+    description: number of messages published for a topic in the last interval
     enabled: true
     sum:
-      aggregation: delta
+      aggregation: cumulative
       monotonic: false
-      value_type: int
+      value_type: float
     unit: "{messages}"
-  topic.backlogsize:
-    description: total unconsumed message data
-    enabled: true
-    sum:
-      aggregation: cumulative # double check this
-      monotonic: false
-      value_type: int
-    unit: bytes
+    attributes: [topic_name]
   topic.sub.unackedmsgs:
     description: number of unacknowledged messages for a subscription
     enabled: true
@@ -31,9 +29,11 @@ metrics:
       monotonic: false
       value_type: int
     unit: "{messages}"
+    attributes: [topic_name]
   topic.avgmsgsize:
     description: average size of messages in the last interval
     enabled: true
     gauge:
-      value_type: int
+      value_type: float
     unit: bytes
+    attributes: [topic_name]

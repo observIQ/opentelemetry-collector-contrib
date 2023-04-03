@@ -69,6 +69,9 @@ func TestDefaultReceivers(t *testing.T) {
 			receiver: "aerospike",
 		},
 		{
+			receiver: "apachepulsar"
+		},
+		{
 			receiver: "apache",
 		},
 		{
