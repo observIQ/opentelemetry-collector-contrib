@@ -102,6 +102,7 @@ import (
 	transformprocessor "github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor"
 	activedirectorydsreceiver "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/activedirectorydsreceiver"
 	aerospikereceiver "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/aerospikereceiver"
+	apachepulsarreceiver "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/apachepulsarreceiver"
 	apachereceiver "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/apachereceiver"
 	awscloudwatchreceiver "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscloudwatchreceiver"
 	awscontainerinsightreceiver "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscontainerinsightreceiver"
@@ -210,6 +211,7 @@ func components() (otelcol.Factories, error) {
 		otlpreceiver.NewFactory(),
 		activedirectorydsreceiver.NewFactory(),
 		aerospikereceiver.NewFactory(),
+		apachepulsarreceiver.NewFactory(),
 		apachereceiver.NewFactory(),
 		awscloudwatchreceiver.NewFactory(),
 		awscontainerinsightreceiver.NewFactory(),
