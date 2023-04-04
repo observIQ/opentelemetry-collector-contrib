@@ -57,8 +57,6 @@ func (s *apachePulsarScraper) scrape(_ context.Context) (pmetric.Metrics, error)
 		return pmetric.NewMetrics(), errClientNotInit
 	}
 
-	collectedMetrics := false
-
 	tenants, err := s.client.GetTenants()
 	if err != nil {
 		scrapeErrors.AddPartial(1, err)
@@ -78,26 +76,20 @@ func (s *apachePulsarScraper) scrape(_ context.Context) (pmetric.Metrics, error)
 	if err != nil {
 		scrapeErrors.AddPartial(1, err)
 		s.logger.Warn("Failed to scrape topic stat metrics", zap.Error(err))
-	} else {
-		collectedMetrics = true
-		// scrape metrics for each topic
-		for name, stats := range topicStats {
-			// get metrics I want from stats
-			msgRateIn := stats.MsgRateIn // can't get count, only rate
-			avgMsgSize := stats.AverageMsgSize
-
-			var totalUnackedMsgs int64 = 0
-
-			for _, subStats := range stats.Subscriptions {
-				totalUnackedMsgs += int64(subStats.UnAckedMessages)
-			}
-			metrics := models.TopicMetrics{TopicName: *name, MsgRateIn: msgRateIn, AvgMsgSize: avgMsgSize, UnackedMessages: totalUnackedMsgs}
-			s.collectTopicMetrics(&metrics, now)
-		}
 	}
+	// scrape metrics for each topic
+	for name, stats := range topicStats {
+		// get metrics I want from stats
+		msgRateIn := stats.MsgRateIn // can't get count, only rate
+		avgMsgSize := stats.AverageMsgSize
 
-	if !collectedMetrics {
-		return pmetric.NewMetrics(), errScrapedNoMetrics
+		var totalUnackedMsgs int64 = 0
+
+		for _, subStats := range stats.Subscriptions {
+			totalUnackedMsgs += int64(subStats.UnAckedMessages)
+		}
+		metrics := models.TopicMetrics{TopicName: *name, MsgRateIn: msgRateIn, AvgMsgSize: avgMsgSize, UnackedMessages: totalUnackedMsgs}
+		s.collectTopicMetrics(&metrics, now)
 	}
 	return s.mb.Emit(), scrapeErrors.Combine()
 }
