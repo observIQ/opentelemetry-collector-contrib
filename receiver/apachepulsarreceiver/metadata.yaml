@@ -4,7 +4,7 @@ status:
   type: receiver
   stability: development
   pipelines: [metrics]
-  distribution: [contrib]
+  # distribution: [contrib]
 
 attributes:
   topic_name:
