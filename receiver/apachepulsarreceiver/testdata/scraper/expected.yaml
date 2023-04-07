@@ -1,1 +1,45 @@
-{}
+resourceMetrics:
+  - resource: {}
+    scopeMetrics:
+      - metrics:
+          - description: The average size (in bytes) of messages in the last interval for all topics in the cluster.
+            gauge:
+              dataPoints:
+                - asInt: "0"
+                  attributes:
+                    - key: topic_name
+                      value:
+                        stringValue: ""
+                  startTimeUnixNano: "1680794871204436000"
+                  timeUnixNano: "1680794871204576000"
+            name: pulsar.topic.avgmsgsize
+            unit: bytes
+          - description: The number of messages published to all topics in the last interval.
+            name: pulsar.topic.msginrate
+            sum:
+              aggregationTemporality: 2
+              dataPoints:
+                - asInt: "0"
+                  attributes:
+                    - key: topic_name
+                      value:
+                        stringValue: ""
+                  startTimeUnixNano: "1680794871204436000"
+                  timeUnixNano: "1680794871204576000"
+            unit: '{messages}'
+          - description: The number of unacked messages for all subscriptions in a cluster.
+            name: pulsar.topic.sub.unackedmsgs
+            sum:
+              aggregationTemporality: 2
+              dataPoints:
+                - asInt: "0"
+                  attributes:
+                    - key: topic_name
+                      value:
+                        stringValue: ""
+                  startTimeUnixNano: "1680794871204436000"
+                  timeUnixNano: "1680794871204576000"
+            unit: '{messages}'
+        scope:
+          name: otelcol/apachepulsarreceiver
+          version: latest

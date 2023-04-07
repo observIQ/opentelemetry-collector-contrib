@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/apachepulsarreceiver/internal/metadata"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/apachepulsarreceiver/internal/models"
 )
 
 // custom errors
@@ -80,25 +79,22 @@ func (s *apachePulsarScraper) scrape(_ context.Context) (pmetric.Metrics, error)
 	// scrape metrics for each topic
 	for name, stats := range topicStats {
 		// get metrics I want from stats
-		msgRateIn := stats.MsgRateIn // can't get count, only rate
+		msgRateIn := stats.MsgRateIn
 		avgMsgSize := stats.AverageMsgSize
+
+		s.mb.RecordPulsarTopicAvgmsgsizeDataPoint(now, int64(avgMsgSize), name.GetLocalName())
+		s.mb.RecordPulsarTopicMsginrateDataPoint(now, int64(msgRateIn), name.GetLocalName())
 
 		var totalUnackedMsgs int64 = 0
 
 		for _, subStats := range stats.Subscriptions {
 			totalUnackedMsgs += int64(subStats.UnAckedMessages)
 		}
-		metrics := models.TopicMetrics{TopicName: *name, MsgRateIn: msgRateIn, AvgMsgSize: avgMsgSize, UnackedMessages: totalUnackedMsgs}
-		s.collectTopicMetrics(&metrics, now)
+
+		fmt.Printf("New Topic Metrics for topic '%s': \nAvgMsgSize: %d\tMsgRateIn: %d\tUnackedMsgs: %d\n\n",
+			name.GetLocalName(), int64(avgMsgSize), int64(msgRateIn), totalUnackedMsgs)
+		s.mb.RecordPulsarTopicSubUnackedmsgsDataPoint(now, totalUnackedMsgs, name.GetLocalName())
 	}
+
 	return s.mb.Emit(), scrapeErrors.Combine()
-}
-
-func (s *apachePulsarScraper) collectTopicMetrics(topicMetrics *models.TopicMetrics, now pcommon.Timestamp) {
-	fmt.Println("Average message size being collected: ", topicMetrics.AvgMsgSize)
-	s.mb.RecordTopicAvgmsgsizeDataPoint(now, int64(topicMetrics.AvgMsgSize), string(topicMetrics.TopicName.GetLocalName()))
-	s.mb.RecordTopicMsginrateDataPoint(now, int64(topicMetrics.MsgRateIn), string(topicMetrics.TopicName.GetLocalName()))
-	s.mb.RecordTopicSubUnackedmsgsDataPoint(now, topicMetrics.UnackedMessages, string(topicMetrics.TopicName.GetLocalName()))
-
-	s.mb.Emit()
 }

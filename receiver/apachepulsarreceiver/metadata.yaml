@@ -4,7 +4,6 @@ status:
   type: receiver
   stability: development
   pipelines: [metrics]
-  # distribution: [contrib]
 
 attributes:
   topic_name:
@@ -12,8 +11,8 @@ attributes:
     type: string
 
 metrics:
-  topic.msginrate:
-    description: number of messages published for a topic in the last interval
+  pulsar.topic.msginrate:
+    description: The number of messages published to all topics in the last interval.
     enabled: true
     sum:
       aggregation: cumulative
@@ -21,8 +20,8 @@ metrics:
       value_type: int
     unit: "{messages}"
     attributes: [topic_name]
-  topic.sub.unackedmsgs:
-    description: number of unacknowledged messages for a subscription
+  pulsar.topic.sub.unackedmsgs:
+    description: The number of unacked messages for all subscriptions in a cluster.
     enabled: true
     sum:
       aggregation: cumulative
@@ -30,8 +29,8 @@ metrics:
       value_type: int
     unit: "{messages}"
     attributes: [topic_name]
-  topic.avgmsgsize:
-    description: average size of messages in the last interval
+  pulsar.topic.avgmsgsize:
+    description: The average size (in bytes) of messages in the last interval for all topics in the cluster.
     enabled: true
     gauge:
       value_type: int

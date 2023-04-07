@@ -23,13 +23,13 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/apachepulsarreceiver/internal/metadata"
 )
 
-const (
-	defaultCollectionInterval = 15 * time.Second
-	defaultEndpoint           = "http://localhost:8080"
-)
-
 type Config struct {
 	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
 	metadata.MetricsBuilderConfig           `mapstructure:",squash"`
 	confighttp.HTTPClientSettings           `mapstructure:",squash"`
 }
+
+const (
+	defaultCollectionInterval = 15 * time.Second
+	defaultEndpoint           = "http://localhost:8080"
+)

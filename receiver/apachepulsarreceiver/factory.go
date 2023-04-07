@@ -19,7 +19,9 @@ import (
 	"errors"
 	"time"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/apachepulsarreceiver/internal/metadata"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/scraperhelper"
@@ -44,6 +46,10 @@ func newDefaultConfig() component.Config {
 		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
 			CollectionInterval: 10 * time.Second,
 		},
+		HTTPClientSettings: confighttp.HTTPClientSettings{
+			Endpoint: defaultEndpoint,
+		},
+		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
 	}
 }
 
@@ -69,37 +75,3 @@ func createMetricsReceiver(
 		consumer, scraperhelper.AddScraper(scraper))
 
 }
-
-// func addMissingConfigDefaults(cfg *Config) error {
-// 	// Add the schema prefix to the endpoint if it doesn't contain one
-// 	if !strings.Contains(cfg.Endpoint, "://") {
-// 		cfg.Endpoint = "udp://" + cfg.Endpoint
-// 	}
-
-// 	u, err := url.Parse(cfg.Endpoint)
-// 	if err == nil && u.Port() == "" {
-// 		portSuffix := "8080"
-// 		if cfg.Endpoint[len(cfg.Endpoint)-1:] != ":" {
-// 			portSuffix = ":" + portSuffix
-// 		}
-// 		cfg.Endpoint += portSuffix
-// 	}
-
-// 	for _, metricCfg := range cfg.Metrics {
-// 		if metricCfg.Unit == "" {
-// 			metricCfg.Unit = "1"
-// 		}
-// 		if metricCfg.Gauge != nil && metricCfg.Gauge.ValueType == "" {
-// 			metricCfg.Gauge.ValueType = "float"
-// 		}
-// 		if metricCfg.Sum != nil {
-// 			if metricCfg.Sum.ValueType == "" {
-// 				metricCfg.Sum.ValueType = "float"
-// 			}
-// 			if metricCfg.Sum.Aggregation == "" {
-// 				metricCfg.Sum.Aggregation = "cumulative"
-// 			}
-// 		}
-// 	}
-// 	return cfg.Validate()
-// }

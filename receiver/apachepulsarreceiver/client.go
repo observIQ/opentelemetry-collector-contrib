@@ -105,7 +105,6 @@ func (c *apachePulsarClient) GetTopicStats(topics []string) (map[*utils.TopicNam
 		return nil, errEmptyParam
 	}
 	topicInterface := c.client.Topics()
-	var statsList = []utils.TopicStats{}
 	var topicStats = map[*utils.TopicName]utils.TopicStats{}
 	for i := range topics {
 		name, err := utils.GetTopicName(topics[i])
@@ -117,10 +116,11 @@ func (c *apachePulsarClient) GetTopicStats(topics []string) (map[*utils.TopicNam
 		if err != nil {
 			return nil, errTopicStatsNotFound
 		}
-		fmt.Println(stats)
+		// fmt.Println("Average message size: ", stats.AverageMsgSize)
+		// fmt.Println("Message Rate In: ", stats.MsgRateIn)
 
 		topicStats[name] = stats
-		statsList = append(statsList, stats)
 	}
+	fmt.Println("-----------------------------------------")
 	return topicStats, nil
 }

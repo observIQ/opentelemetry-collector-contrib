@@ -12,9 +12,9 @@ metrics:
     enabled: false
 ```
 
-### topic.avgmsgsize
+### pulsar.topic.avgmsgsize
 
-average size of messages in the last interval
+The average size (in bytes) of messages in the last interval for all topics in the cluster.
 
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
@@ -26,9 +26,9 @@ average size of messages in the last interval
 | ---- | ----------- | ------ |
 | topic_name | the name of the topic that the metric comes from | Any Str |
 
-### topic.msginrate
+### pulsar.topic.msginrate
 
-number of messages published for a topic in the last interval
+The number of messages published to all topics in the last interval.
 
 | Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
 | ---- | ----------- | ---------- | ----------------------- | --------- |
@@ -40,9 +40,9 @@ number of messages published for a topic in the last interval
 | ---- | ----------- | ------ |
 | topic_name | the name of the topic that the metric comes from | Any Str |
 
-### topic.sub.unackedmsgs
+### pulsar.topic.sub.unackedmsgs
 
-number of unacknowledged messages for a subscription
+The number of unacked messages for all subscriptions in a cluster.
 
 | Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
 | ---- | ----------- | ---------- | ----------------------- | --------- |

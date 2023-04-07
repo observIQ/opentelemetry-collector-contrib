@@ -1,19 +1,19 @@
 default:
 all_set:
   metrics:
-    topic.avgmsgsize:
+    pulsar.topic.avgmsgsize:
       enabled: true
-    topic.msginrate:
+    pulsar.topic.msginrate:
       enabled: true
-    topic.sub.unackedmsgs:
+    pulsar.topic.sub.unackedmsgs:
       enabled: true
   resource_attributes:
 none_set:
   metrics:
-    topic.avgmsgsize:
+    pulsar.topic.avgmsgsize:
       enabled: false
-    topic.msginrate:
+    pulsar.topic.msginrate:
       enabled: false
-    topic.sub.unackedmsgs:
+    pulsar.topic.sub.unackedmsgs:
       enabled: false
   resource_attributes:

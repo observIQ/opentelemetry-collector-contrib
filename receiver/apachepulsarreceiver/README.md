@@ -25,7 +25,7 @@ metrics:
     enabled: false
 ```
 
-### topic.msgincount
+### pulsar.topic.msginrate
 
 Number of messages published for a topic in the last interval
 
@@ -33,15 +33,7 @@ Number of messages published for a topic in the last interval
 | -------- | ----------------- | ---------- |
 | messages | Non-monotonic sum | Int        |
 
-### topic.backlogsize
-
-Total unconsumed message data for a topic
-
-| Unit  | Metric Type       | Value Type |
-| ----- | ----------------- | ---------- |
-| bytes | Non-monotonic sum | Int        |
-
-### topic.sub.unackedmsgs
+### pulsar.topic.sub.unackedmsgs
 
 Number of unacknowledged messages for a subscription
 
@@ -49,7 +41,7 @@ Number of unacknowledged messages for a subscription
 | -------- | ----------------- | ---------- |
 | messages | Non-monotonic sum | Int        |
 
-### topic.avgmsgsize
+### pulsar.topic.avgmsgsize
 
 Average size of messages in bytes in the last interval
 

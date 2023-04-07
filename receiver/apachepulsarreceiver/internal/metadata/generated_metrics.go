@@ -33,20 +33,20 @@ func (ms *MetricSettings) Unmarshal(parser *confmap.Conf) error {
 
 // MetricsSettings provides settings for apachepulsarreceiver metrics.
 type MetricsSettings struct {
-	TopicAvgmsgsize     MetricSettings `mapstructure:"topic.avgmsgsize"`
-	TopicMsginrate      MetricSettings `mapstructure:"topic.msginrate"`
-	TopicSubUnackedmsgs MetricSettings `mapstructure:"topic.sub.unackedmsgs"`
+	PulsarTopicAvgmsgsize     MetricSettings `mapstructure:"pulsar.topic.avgmsgsize"`
+	PulsarTopicMsginrate      MetricSettings `mapstructure:"pulsar.topic.msginrate"`
+	PulsarTopicSubUnackedmsgs MetricSettings `mapstructure:"pulsar.topic.sub.unackedmsgs"`
 }
 
 func DefaultMetricsSettings() MetricsSettings {
 	return MetricsSettings{
-		TopicAvgmsgsize: MetricSettings{
+		PulsarTopicAvgmsgsize: MetricSettings{
 			Enabled: true,
 		},
-		TopicMsginrate: MetricSettings{
+		PulsarTopicMsginrate: MetricSettings{
 			Enabled: true,
 		},
-		TopicSubUnackedmsgs: MetricSettings{
+		PulsarTopicSubUnackedmsgs: MetricSettings{
 			Enabled: true,
 		},
 	}
@@ -65,22 +65,22 @@ func DefaultResourceAttributesSettings() ResourceAttributesSettings {
 	return ResourceAttributesSettings{}
 }
 
-type metricTopicAvgmsgsize struct {
+type metricPulsarTopicAvgmsgsize struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
 	capacity int            // max observed number of data points added to the metric.
 }
 
-// init fills topic.avgmsgsize metric with initial data.
-func (m *metricTopicAvgmsgsize) init() {
-	m.data.SetName("topic.avgmsgsize")
-	m.data.SetDescription("average size of messages in the last interval")
+// init fills pulsar.topic.avgmsgsize metric with initial data.
+func (m *metricPulsarTopicAvgmsgsize) init() {
+	m.data.SetName("pulsar.topic.avgmsgsize")
+	m.data.SetDescription("The average size (in bytes) of messages in the last interval for all topics in the cluster.")
 	m.data.SetUnit("bytes")
 	m.data.SetEmptyGauge()
 	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
 }
 
-func (m *metricTopicAvgmsgsize) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
+func (m *metricPulsarTopicAvgmsgsize) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
 	}
@@ -92,14 +92,14 @@ func (m *metricTopicAvgmsgsize) recordDataPoint(start pcommon.Timestamp, ts pcom
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
-func (m *metricTopicAvgmsgsize) updateCapacity() {
+func (m *metricPulsarTopicAvgmsgsize) updateCapacity() {
 	if m.data.Gauge().DataPoints().Len() > m.capacity {
 		m.capacity = m.data.Gauge().DataPoints().Len()
 	}
 }
 
 // emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
-func (m *metricTopicAvgmsgsize) emit(metrics pmetric.MetricSlice) {
+func (m *metricPulsarTopicAvgmsgsize) emit(metrics pmetric.MetricSlice) {
 	if m.settings.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
 		m.updateCapacity()
 		m.data.MoveTo(metrics.AppendEmpty())
@@ -107,8 +107,8 @@ func (m *metricTopicAvgmsgsize) emit(metrics pmetric.MetricSlice) {
 	}
 }
 
-func newMetricTopicAvgmsgsize(settings MetricSettings) metricTopicAvgmsgsize {
-	m := metricTopicAvgmsgsize{settings: settings}
+func newMetricPulsarTopicAvgmsgsize(settings MetricSettings) metricPulsarTopicAvgmsgsize {
+	m := metricPulsarTopicAvgmsgsize{settings: settings}
 	if settings.Enabled {
 		m.data = pmetric.NewMetric()
 		m.init()
@@ -116,16 +116,16 @@ func newMetricTopicAvgmsgsize(settings MetricSettings) metricTopicAvgmsgsize {
 	return m
 }
 
-type metricTopicMsginrate struct {
+type metricPulsarTopicMsginrate struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
 	capacity int            // max observed number of data points added to the metric.
 }
 
-// init fills topic.msginrate metric with initial data.
-func (m *metricTopicMsginrate) init() {
-	m.data.SetName("topic.msginrate")
-	m.data.SetDescription("number of messages published for a topic in the last interval")
+// init fills pulsar.topic.msginrate metric with initial data.
+func (m *metricPulsarTopicMsginrate) init() {
+	m.data.SetName("pulsar.topic.msginrate")
+	m.data.SetDescription("The number of messages published to all topics in the last interval.")
 	m.data.SetUnit("{messages}")
 	m.data.SetEmptySum()
 	m.data.Sum().SetIsMonotonic(false)
@@ -133,7 +133,7 @@ func (m *metricTopicMsginrate) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
-func (m *metricTopicMsginrate) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
+func (m *metricPulsarTopicMsginrate) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
 	}
@@ -145,14 +145,14 @@ func (m *metricTopicMsginrate) recordDataPoint(start pcommon.Timestamp, ts pcomm
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
-func (m *metricTopicMsginrate) updateCapacity() {
+func (m *metricPulsarTopicMsginrate) updateCapacity() {
 	if m.data.Sum().DataPoints().Len() > m.capacity {
 		m.capacity = m.data.Sum().DataPoints().Len()
 	}
 }
 
 // emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
-func (m *metricTopicMsginrate) emit(metrics pmetric.MetricSlice) {
+func (m *metricPulsarTopicMsginrate) emit(metrics pmetric.MetricSlice) {
 	if m.settings.Enabled && m.data.Sum().DataPoints().Len() > 0 {
 		m.updateCapacity()
 		m.data.MoveTo(metrics.AppendEmpty())
@@ -160,8 +160,8 @@ func (m *metricTopicMsginrate) emit(metrics pmetric.MetricSlice) {
 	}
 }
 
-func newMetricTopicMsginrate(settings MetricSettings) metricTopicMsginrate {
-	m := metricTopicMsginrate{settings: settings}
+func newMetricPulsarTopicMsginrate(settings MetricSettings) metricPulsarTopicMsginrate {
+	m := metricPulsarTopicMsginrate{settings: settings}
 	if settings.Enabled {
 		m.data = pmetric.NewMetric()
 		m.init()
@@ -169,16 +169,16 @@ func newMetricTopicMsginrate(settings MetricSettings) metricTopicMsginrate {
 	return m
 }
 
-type metricTopicSubUnackedmsgs struct {
+type metricPulsarTopicSubUnackedmsgs struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	settings MetricSettings // metric settings provided by user.
 	capacity int            // max observed number of data points added to the metric.
 }
 
-// init fills topic.sub.unackedmsgs metric with initial data.
-func (m *metricTopicSubUnackedmsgs) init() {
-	m.data.SetName("topic.sub.unackedmsgs")
-	m.data.SetDescription("number of unacknowledged messages for a subscription")
+// init fills pulsar.topic.sub.unackedmsgs metric with initial data.
+func (m *metricPulsarTopicSubUnackedmsgs) init() {
+	m.data.SetName("pulsar.topic.sub.unackedmsgs")
+	m.data.SetDescription("The number of unacked messages for all subscriptions in a cluster.")
 	m.data.SetUnit("{messages}")
 	m.data.SetEmptySum()
 	m.data.Sum().SetIsMonotonic(false)
@@ -186,7 +186,7 @@ func (m *metricTopicSubUnackedmsgs) init() {
 	m.data.Sum().DataPoints().EnsureCapacity(m.capacity)
 }
 
-func (m *metricTopicSubUnackedmsgs) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
+func (m *metricPulsarTopicSubUnackedmsgs) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
 	if !m.settings.Enabled {
 		return
 	}
@@ -198,14 +198,14 @@ func (m *metricTopicSubUnackedmsgs) recordDataPoint(start pcommon.Timestamp, ts 
 }
 
 // updateCapacity saves max length of data point slices that will be used for the slice capacity.
-func (m *metricTopicSubUnackedmsgs) updateCapacity() {
+func (m *metricPulsarTopicSubUnackedmsgs) updateCapacity() {
 	if m.data.Sum().DataPoints().Len() > m.capacity {
 		m.capacity = m.data.Sum().DataPoints().Len()
 	}
 }
 
 // emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
-func (m *metricTopicSubUnackedmsgs) emit(metrics pmetric.MetricSlice) {
+func (m *metricPulsarTopicSubUnackedmsgs) emit(metrics pmetric.MetricSlice) {
 	if m.settings.Enabled && m.data.Sum().DataPoints().Len() > 0 {
 		m.updateCapacity()
 		m.data.MoveTo(metrics.AppendEmpty())
@@ -213,8 +213,8 @@ func (m *metricTopicSubUnackedmsgs) emit(metrics pmetric.MetricSlice) {
 	}
 }
 
-func newMetricTopicSubUnackedmsgs(settings MetricSettings) metricTopicSubUnackedmsgs {
-	m := metricTopicSubUnackedmsgs{settings: settings}
+func newMetricPulsarTopicSubUnackedmsgs(settings MetricSettings) metricPulsarTopicSubUnackedmsgs {
+	m := metricPulsarTopicSubUnackedmsgs{settings: settings}
 	if settings.Enabled {
 		m.data = pmetric.NewMetric()
 		m.init()
@@ -231,15 +231,15 @@ type MetricsBuilderConfig struct {
 // MetricsBuilder provides an interface for scrapers to report metrics while taking care of all the transformations
 // required to produce metric representation defined in metadata and user settings.
 type MetricsBuilder struct {
-	startTime                  pcommon.Timestamp   // start time that will be applied to all recorded data points.
-	metricsCapacity            int                 // maximum observed number of metrics per resource.
-	resourceCapacity           int                 // maximum observed number of resource attributes.
-	metricsBuffer              pmetric.Metrics     // accumulates metrics data before emitting.
-	buildInfo                  component.BuildInfo // contains version information
-	resourceAttributesSettings ResourceAttributesSettings
-	metricTopicAvgmsgsize      metricTopicAvgmsgsize
-	metricTopicMsginrate       metricTopicMsginrate
-	metricTopicSubUnackedmsgs  metricTopicSubUnackedmsgs
+	startTime                       pcommon.Timestamp   // start time that will be applied to all recorded data points.
+	metricsCapacity                 int                 // maximum observed number of metrics per resource.
+	resourceCapacity                int                 // maximum observed number of resource attributes.
+	metricsBuffer                   pmetric.Metrics     // accumulates metrics data before emitting.
+	buildInfo                       component.BuildInfo // contains version information
+	resourceAttributesSettings      ResourceAttributesSettings
+	metricPulsarTopicAvgmsgsize     metricPulsarTopicAvgmsgsize
+	metricPulsarTopicMsginrate      metricPulsarTopicMsginrate
+	metricPulsarTopicSubUnackedmsgs metricPulsarTopicSubUnackedmsgs
 }
 
 // metricBuilderOption applies changes to default metrics builder.
@@ -268,13 +268,13 @@ func NewMetricsBuilderConfig(ms MetricsSettings, ras ResourceAttributesSettings)
 
 func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSettings, options ...metricBuilderOption) *MetricsBuilder {
 	mb := &MetricsBuilder{
-		startTime:                  pcommon.NewTimestampFromTime(time.Now()),
-		metricsBuffer:              pmetric.NewMetrics(),
-		buildInfo:                  settings.BuildInfo,
-		resourceAttributesSettings: mbc.ResourceAttributes,
-		metricTopicAvgmsgsize:      newMetricTopicAvgmsgsize(mbc.Metrics.TopicAvgmsgsize),
-		metricTopicMsginrate:       newMetricTopicMsginrate(mbc.Metrics.TopicMsginrate),
-		metricTopicSubUnackedmsgs:  newMetricTopicSubUnackedmsgs(mbc.Metrics.TopicSubUnackedmsgs),
+		startTime:                       pcommon.NewTimestampFromTime(time.Now()),
+		metricsBuffer:                   pmetric.NewMetrics(),
+		buildInfo:                       settings.BuildInfo,
+		resourceAttributesSettings:      mbc.ResourceAttributes,
+		metricPulsarTopicAvgmsgsize:     newMetricPulsarTopicAvgmsgsize(mbc.Metrics.PulsarTopicAvgmsgsize),
+		metricPulsarTopicMsginrate:      newMetricPulsarTopicMsginrate(mbc.Metrics.PulsarTopicMsginrate),
+		metricPulsarTopicSubUnackedmsgs: newMetricPulsarTopicSubUnackedmsgs(mbc.Metrics.PulsarTopicSubUnackedmsgs),
 	}
 	for _, op := range options {
 		op(mb)
@@ -327,9 +327,9 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	ils.Scope().SetName("otelcol/apachepulsarreceiver")
 	ils.Scope().SetVersion(mb.buildInfo.Version)
 	ils.Metrics().EnsureCapacity(mb.metricsCapacity)
-	mb.metricTopicAvgmsgsize.emit(ils.Metrics())
-	mb.metricTopicMsginrate.emit(ils.Metrics())
-	mb.metricTopicSubUnackedmsgs.emit(ils.Metrics())
+	mb.metricPulsarTopicAvgmsgsize.emit(ils.Metrics())
+	mb.metricPulsarTopicMsginrate.emit(ils.Metrics())
+	mb.metricPulsarTopicSubUnackedmsgs.emit(ils.Metrics())
 
 	for _, op := range rmo {
 		op(mb.resourceAttributesSettings, rm)
@@ -350,19 +350,19 @@ func (mb *MetricsBuilder) Emit(rmo ...ResourceMetricsOption) pmetric.Metrics {
 	return metrics
 }
 
-// RecordTopicAvgmsgsizeDataPoint adds a data point to topic.avgmsgsize metric.
-func (mb *MetricsBuilder) RecordTopicAvgmsgsizeDataPoint(ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
-	mb.metricTopicAvgmsgsize.recordDataPoint(mb.startTime, ts, val, topicNameAttributeValue)
+// RecordPulsarTopicAvgmsgsizeDataPoint adds a data point to pulsar.topic.avgmsgsize metric.
+func (mb *MetricsBuilder) RecordPulsarTopicAvgmsgsizeDataPoint(ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
+	mb.metricPulsarTopicAvgmsgsize.recordDataPoint(mb.startTime, ts, val, topicNameAttributeValue)
 }
 
-// RecordTopicMsginrateDataPoint adds a data point to topic.msginrate metric.
-func (mb *MetricsBuilder) RecordTopicMsginrateDataPoint(ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
-	mb.metricTopicMsginrate.recordDataPoint(mb.startTime, ts, val, topicNameAttributeValue)
+// RecordPulsarTopicMsginrateDataPoint adds a data point to pulsar.topic.msginrate metric.
+func (mb *MetricsBuilder) RecordPulsarTopicMsginrateDataPoint(ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
+	mb.metricPulsarTopicMsginrate.recordDataPoint(mb.startTime, ts, val, topicNameAttributeValue)
 }
 
-// RecordTopicSubUnackedmsgsDataPoint adds a data point to topic.sub.unackedmsgs metric.
-func (mb *MetricsBuilder) RecordTopicSubUnackedmsgsDataPoint(ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
-	mb.metricTopicSubUnackedmsgs.recordDataPoint(mb.startTime, ts, val, topicNameAttributeValue)
+// RecordPulsarTopicSubUnackedmsgsDataPoint adds a data point to pulsar.topic.sub.unackedmsgs metric.
+func (mb *MetricsBuilder) RecordPulsarTopicSubUnackedmsgsDataPoint(ts pcommon.Timestamp, val int64, topicNameAttributeValue string) {
+	mb.metricPulsarTopicSubUnackedmsgs.recordDataPoint(mb.startTime, ts, val, topicNameAttributeValue)
 }
 
 // Reset resets metrics builder to its initial state. It should be used when external metrics source is restarted,

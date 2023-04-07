@@ -1,13 +1,22 @@
 # ./bin/otelcontribcol_darwin_arm64 --config ./receiver/apachepulsarreceiver/testdata/config.yaml
 receivers:
   apachepulsar:
-    collection_interval: 15s
+    collection_interval: 60s
 exporters:
   file:
-    path: ./metrics_output.json
+    path: ./receiver/apachepulsarreceiver/output/metrics_output.json
+  prometheusremotewrite:
+    endpoint: "http://localhost:9090/api/v1/write"
+    resource_to_telemetry_conversion:
+      enabled: true
+  googlecloud:
+    log:
+      default_log_name: opentelemetry.io/collector-exported-log
+    retry_on_failure:
+      enabled: true
 
 service:
   pipelines:
     metrics:
       receivers: [apachepulsar]
-      exporters: [file]
+      exporters: [prometheusremotewrite, googlecloud]

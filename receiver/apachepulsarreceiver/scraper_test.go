@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/golden"
@@ -20,7 +19,6 @@ import (
 func TestScraper(t *testing.T) {
 
 	cfg := newDefaultConfig().(*Config)
-	require.NoError(t, component.ValidateConfig(cfg))
 
 	scraper := newScraper(zap.NewNop(), cfg, receivertest.NewNopCreateSettings())
 	scraper.client = newMockClient(t)

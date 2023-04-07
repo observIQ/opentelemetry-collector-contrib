@@ -60,15 +60,15 @@ func TestMetricsBuilder(t *testing.T) {
 
 			defaultMetricsCount++
 			allMetricsCount++
-			mb.RecordTopicAvgmsgsizeDataPoint(ts, 1, "attr-val")
+			mb.RecordPulsarTopicAvgmsgsizeDataPoint(ts, 1, "attr-val")
 
 			defaultMetricsCount++
 			allMetricsCount++
-			mb.RecordTopicMsginrateDataPoint(ts, 1, "attr-val")
+			mb.RecordPulsarTopicMsginrateDataPoint(ts, 1, "attr-val")
 
 			defaultMetricsCount++
 			allMetricsCount++
-			mb.RecordTopicSubUnackedmsgsDataPoint(ts, 1, "attr-val")
+			mb.RecordPulsarTopicSubUnackedmsgsDataPoint(ts, 1, "attr-val")
 
 			metrics := mb.Emit()
 
@@ -95,12 +95,12 @@ func TestMetricsBuilder(t *testing.T) {
 			validatedMetrics := make(map[string]bool)
 			for i := 0; i < ms.Len(); i++ {
 				switch ms.At(i).Name() {
-				case "topic.avgmsgsize":
-					assert.False(t, validatedMetrics["topic.avgmsgsize"], "Found a duplicate in the metrics slice: topic.avgmsgsize")
-					validatedMetrics["topic.avgmsgsize"] = true
+				case "pulsar.topic.avgmsgsize":
+					assert.False(t, validatedMetrics["pulsar.topic.avgmsgsize"], "Found a duplicate in the metrics slice: pulsar.topic.avgmsgsize")
+					validatedMetrics["pulsar.topic.avgmsgsize"] = true
 					assert.Equal(t, pmetric.MetricTypeGauge, ms.At(i).Type())
 					assert.Equal(t, 1, ms.At(i).Gauge().DataPoints().Len())
-					assert.Equal(t, "average size of messages in the last interval", ms.At(i).Description())
+					assert.Equal(t, "The average size (in bytes) of messages in the last interval for all topics in the cluster.", ms.At(i).Description())
 					assert.Equal(t, "bytes", ms.At(i).Unit())
 					dp := ms.At(i).Gauge().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -110,12 +110,12 @@ func TestMetricsBuilder(t *testing.T) {
 					attrVal, ok := dp.Attributes().Get("topic_name")
 					assert.True(t, ok)
 					assert.EqualValues(t, "attr-val", attrVal.Str())
-				case "topic.msginrate":
-					assert.False(t, validatedMetrics["topic.msginrate"], "Found a duplicate in the metrics slice: topic.msginrate")
-					validatedMetrics["topic.msginrate"] = true
+				case "pulsar.topic.msginrate":
+					assert.False(t, validatedMetrics["pulsar.topic.msginrate"], "Found a duplicate in the metrics slice: pulsar.topic.msginrate")
+					validatedMetrics["pulsar.topic.msginrate"] = true
 					assert.Equal(t, pmetric.MetricTypeSum, ms.At(i).Type())
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
-					assert.Equal(t, "number of messages published for a topic in the last interval", ms.At(i).Description())
+					assert.Equal(t, "The number of messages published to all topics in the last interval.", ms.At(i).Description())
 					assert.Equal(t, "{messages}", ms.At(i).Unit())
 					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
@@ -127,12 +127,12 @@ func TestMetricsBuilder(t *testing.T) {
 					attrVal, ok := dp.Attributes().Get("topic_name")
 					assert.True(t, ok)
 					assert.EqualValues(t, "attr-val", attrVal.Str())
-				case "topic.sub.unackedmsgs":
-					assert.False(t, validatedMetrics["topic.sub.unackedmsgs"], "Found a duplicate in the metrics slice: topic.sub.unackedmsgs")
-					validatedMetrics["topic.sub.unackedmsgs"] = true
+				case "pulsar.topic.sub.unackedmsgs":
+					assert.False(t, validatedMetrics["pulsar.topic.sub.unackedmsgs"], "Found a duplicate in the metrics slice: pulsar.topic.sub.unackedmsgs")
+					validatedMetrics["pulsar.topic.sub.unackedmsgs"] = true
 					assert.Equal(t, pmetric.MetricTypeSum, ms.At(i).Type())
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
-					assert.Equal(t, "number of unacknowledged messages for a subscription", ms.At(i).Description())
+					assert.Equal(t, "The number of unacked messages for all subscriptions in a cluster.", ms.At(i).Description())
 					assert.Equal(t, "{messages}", ms.At(i).Unit())
 					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
