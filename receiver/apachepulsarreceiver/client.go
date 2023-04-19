@@ -116,8 +116,6 @@ func (c *apachePulsarClient) GetTopicStats(topics []string) (map[*utils.TopicNam
 		if err != nil {
 			return nil, errTopicStatsNotFound
 		}
-		// fmt.Println("Average message size: ", stats.AverageMsgSize)
-		// fmt.Println("Message Rate In: ", stats.MsgRateIn)
 
 		topicStats[name] = stats
 	}
