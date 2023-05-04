@@ -27,11 +27,8 @@ import (
 )
 
 const (
-	// The value of "type" key in configuration.
-	typeStr = "azureeventhub"
-
 	// The receiver scope name
-	receiverScopeName = "otelcol/" + typeStr
+	receiverScopeName = "otelcol/" + metadata.Type
 )
 
 var (
@@ -49,7 +46,7 @@ func NewFactory() receiver.Factory {
 	}
 
 	return receiver.NewFactory(
-		typeStr,
+		metadata.Type,
 		createDefaultConfig,
 		receiver.WithLogs(f.createLogsReceiver, metadata.Stability),
 		receiver.WithMetrics(f.createMetricsReceiver, metadata.Stability))

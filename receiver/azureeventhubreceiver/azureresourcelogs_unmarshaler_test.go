@@ -28,6 +28,7 @@ import (
 	conventions "go.opentelemetry.io/collector/semconv/v1.13.0"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/plogtest"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azureeventhubreceiver/internal/metadata"
 )
 
 var testBuildInfo = component.BuildInfo{
@@ -236,7 +237,7 @@ func TestUnmarshalLogs(t *testing.T) {
 	expectedMinimum := plog.NewLogs()
 	resourceLogs := expectedMinimum.ResourceLogs().AppendEmpty()
 	scopeLogs := resourceLogs.ScopeLogs().AppendEmpty()
-	scopeLogs.Scope().SetName("otelcol/" + typeStr)
+	scopeLogs.Scope().SetName("otelcol/" + metadata.Type)
 	scopeLogs.Scope().SetVersion(testBuildInfo.Version)
 	lr := scopeLogs.LogRecords().AppendEmpty()
 	resourceLogs.Resource().Attributes().PutStr(azureResourceID, "/RESOURCE_ID")
@@ -246,7 +247,7 @@ func TestUnmarshalLogs(t *testing.T) {
 	resourceLogs = expectedMinimum2.ResourceLogs().AppendEmpty()
 	resourceLogs.Resource().Attributes().PutStr(azureResourceID, "/RESOURCE_ID")
 	scopeLogs = resourceLogs.ScopeLogs().AppendEmpty()
-	scopeLogs.Scope().SetName("otelcol/" + typeStr)
+	scopeLogs.Scope().SetName("otelcol/" + metadata.Type)
 	scopeLogs.Scope().SetVersion(testBuildInfo.Version)
 	logRecords := scopeLogs.LogRecords()
 	lr = logRecords.AppendEmpty()
@@ -258,7 +259,7 @@ func TestUnmarshalLogs(t *testing.T) {
 	resourceLogs = expectedMaximum.ResourceLogs().AppendEmpty()
 	resourceLogs.Resource().Attributes().PutStr(azureResourceID, "/RESOURCE_ID")
 	scopeLogs = resourceLogs.ScopeLogs().AppendEmpty()
-	scopeLogs.Scope().SetName("otelcol/" + typeStr)
+	scopeLogs.Scope().SetName("otelcol/" + metadata.Type)
 	scopeLogs.Scope().SetVersion(testBuildInfo.Version)
 	lr = scopeLogs.LogRecords().AppendEmpty()
 	maximumLogRecord.CopyTo(lr)
