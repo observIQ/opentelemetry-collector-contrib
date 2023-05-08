@@ -7,6 +7,6 @@ import (
 )
 
 const (
-	Type      = "memcachedreceiver"
-	Stability = component.StabilityLevelBeta
+	Type             = "memcachedreceiver"
+	MetricsStability = component.StabilityLevelBeta
 )
