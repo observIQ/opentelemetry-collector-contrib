@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestFinder(t *testing.T) {
@@ -138,10 +140,33 @@ func TestFinder(t *testing.T) {
 				require.NoError(t, os.WriteFile(f, []byte(filepath.Base(f)), 0000))
 			}
 
-			finder := Finder{include, exclude}
+			finder := Finder{include, exclude, nil}
 			require.ElementsMatch(t, finder.FindFiles(), expected)
 		})
 	}
+}
+
+func TestFinderDebugIOError(t *testing.T) {
+	core, logs := observer.New(zap.DebugLevel)
+	logger := zap.New(core)
+
+	tempDir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "badfolder"), 0200))
+
+	glob := filepath.Join(tempDir, "badfolder", "*.log")
+	finder := Finder{[]string{glob}, []string{}, logger}
+
+	require.Equal(t, finder.FindFiles(), []string{})
+
+	// Check that the error actually got logged
+	logLines := logs.All()
+	require.Equal(t, 1, len(logLines))
+	line := logLines[0]
+	lineContext := line.ContextMap()
+	require.Equal(t, "Error when globbing.", line.Entry.Message)
+	require.Equal(t, glob, lineContext["glob"])
+	require.Contains(t, lineContext, "error") // actual error may be OS dependent
 }
 
 func absPath(tempDir string, files []string) []string {

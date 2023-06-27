@@ -5,11 +5,14 @@ package fileconsumer // import "github.com/open-telemetry/opentelemetry-collecto
 
 import (
 	"github.com/bmatcuk/doublestar/v4"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type Finder struct {
 	Include []string `mapstructure:"include,omitempty"`
 	Exclude []string `mapstructure:"exclude,omitempty"`
+	logger  *zap.Logger
 }
 
 // FindFiles gets a list of paths given an array of glob patterns to include and exclude
@@ -18,7 +21,22 @@ type Finder struct {
 func (f Finder) FindFiles() []string {
 	all := make([]string, 0, len(f.Include))
 	for _, include := range f.Include {
-		matches, _ := doublestar.FilepathGlob(include, doublestar.WithFilesOnly()) // compile error checked in build
+		var matches []string
+
+		if f.logger != nil && f.logger.Level().Enabled(zapcore.DebugLevel) {
+			// For debugging, we should log IO errors if they occur.
+			var err error
+			matches, err = doublestar.FilepathGlob(include, doublestar.WithFilesOnly(), doublestar.WithFailOnIOErrors())
+			if err != nil {
+				if f.logger != nil {
+					f.logger.Debug("Error when globbing.", zap.String("glob", include), zap.Error(err))
+				}
+				matches, _ = doublestar.FilepathGlob(include, doublestar.WithFilesOnly()) // compile error checked in build
+			}
+		} else {
+			matches, _ = doublestar.FilepathGlob(include, doublestar.WithFilesOnly()) // compile error checked in build
+		}
+
 	INCLUDE:
 		for _, match := range matches {
 			for _, exclude := range f.Exclude {
