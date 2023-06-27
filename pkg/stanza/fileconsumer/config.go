@@ -141,7 +141,6 @@ func (c Config) buildManager(logger *zap.SugaredLogger, emit EmitFunc, factory s
 		}
 	}
 
-	// Set finder logger
 	c.Finder.logger = logger.Desugar()
 
 	return &Manager{
