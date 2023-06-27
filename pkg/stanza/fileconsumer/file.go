@@ -287,7 +287,7 @@ func (m *Manager) saveCurrent(readers []*Reader) {
 func (m *Manager) newReader(file *os.File, fp *Fingerprint) (*Reader, error) {
 	// Check if the new path has the same fingerprint as an old path
 	if oldReader, ok := m.findFingerprintMatch(fp); ok {
-		m.Desugar().Debug("Using old reader.", zap.String("newFile", file.Name()), zap.String("oldFile", oldReader.file.Name()))
+		m.Desugar().Debug("Using old reader.", zap.String("newFile", fileName(file)), zap.String("oldFile", fileName(oldReader.file)))
 		return m.readerFactory.copy(oldReader, file)
 	}
 
@@ -375,4 +375,11 @@ func (m *Manager) loadLastPollFiles(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func fileName(f *os.File) string {
+	if f == nil {
+		return "<nil>"
+	}
+	return f.Name()
 }
