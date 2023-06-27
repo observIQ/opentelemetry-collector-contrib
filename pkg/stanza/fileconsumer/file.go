@@ -111,12 +111,14 @@ func (m *Manager) poll(ctx context.Context) {
 	matches := m.finder.FindFiles()
 	m.SugaredLogger.Desugar().Debug("Found files.", zap.Strings("matches", matches))
 	for len(matches) > m.maxBatchFiles {
+		m.SugaredLogger.Desugar().Debug("Reading in batches", zap.Strings("matches", matches), zap.Int("processed", batchesProcessed), zap.Int("maxBatchFiles", m.maxBatchFiles))
 		m.consume(ctx, matches[:m.maxBatchFiles])
 
+		batchesProcessed++
 		// If a maxBatches is set, check if we have hit the limit
 		if m.maxBatches != 0 {
-			batchesProcessed++
 			if batchesProcessed >= m.maxBatches {
+				m.SugaredLogger.Desugar().Debug("Hit max batches", zap.Strings("matches", matches), zap.Int("processed", batchesProcessed), zap.Int("maxBatches", m.maxBatches))
 				return
 			}
 		}
@@ -127,7 +129,7 @@ func (m *Manager) poll(ctx context.Context) {
 }
 
 func (m *Manager) consume(ctx context.Context, paths []string) {
-
+	m.Desugar().Debug("Consuming files", zap.Strings("paths", paths))
 	readers := make([]*Reader, 0, len(paths))
 	for _, path := range paths {
 		r := m.makeReader(path)
