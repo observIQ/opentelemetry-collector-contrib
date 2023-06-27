@@ -61,6 +61,7 @@ func (r *Reader) offsetToEnd() error {
 
 // ReadToEnd will read until the end of the file
 func (r *Reader) ReadToEnd(ctx context.Context) {
+	r.Desugar().Debug("Reading to end of file.", zap.String("file", r.file.Name()), zap.Int64("offset", r.Offset))
 	if _, err := r.file.Seek(r.Offset, 0); err != nil {
 		r.Errorw("Failed to seek", zap.Error(err))
 		return
@@ -76,6 +77,7 @@ func (r *Reader) ReadToEnd(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			r.Desugar().Debug("Context done while reading to end of file.", zap.String("file", r.file.Name()), zap.Int64("offset", r.Offset))
 			return
 		default:
 		}

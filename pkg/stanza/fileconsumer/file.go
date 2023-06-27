@@ -109,6 +109,7 @@ func (m *Manager) poll(ctx context.Context) {
 
 	// Get the list of paths on disk
 	matches := m.finder.FindFiles()
+	m.SugaredLogger.Desugar().Debug("Found files.", zap.Strings("matches", matches))
 	for len(matches) > m.maxBatchFiles {
 		m.consume(ctx, matches[:m.maxBatchFiles])
 
@@ -126,12 +127,14 @@ func (m *Manager) poll(ctx context.Context) {
 }
 
 func (m *Manager) consume(ctx context.Context, paths []string) {
-	m.Debug("Consuming files")
+
 	readers := make([]*Reader, 0, len(paths))
 	for _, path := range paths {
 		r := m.makeReader(path)
 		if r != nil {
 			readers = append(readers, r)
+		} else {
+			m.Desugar().Debug("Failed to create reader of path", zap.String("path", path))
 		}
 	}
 
@@ -229,14 +232,17 @@ func (m *Manager) checkDuplicates(fp *Fingerprint) bool {
 // discarding any that have a duplicate fingerprint to other files that have already
 // been read this polling interval
 func (m *Manager) makeReader(path string) *Reader {
+	m.Desugar().Debug("Creating reader.", zap.String("path", path))
 	// Open the files first to minimize the time between listing and opening
 	fp, file := m.makeFingerprint(path)
 	if fp == nil {
+		m.Desugar().Debug("Couldn't create fingerprint.", zap.String("path", path))
 		return nil
 	}
 
 	// Exclude any empty fingerprints or duplicate fingerprints to avoid doubling up on copy-truncate files
 	if m.checkDuplicates(fp) {
+		m.Desugar().Debug("Determined file was duplicate of another known file.", zap.String("path", path))
 		if err := file.Close(); err != nil {
 			m.Errorf("problem closing file", "file", file.Name())
 		}
@@ -249,7 +255,7 @@ func (m *Manager) makeReader(path string) *Reader {
 		m.Errorw("Failed to create reader", zap.Error(err))
 		return nil
 	}
-
+	m.Desugar().Debug("Reader created.", zap.String("path", path))
 	return reader
 }
 
@@ -263,6 +269,8 @@ func (m *Manager) clearCurrentFingerprints() {
 func (m *Manager) saveCurrent(readers []*Reader) {
 	// Add readers from the current, completed poll interval to the list of known files
 	m.knownFiles = append(m.knownFiles, readers...)
+
+	m.Desugar().Debug("saveCurrent", zap.Any("readers", m.knownFiles))
 
 	// Clear out old readers. They are sorted such that they are oldest first,
 	// so we can just find the first reader whose generation is less than our
@@ -279,6 +287,7 @@ func (m *Manager) saveCurrent(readers []*Reader) {
 func (m *Manager) newReader(file *os.File, fp *Fingerprint) (*Reader, error) {
 	// Check if the new path has the same fingerprint as an old path
 	if oldReader, ok := m.findFingerprintMatch(fp); ok {
+		m.Desugar().Debug("Using old reader.", zap.String("newFile", file.Name()), zap.String("oldFile", oldReader.file.Name()))
 		return m.readerFactory.copy(oldReader, file)
 	}
 
