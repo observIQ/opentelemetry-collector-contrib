@@ -55,6 +55,10 @@ func (s *receiver) scrape(ctx context.Context) (pmetric.Metrics, error) {
 	if err := s.poll(ctx, s.timeConstraints(now)); err != nil {
 		return pmetric.Metrics{}, err
 	}
+
+	// Reset num requests, only want on a per-scrape basis(?)
+	internal.NumRequests.Store(0)
+
 	s.lastRun = now
 	return s.mb.Emit(), nil
 }

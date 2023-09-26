@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -20,6 +21,8 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver/internal/metadata"
 )
+
+var NumRequests = atomic.Int64{}
 
 type clientRoundTripper struct {
 	originalTransport http.RoundTripper
@@ -73,6 +76,9 @@ func (rt *clientRoundTripper) RoundTrip(r *http.Request) (*http.Response, error)
 		return nil, fmt.Errorf("request cancelled due to shutdown")
 	}
 
+	NumRequests.Add(1)
+	rt.log.Info("Doing request", zap.Int64("requests", NumRequests.Load()), zap.String("url", r.URL.String()))
+
 	resp, err := rt.originalTransport.RoundTrip(r)
 	if err != nil {
 		return nil, err // Can't do anything
@@ -105,6 +111,9 @@ func (rt *clientRoundTripper) RoundTrip(r *http.Request) (*http.Response, error)
 				return resp, fmt.Errorf("request is cancelled due to server shutdown")
 			case <-time.After(delay):
 			}
+
+			NumRequests.Add(1)
+			rt.log.Info("Doing request", zap.Int64("requests", NumRequests.Load()), zap.String("url", r.URL.String()))
 
 			resp, err = rt.originalTransport.RoundTrip(r)
 			if err != nil {
