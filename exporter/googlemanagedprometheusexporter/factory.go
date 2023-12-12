@@ -28,7 +28,7 @@ const (
 	// The value of "type" key in configuration.
 	typeStr = "googlemanagedprometheus"
 	// The stability level of the exporter.
-	stability      = component.StabilityLevelAlpha
+	stability      = component.StabilityLevelBeta
 	defaultTimeout = 12 * time.Second // Consistent with Cloud Monitoring's timeout
 )
 
@@ -43,9 +43,11 @@ func NewFactory() exporter.Factory {
 
 // createDefaultConfig creates the default configuration for exporter.
 func createDefaultConfig() component.Config {
+	retrySettings := exporterhelper.NewDefaultRetrySettings()
+	retrySettings.Enabled = false
 	return &Config{
 		TimeoutSettings: exporterhelper.TimeoutSettings{Timeout: defaultTimeout},
-		RetrySettings:   exporterhelper.NewDefaultRetrySettings(),
+		RetrySettings:   retrySettings,
 		QueueSettings:   exporterhelper.NewDefaultQueueSettings(),
 	}
 }

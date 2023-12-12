@@ -15,6 +15,7 @@
 package purefareceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/purefareceiver"
 
 // This file implements Factory for Array scraper.
+
 import (
 	"context"
 	"fmt"
@@ -45,7 +46,7 @@ func createDefaultConfig() component.Config {
 		Settings: &Settings{
 			ReloadIntervals: &ReloadIntervals{
 				Array:       15 * time.Second,
-				Host:        15 * time.Second,
+				Hosts:       15 * time.Second,
 				Directories: 15 * time.Second,
 				Pods:        15 * time.Second,
 				Volumes:     15 * time.Second,

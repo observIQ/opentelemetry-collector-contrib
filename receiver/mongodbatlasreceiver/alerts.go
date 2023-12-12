@@ -43,7 +43,6 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/adapter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver/internal"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver/internal/model"
 )
@@ -91,8 +90,6 @@ type alertsReceiver struct {
 	pageSize      int64
 	maxPages      int64
 	doneChan      chan bool
-	id            component.ID  // ID of the receiver component
-	storageID     *component.ID // ID of the storage extension component
 	storageClient storage.Client
 }
 
@@ -129,8 +126,6 @@ func newAlertsReceiver(params rcvr.CreateSettings, baseConfig *Config, consumer 
 		pageSize:      baseConfig.Alerts.PageSize,
 		doneChan:      make(chan bool, 1),
 		logger:        params.Logger,
-		id:            params.ID,
-		storageID:     baseConfig.StorageID,
 	}
 
 	if recv.mode == alertModePoll {
@@ -138,28 +133,25 @@ func newAlertsReceiver(params rcvr.CreateSettings, baseConfig *Config, consumer 
 		return recv, nil
 	}
 	s := &http.Server{
-		TLSConfig: tlsConfig,
-		Handler:   http.HandlerFunc(recv.handleRequest),
+		TLSConfig:         tlsConfig,
+		Handler:           http.HandlerFunc(recv.handleRequest),
+		ReadHeaderTimeout: 20 * time.Second,
 	}
 	recv.server = s
 	return recv, nil
 }
 
-func (a *alertsReceiver) Start(ctx context.Context, host component.Host) error {
+func (a *alertsReceiver) Start(ctx context.Context, host component.Host, storageClient storage.Client) error {
 	if a.mode == alertModePoll {
-		return a.startPolling(ctx, host)
+		return a.startPolling(ctx, storageClient)
 	}
 	return a.startListening(ctx, host)
 }
 
-func (a *alertsReceiver) startPolling(ctx context.Context, host component.Host) error {
+func (a *alertsReceiver) startPolling(ctx context.Context, storageClient storage.Client) error {
 	a.logger.Debug("starting alerts receiver in retrieval mode")
-	storageClient, err := adapter.GetStorageClient(ctx, host, a.storageID, a.id)
-	if err != nil {
-		return fmt.Errorf("failed to set up storage: %w", err)
-	}
 	a.storageClient = storageClient
-	err = a.syncPersistence(ctx)
+	err := a.syncPersistence(ctx)
 	if err != nil {
 		a.logger.Error("there was an error syncing the receiver with checkpoint", zap.Error(err))
 	}
@@ -210,7 +202,7 @@ func (a *alertsReceiver) pollAndProcess(ctx context.Context, pc *ProjectConfig, 
 
 		filteredAlerts := a.applyFilters(pc, projectAlerts)
 		now := pcommon.NewTimestampFromTime(time.Now())
-		logs, err := a.convertAlerts(now, filteredAlerts)
+		logs, err := a.convertAlerts(now, filteredAlerts, project)
 		if err != nil {
 			a.logger.Error("error processing alerts", zap.Error(err))
 			break
@@ -356,7 +348,7 @@ func (a *alertsReceiver) shutdownPoller(ctx context.Context) error {
 	return a.writeCheckpoint(ctx)
 }
 
-func (a *alertsReceiver) convertAlerts(now pcommon.Timestamp, alerts []mongodbatlas.Alert) (plog.Logs, error) {
+func (a *alertsReceiver) convertAlerts(now pcommon.Timestamp, alerts []mongodbatlas.Alert, project *mongodbatlas.Project) (plog.Logs, error) {
 	logs := plog.NewLogs()
 	var errs error
 	for _, alert := range alerts {
@@ -364,6 +356,8 @@ func (a *alertsReceiver) convertAlerts(now pcommon.Timestamp, alerts []mongodbat
 		resourceAttrs := resourceLogs.Resource().Attributes()
 		resourceAttrs.PutStr("mongodbatlas.group.id", alert.GroupID)
 		resourceAttrs.PutStr("mongodbatlas.alert.config.id", alert.AlertConfigID)
+		resourceAttrs.PutStr("mongodbatlas.org.id", project.OrgID)
+		resourceAttrs.PutStr("mongodbatlas.project.name", project.Name)
 		putStringToMapNotNil(resourceAttrs, "mongodbatlas.cluster.name", &alert.ClusterName)
 		putStringToMapNotNil(resourceAttrs, "mongodbatlas.replica_set.name", &alert.ReplicaSetName)
 

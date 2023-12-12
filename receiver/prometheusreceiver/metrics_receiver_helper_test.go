@@ -23,6 +23,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,7 +40,6 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.uber.org/atomic"
 	"gopkg.in/yaml.v2"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver/internal"
@@ -64,7 +64,7 @@ func newMockPrometheus(endpoints map[string][]mockPrometheusResponse) *mockProme
 	wg := &sync.WaitGroup{}
 	wg.Add(len(endpoints))
 	for k := range endpoints {
-		accessIndex[k] = atomic.NewInt32(0)
+		accessIndex[k] = &atomic.Int32{}
 	}
 	mp := &mockPrometheus{
 		wg:          wg,
@@ -447,11 +447,8 @@ func compareAttributes(attributes map[string]string) numberPointComparator {
 		if req {
 			for k, v := range attributes {
 				val, ok := numberDataPoint.Attributes().Get(k)
-				if ok {
-					assert.Equal(t, v, val.AsString(), "Attributes do not match")
-				} else {
-					assert.Failf(t, "Attributes key does not match: %v", k)
-				}
+				require.True(t, ok)
+				assert.Equal(t, v, val.AsString(), "Attributes do not match")
 			}
 		}
 	}
@@ -463,11 +460,8 @@ func compareSummaryAttributes(attributes map[string]string) summaryPointComparat
 		if req {
 			for k, v := range attributes {
 				val, ok := summaryDataPoint.Attributes().Get(k)
-				if ok {
-					assert.Equal(t, v, val.AsString(), "Summary attributes value do not match")
-				} else {
-					assert.Failf(t, "Summary attributes key does not match: %v", k)
-				}
+				require.True(t, ok)
+				assert.Equal(t, v, val.AsString(), "Summary attributes value do not match")
 			}
 		}
 	}
@@ -485,11 +479,8 @@ func compareHistogramAttributes(attributes map[string]string) histogramPointComp
 		if req {
 			for k, v := range attributes {
 				val, ok := histogramDataPoint.Attributes().Get(k)
-				if ok {
-					assert.Equal(t, v, val.AsString(), "Histogram attributes value do not match")
-				} else {
-					assert.Fail(t, "Histogram attributes key do not match")
-				}
+				require.True(t, ok)
+				assert.Equal(t, v, val.AsString(), "Histogram attributes value do not match")
 			}
 		}
 	}

@@ -127,7 +127,7 @@ func main() {
 	meter := global.Meter("demo-server-meter")
 	serverAttribute := attribute.String("server-attribute", "foo")
 	commonLabels := []attribute.KeyValue{serverAttribute}
-	requestCount, _ := meter.SyncInt64().Counter(
+	requestCount, _ := meter.Int64Counter(
 		"demo_server/request_counts",
 		instrument.WithDescription("The number of requests received"),
 	)
@@ -172,8 +172,9 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/hello", otelhttp.NewHandler(handler, "/hello"))
 	server := &http.Server{
-		Addr:    ":7080",
-		Handler: mux,
+		Addr:              ":7080",
+		Handler:           mux,
+		ReadHeaderTimeout: 20 * time.Second,
 	}
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		handleErr(err, "server failed to serve")

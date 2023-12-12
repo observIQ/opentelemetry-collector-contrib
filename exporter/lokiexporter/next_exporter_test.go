@@ -24,14 +24,13 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/grafana/loki/pkg/push"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/pdata/plog"
-
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/loki/logproto"
 )
 
 func TestPushLogData(t *testing.T) {
@@ -52,7 +51,7 @@ func TestPushLogData(t *testing.T) {
 			hints: map[string]interface{}{
 				"loki.attribute.labels": "host.name",
 			},
-			expectedLabel: `{exporter="OTLP", host.name="guarana"}`,
+			expectedLabel: `{exporter="OTLP", host_name="guarana"}`,
 			expectedLine:  `{"traceid":"01020304000000000000000000000000","attributes":{"http.status":200}}`,
 		},
 		{
@@ -64,13 +63,13 @@ func TestPushLogData(t *testing.T) {
 			hints: map[string]interface{}{
 				"loki.resource.labels": "host.name",
 			},
-			expectedLabel: `{exporter="OTLP", host.name="guarana"}`,
+			expectedLabel: `{exporter="OTLP", host_name="guarana"}`,
 			expectedLine:  `{"traceid":"01020304000000000000000000000000","resources":{"region.az":"eu-west-1a"}}`,
 		},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			actualPushRequest := &logproto.PushRequest{}
+			actualPushRequest := &push.PushRequest{}
 
 			// prepare
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -170,11 +169,11 @@ func TestLogsToLokiRequestWithGroupingByTenant(t *testing.T) {
 				label string
 			}{
 				"1": {
-					label: `{exporter="OTLP", tenant.id="1"}`,
+					label: `{exporter="OTLP", tenant_id="1"}`,
 					line:  `{"attributes":{"http.status":200}}`,
 				},
 				"2": {
-					label: `{exporter="OTLP", tenant.id="2"}`,
+					label: `{exporter="OTLP", tenant_id="2"}`,
 					line:  `{"attributes":{"http.status":200}}`,
 				},
 			},
@@ -234,11 +233,11 @@ func TestLogsToLokiRequestWithGroupingByTenant(t *testing.T) {
 				label string
 			}{
 				"1": {
-					label: `{exporter="OTLP", tenant.id="1"}`,
+					label: `{exporter="OTLP", tenant_id="1"}`,
 					line:  `{"attributes":{"http.status":200}}`,
 				},
 				"2": {
-					label: `{exporter="OTLP", tenant.id="2"}`,
+					label: `{exporter="OTLP", tenant_id="2"}`,
 					line:  `{"attributes":{"http.status":200}}`,
 				},
 			},
@@ -246,7 +245,7 @@ func TestLogsToLokiRequestWithGroupingByTenant(t *testing.T) {
 	}
 	for _, tC := range tests {
 		t.Run(tC.desc, func(t *testing.T) {
-			actualPushRequestPerTenant := map[string]*logproto.PushRequest{}
+			actualPushRequestPerTenant := map[string]*push.PushRequest{}
 
 			// prepare
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +255,7 @@ func TestLogsToLokiRequestWithGroupingByTenant(t *testing.T) {
 				decPayload, err := snappy.Decode(nil, encPayload)
 				require.NoError(t, err)
 
-				pr := &logproto.PushRequest{}
+				pr := &push.PushRequest{}
 				err = proto.Unmarshal(decPayload, pr)
 				require.NoError(t, err)
 

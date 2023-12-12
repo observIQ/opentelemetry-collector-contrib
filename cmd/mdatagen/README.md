@@ -1,6 +1,11 @@
 # Metadata Generator
 
-Receivers can contain a `metadata.yaml` file that documents the metrics that may be emitted by the receiver.
+Components must contain a `metadata.yaml` file that documents various aspects of the component including:
+
+* its stability level
+* the distributions containing it
+* the types of pipelines it supports
+* metrics emitted in the case of a scraping receiver
 
 Current examples:
 
@@ -10,7 +15,7 @@ See [metric-metadata.yaml](metric-metadata.yaml) for file format documentation.
 
 If adding a new receiver a `doc.go` file should also be added to trigger the generation. See below for details.
 
-## Build
+## Generating
 
 `make generate` triggers the following actions:
 
@@ -34,3 +39,4 @@ In order to introduce support of a new functionality in metadata.yaml:
 3. Run `make mdatagen-test`.
 4. Make sure all tests are passing including (generated tests)[./internal/metadata/generated_metrics_test.go].
 5. Run `make generate`.
+

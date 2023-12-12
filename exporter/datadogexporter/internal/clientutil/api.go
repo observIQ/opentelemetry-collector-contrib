@@ -20,11 +20,15 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.uber.org/zap"
 	zorkian "gopkg.in/zorkian/go-datadog-api.v2"
 )
+
+// GZipSubmitMetricsOptionalParameters is used to enable gzip compression for metric payloads submitted by native datadog client
+var GZipSubmitMetricsOptionalParameters = datadogV2.NewSubmitMetricsOptionalParameters().WithContentEncoding(datadogV2.METRICCONTENTENCODING_GZIP)
 
 // CreateAPIClient creates a new Datadog API client
 func CreateAPIClient(buildInfo component.BuildInfo, endpoint string, settings exporterhelper.TimeoutSettings, insecureSkipVerify bool) *datadog.APIClient {
@@ -46,7 +50,7 @@ func CreateAPIClient(buildInfo component.BuildInfo, endpoint string, settings ex
 func ValidateAPIKey(ctx context.Context, apiKey string, logger *zap.Logger, apiClient *datadog.APIClient) error {
 	logger.Info("Validating API key.")
 	authAPI := datadogV1.NewAuthenticationApi(apiClient)
-	resp, _, err := authAPI.Validate(GetRequestContext(ctx, apiKey))
+	resp, httpresp, err := authAPI.Validate(GetRequestContext(ctx, apiKey))
 	if err == nil && resp.Valid != nil && *resp.Valid {
 		logger.Info("API key validation successful.")
 		return nil
@@ -56,7 +60,7 @@ func ValidateAPIKey(ctx context.Context, apiKey string, logger *zap.Logger, apiC
 		return nil
 	}
 	logger.Warn(ErrInvalidAPI.Error())
-	return ErrInvalidAPI
+	return WrapError(ErrInvalidAPI, httpresp)
 }
 
 // GetRequestContext creates a new context with API key for DatadogV2 requests

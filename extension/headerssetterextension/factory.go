@@ -19,6 +19,8 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/headerssetterextension/internal/metadata"
 )
 
 const (
@@ -31,7 +33,7 @@ func NewFactory() extension.Factory {
 		typeStr,
 		createDefaultConfig,
 		createExtension,
-		component.StabilityLevelDevelopment,
+		metadata.Stability,
 	)
 }
 
@@ -41,8 +43,8 @@ func createDefaultConfig() component.Config {
 
 func createExtension(
 	_ context.Context,
-	_ extension.CreateSettings,
+	settings extension.CreateSettings,
 	cfg component.Config,
 ) (extension.Extension, error) {
-	return newHeadersSetterExtension(cfg.(*Config))
+	return newHeadersSetterExtension(cfg.(*Config), settings.Logger)
 }

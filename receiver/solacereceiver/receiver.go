@@ -19,13 +19,13 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/receiver"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -56,11 +56,6 @@ func newTracesReceiver(config *Config, set receiver.CreateSettings, nextConsumer
 		return nil, component.ErrNilNextConsumer
 	}
 
-	if err := config.Validate(); err != nil {
-		set.Logger.Warn("Error validating configuration", zap.Any("error", err))
-		return nil, err
-	}
-
 	factory, err := newAMQPMessagingServiceFactory(config, set.Logger)
 	if err != nil {
 		set.Logger.Warn("Error validating messaging service configuration", zap.Any("error", err))
@@ -84,7 +79,7 @@ func newTracesReceiver(config *Config, set receiver.CreateSettings, nextConsumer
 		shutdownWaitGroup: &sync.WaitGroup{},
 		factory:           factory,
 		retryTimeout:      1 * time.Second,
-		terminating:       atomic.NewBool(false),
+		terminating:       &atomic.Bool{},
 	}, nil
 }
 
