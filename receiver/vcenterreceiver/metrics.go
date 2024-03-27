@@ -5,6 +5,7 @@ package vcenterreceiver // import "github.com/open-telemetry/opentelemetry-colle
 
 import (
 	"context"
+	"time"
 
 	"github.com/vmware/govmomi/performance"
 	"github.com/vmware/govmomi/vim25/mo"
@@ -136,7 +137,7 @@ func (v *vcenterMetricScraper) recordHostPerformanceMetrics(
 	ctx context.Context,
 	host mo.HostSystem,
 	errs *scrapererror.ScrapeErrors,
-) {
+) time.Duration {
 	spec := types.PerfQuerySpec{
 		Entity:    host.Reference(),
 		MaxSample: 5,
@@ -150,9 +151,12 @@ func (v *vcenterMetricScraper) recordHostPerformanceMetrics(
 	info, err := v.client.performanceQuery(ctx, spec, hostPerfMetricList, []types.ManagedObjectReference{host.Reference()})
 	if err != nil {
 		errs.AddPartial(1, err)
-		return
+		return time.Duration(time.Millisecond * 0)
 	}
+	start := time.Now()
 	v.processHostPerformance(info.results)
+	end := time.Now()
+	return end.Sub(start)
 }
 
 // vmPerfMetricList may be customizable in the future but here is the full list of Virtual Machine Performance Counters
@@ -177,7 +181,8 @@ func (v *vcenterMetricScraper) recordVMPerformance(
 	ctx context.Context,
 	vm mo.VirtualMachine,
 	errs *scrapererror.ScrapeErrors,
-) {
+) (time.Duration, time.Duration, time.Duration) {
+	start := time.Now()
 	spec := types.PerfQuerySpec{
 		Entity: vm.Reference(),
 		Format: string(types.PerfFormatNormal),
@@ -186,13 +191,21 @@ func (v *vcenterMetricScraper) recordVMPerformance(
 		// a system of making this user customizable or adapt to use a 5 minute interval per metric
 		IntervalId: int32(20),
 	}
-
+	end := time.Now()
+	pre := end.Sub(start)
+	start = time.Now()
 	info, err := v.client.performanceQuery(ctx, spec, vmPerfMetricList, []types.ManagedObjectReference{vm.Reference()})
+	end = time.Now()
+	request := end.Sub(start)
 	if err != nil {
 		errs.AddPartial(1, err)
-		return
+		return time.Duration(time.Millisecond * 0), time.Duration(time.Millisecond * 0), time.Duration(time.Millisecond * 0)
 	}
+	start = time.Now()
 	v.processVMPerformanceMetrics(info)
+	end = time.Now()
+	post := end.Sub(start)
+	return pre, request, post
 }
 
 func (v *vcenterMetricScraper) processVMPerformanceMetrics(info *perfSampleResult) {

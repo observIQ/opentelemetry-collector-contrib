@@ -13,7 +13,9 @@ import (
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/performance"
 	"github.com/vmware/govmomi/property"
+	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
 	vt "github.com/vmware/govmomi/vim25/types"
 )
 
@@ -24,6 +26,7 @@ type vcenterClient struct {
 	finder    *find.Finder
 	pc        *property.Collector
 	pm        *performance.Manager
+	vm        *view.Manager
 	cfg       *Config
 }
 
@@ -69,6 +72,7 @@ func (vc *vcenterClient) EnsureConnection(ctx context.Context) error {
 	vc.pc = property.DefaultCollector(vc.vimDriver)
 	vc.finder = find.NewFinder(vc.vimDriver)
 	vc.pm = performance.NewManager(vc.vimDriver)
+	vc.vm = view.NewManager(vc.vimDriver)
 	return nil
 }
 
@@ -80,7 +84,16 @@ func (vc *vcenterClient) Disconnect(ctx context.Context) error {
 	return nil
 }
 
-// Datacenters returns the datacenterComputeResources of the vSphere SDK
+func (vc *vcenterClient) VMContainerView(ctx context.Context) (*view.ContainerView, error) {
+	v, err := vc.vm.CreateContainerView(ctx, vc.vimDriver.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// Datacenters returns the Datacenters of the vSphere SDK
 func (vc *vcenterClient) Datacenters(ctx context.Context) ([]*object.Datacenter, error) {
 	datacenters, err := vc.finder.DatacenterList(ctx, "*")
 	if err != nil {
@@ -89,6 +102,7 @@ func (vc *vcenterClient) Datacenters(ctx context.Context) ([]*object.Datacenter,
 	return datacenters, nil
 }
 
+// Computes returns the ComputeResources (Hosts & Clusters) of the vSphere SDK for a given datacenter
 func (vc *vcenterClient) Computes(ctx context.Context, datacenter *object.Datacenter) ([]*object.ComputeResource, error) {
 	vc.finder = vc.finder.SetDatacenter(datacenter)
 	computes, err := vc.finder.ComputeResourceList(ctx, "*")
@@ -98,7 +112,7 @@ func (vc *vcenterClient) Computes(ctx context.Context, datacenter *object.Datace
 	return computes, nil
 }
 
-// ResourcePools returns the resourcePools in the vSphere SDK
+// ResourcePools returns the ResourcePools in the vSphere SDK
 func (vc *vcenterClient) ResourcePools(ctx context.Context) ([]*object.ResourcePool, error) {
 	rps, err := vc.finder.ResourcePoolList(ctx, "*")
 	if err != nil {
@@ -107,12 +121,51 @@ func (vc *vcenterClient) ResourcePools(ctx context.Context) ([]*object.ResourceP
 	return rps, err
 }
 
+// VMs returns the VirtualMachines in the vSphere SDK
 func (vc *vcenterClient) VMs(ctx context.Context) ([]*object.VirtualMachine, error) {
 	vms, err := vc.finder.VirtualMachineList(ctx, "*")
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve vms: %w", err)
 	}
 	return vms, err
+}
+
+func (vc *vcenterClient) AltVMs(ctx context.Context) ([]mo.VirtualMachine, error) {
+	v, err := vc.vm.CreateContainerView(ctx, vc.vimDriver.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve VMs: %w", err)
+	}
+
+	defer v.Destroy(ctx)
+
+	var vms []mo.VirtualMachine
+	err = v.Retrieve(ctx, []string{"VirtualMachine"}, []string{
+		"config",
+		"runtime",
+		"summary",
+		"resourcePool",
+	}, &vms)
+
+	return vms, nil
+}
+
+func (vc *vcenterClient) AltResourcePools(ctx context.Context) ([]mo.ResourcePool, error) {
+	v, err := vc.vm.CreateContainerView(ctx, vc.vimDriver.ServiceContent.RootFolder, []string{"ResourcePool"}, true)
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve Resource Pools: %w", err)
+	}
+
+	defer v.Destroy(ctx)
+
+	var rps []mo.ResourcePool
+	err = v.Retrieve(ctx, []string{"ResourcePool"}, []string{
+		"owner",
+		"summary",
+		"name",
+		"vm",
+	}, &rps)
+
+	return rps, nil
 }
 
 type perfSampleResult struct {
