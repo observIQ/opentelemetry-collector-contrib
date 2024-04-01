@@ -41,6 +41,8 @@ type opampAgent struct {
 	agentDescription *protobufs.AgentDescription
 
 	opampClient client.OpAMPClient
+
+	customCapabilityRegistry *customCapabilityRegistry
 }
 
 func (o *opampAgent) Start(_ context.Context, _ component.Host) error {
@@ -119,6 +121,10 @@ func (o *opampAgent) NotifyConfig(ctx context.Context, conf *confmap.Conf) error
 	return nil
 }
 
+func (o *opampAgent) Register(capability string, callback CustomMessageCallback) (CustomCapability, error) {
+	return o.customCapabilityRegistry.Register(capability, callback)
+}
+
 func (o *opampAgent) updateEffectiveConfig(conf *confmap.Conf) {
 	o.eclk.Lock()
 	defer o.eclk.Unlock()
@@ -160,14 +166,16 @@ func newOpampAgent(cfg *Config, logger *zap.Logger, build component.BuildInfo, r
 		}
 	}
 
+	opampClient := cfg.Server.GetClient(logger)
 	agent := &opampAgent{
-		cfg:          cfg,
-		logger:       logger,
-		agentType:    agentType,
-		agentVersion: agentVersion,
-		instanceID:   uid,
-		capabilities: cfg.Capabilities,
-		opampClient:  cfg.Server.GetClient(logger),
+		cfg:                      cfg,
+		logger:                   logger,
+		agentType:                agentType,
+		agentVersion:             agentVersion,
+		instanceID:               uid,
+		capabilities:             cfg.Capabilities,
+		opampClient:              opampClient,
+		customCapabilityRegistry: newCustomCapabilityRegistry(logger, opampClient),
 	}
 
 	return agent, nil
