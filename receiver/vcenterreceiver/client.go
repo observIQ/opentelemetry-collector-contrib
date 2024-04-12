@@ -159,6 +159,7 @@ func (vc *vcenterClient) HostSystems(ctx context.Context, containerMoRef vt.Mana
 		"summary.quickStats.overallMemoryUsage",
 		"summary.quickStats.overallCpuUsage",
 		"vm",
+		"parent",
 	}, &hosts)
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve HostSystems: %w", err)
