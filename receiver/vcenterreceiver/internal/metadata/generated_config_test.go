@@ -68,6 +68,8 @@ func TestMetricsBuilderConfig(t *testing.T) {
 				},
 				ResourceAttributes: ResourceAttributesConfig{
 					VcenterClusterName:               ResourceAttributeConfig{Enabled: true},
+					VcenterClusterNames:              ResourceAttributeConfig{Enabled: true},
+					VcenterDatacenterName:            ResourceAttributeConfig{Enabled: true},
 					VcenterDatastoreName:             ResourceAttributeConfig{Enabled: true},
 					VcenterHostName:                  ResourceAttributeConfig{Enabled: true},
 					VcenterResourcePoolInventoryPath: ResourceAttributeConfig{Enabled: true},
@@ -123,6 +125,8 @@ func TestMetricsBuilderConfig(t *testing.T) {
 				},
 				ResourceAttributes: ResourceAttributesConfig{
 					VcenterClusterName:               ResourceAttributeConfig{Enabled: false},
+					VcenterClusterNames:              ResourceAttributeConfig{Enabled: false},
+					VcenterDatacenterName:            ResourceAttributeConfig{Enabled: false},
 					VcenterDatastoreName:             ResourceAttributeConfig{Enabled: false},
 					VcenterHostName:                  ResourceAttributeConfig{Enabled: false},
 					VcenterResourcePoolInventoryPath: ResourceAttributeConfig{Enabled: false},
@@ -166,6 +170,8 @@ func TestResourceAttributesConfig(t *testing.T) {
 			name: "all_set",
 			want: ResourceAttributesConfig{
 				VcenterClusterName:               ResourceAttributeConfig{Enabled: true},
+				VcenterClusterNames:              ResourceAttributeConfig{Enabled: true},
+				VcenterDatacenterName:            ResourceAttributeConfig{Enabled: true},
 				VcenterDatastoreName:             ResourceAttributeConfig{Enabled: true},
 				VcenterHostName:                  ResourceAttributeConfig{Enabled: true},
 				VcenterResourcePoolInventoryPath: ResourceAttributeConfig{Enabled: true},
@@ -178,6 +184,8 @@ func TestResourceAttributesConfig(t *testing.T) {
 			name: "none_set",
 			want: ResourceAttributesConfig{
 				VcenterClusterName:               ResourceAttributeConfig{Enabled: false},
+				VcenterClusterNames:              ResourceAttributeConfig{Enabled: false},
+				VcenterDatacenterName:            ResourceAttributeConfig{Enabled: false},
 				VcenterDatastoreName:             ResourceAttributeConfig{Enabled: false},
 				VcenterHostName:                  ResourceAttributeConfig{Enabled: false},
 				VcenterResourcePoolInventoryPath: ResourceAttributeConfig{Enabled: false},

@@ -212,6 +212,8 @@ func TestMetricsBuilder(t *testing.T) {
 
 			rb := mb.NewResourceBuilder()
 			rb.SetVcenterClusterName("vcenter.cluster.name-val")
+			rb.SetVcenterClusterNames([]any{"vcenter.cluster.names-item1", "vcenter.cluster.names-item2"})
+			rb.SetVcenterDatacenterName("vcenter.datacenter.name-val")
 			rb.SetVcenterDatastoreName("vcenter.datastore.name-val")
 			rb.SetVcenterHostName("vcenter.host.name-val")
 			rb.SetVcenterResourcePoolInventoryPath("vcenter.resource_pool.inventory_path-val")

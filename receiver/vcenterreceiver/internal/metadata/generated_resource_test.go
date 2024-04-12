@@ -14,6 +14,8 @@ func TestResourceBuilder(t *testing.T) {
 			cfg := loadResourceAttributesConfig(t, test)
 			rb := NewResourceBuilder(cfg)
 			rb.SetVcenterClusterName("vcenter.cluster.name-val")
+			rb.SetVcenterClusterNames([]any{"vcenter.cluster.names-item1", "vcenter.cluster.names-item2"})
+			rb.SetVcenterDatacenterName("vcenter.datacenter.name-val")
 			rb.SetVcenterDatastoreName("vcenter.datastore.name-val")
 			rb.SetVcenterHostName("vcenter.host.name-val")
 			rb.SetVcenterResourcePoolInventoryPath("vcenter.resource_pool.inventory_path-val")
@@ -26,9 +28,9 @@ func TestResourceBuilder(t *testing.T) {
 
 			switch test {
 			case "default":
-				assert.Equal(t, 7, res.Attributes().Len())
+				assert.Equal(t, 9, res.Attributes().Len())
 			case "all_set":
-				assert.Equal(t, 7, res.Attributes().Len())
+				assert.Equal(t, 9, res.Attributes().Len())
 			case "none_set":
 				assert.Equal(t, 0, res.Attributes().Len())
 				return
@@ -40,6 +42,16 @@ func TestResourceBuilder(t *testing.T) {
 			assert.True(t, ok)
 			if ok {
 				assert.EqualValues(t, "vcenter.cluster.name-val", val.Str())
+			}
+			val, ok = res.Attributes().Get("vcenter.cluster.names")
+			assert.True(t, ok)
+			if ok {
+				assert.EqualValues(t, []any{"vcenter.cluster.names-item1", "vcenter.cluster.names-item2"}, val.Slice().AsRaw())
+			}
+			val, ok = res.Attributes().Get("vcenter.datacenter.name")
+			assert.True(t, ok)
+			if ok {
+				assert.EqualValues(t, "vcenter.datacenter.name-val", val.Str())
 			}
 			val, ok = res.Attributes().Get("vcenter.datastore.name")
 			assert.True(t, ok)

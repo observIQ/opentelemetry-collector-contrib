@@ -82,6 +82,10 @@ all_set:
   resource_attributes:
     vcenter.cluster.name:
       enabled: true
+    vcenter.cluster.names:
+      enabled: true
+    vcenter.datacenter.name:
+      enabled: true
     vcenter.datastore.name:
       enabled: true
     vcenter.host.name:
@@ -176,6 +180,10 @@ none_set:
       enabled: false
   resource_attributes:
     vcenter.cluster.name:
+      enabled: false
+    vcenter.cluster.names:
+      enabled: false
+    vcenter.datacenter.name:
       enabled: false
     vcenter.datastore.name:
       enabled: false
