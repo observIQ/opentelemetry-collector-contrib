@@ -199,6 +199,16 @@ func (vc *vcenterClient) AllResourcePoolWithInventoryLists(ctx context.Context) 
 	return rps, nil
 }
 
+// AllVAppWithInventoryLists returns the vApps (with populated InventoryLists) of the vSphere SDK
+func (vc *vcenterClient) AllVAppWithInventoryLists(ctx context.Context) ([]*object.VirtualApp, error) {
+	vApps, err := vc.finder.VirtualAppList(ctx, "*")
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve vApps with InventoryLists: %w", err)
+	}
+
+	return vApps, nil
+}
+
 // VMS returns the VirtualMachines of the vSphere SDK
 func (vc *vcenterClient) VMs(ctx context.Context, containerMoRef vt.ManagedObjectReference) ([]mo.VirtualMachine, error) {
 	v, err := vc.vm.CreateContainerView(ctx, containerMoRef, []string{"VirtualMachine"}, true)
@@ -208,6 +218,7 @@ func (vc *vcenterClient) VMs(ctx context.Context, containerMoRef vt.ManagedObjec
 
 	var vms []mo.VirtualMachine
 	err = v.Retrieve(ctx, []string{"VirtualMachine"}, []string{
+		"name",
 		"config.hardware.numCPU",
 		"config.instanceUuid",
 		"runtime.powerState",
@@ -218,7 +229,6 @@ func (vc *vcenterClient) VMs(ctx context.Context, containerMoRef vt.ManagedObjec
 		"summary.quickStats.ssdSwappedMemory",
 		"summary.quickStats.overallCpuUsage",
 		"summary.config.memorySizeMB",
-		"summary.config.name",
 		"summary.storage.committed",
 		"summary.storage.uncommitted",
 		"summary.runtime.host",

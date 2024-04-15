@@ -94,6 +94,10 @@ all_set:
       enabled: true
     vcenter.resource_pool.name:
       enabled: true
+    vcenter.virtual_app.inventory_path:
+      enabled: true
+    vcenter.virtual_app.name:
+      enabled: true
     vcenter.vm.id:
       enabled: true
     vcenter.vm.name:
@@ -192,6 +196,10 @@ none_set:
     vcenter.resource_pool.inventory_path:
       enabled: false
     vcenter.resource_pool.name:
+      enabled: false
+    vcenter.virtual_app.inventory_path:
+      enabled: false
+    vcenter.virtual_app.name:
       enabled: false
     vcenter.vm.id:
       enabled: false

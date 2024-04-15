@@ -46,11 +46,10 @@ type vcenterMetricScraper struct {
 	logger *zap.Logger
 
 	dsRefToComputeRefs   map[string]map[string]bool
-	vmRefToComputeRef    map[string]string
-	vmRefToRPoolRef      map[string]string
 	datacenters          []*mo.Datacenter
 	datastores           []*mo.Datastore
 	rPoolIPathsByRef     map[string]*string
+	vAppIPathsByRef      map[string]*string
 	rPoolsByRef          map[string]*mo.ResourcePool
 	computesByRef        map[string]*mo.ComputeResource
 	hostsByRef           map[string]*mo.HostSystem
@@ -71,11 +70,10 @@ func newVmwareVcenterScraper(
 		logger:               logger,
 		mb:                   metadata.NewMetricsBuilder(config.MetricsBuilderConfig, settings),
 		dsRefToComputeRefs:   make(map[string]map[string]bool),
-		vmRefToComputeRef:    make(map[string]string),
-		vmRefToRPoolRef:      make(map[string]string),
 		datacenters:          make([]*mo.Datacenter, 0),
 		datastores:           make([]*mo.Datastore, 0),
 		rPoolIPathsByRef:     make(map[string]*string),
+		vAppIPathsByRef:      make(map[string]*string),
 		computesByRef:        make(map[string]*mo.ComputeResource),
 		hostsByRef:           make(map[string]*mo.HostSystem),
 		hostPerfMetricsByRef: make(map[string]*performance.EntityMetric),
@@ -119,6 +117,7 @@ func (v *vcenterMetricScraper) scrape(ctx context.Context) (pmetric.Metrics, err
 // collectAllAndBuildMetrics collects & converts all relevant resources managed by vCenter to OTEL resources & metrics
 func (v *vcenterMetricScraper) collectAllAndBuildMetrics(ctx context.Context, errs *scrapererror.ScrapeErrors) error {
 	v.collectAllRPoolsWithInventoryLists(ctx, errs)
+	v.collectAllVAppsWithInventoryLists(ctx, errs)
 	v.collectDatacenters(ctx, errs)
 	for _, dc := range v.datacenters {
 		v.collectDatastores(ctx, dc, errs)
@@ -139,7 +138,7 @@ func (v *vcenterMetricScraper) collectAllRPoolsWithInventoryLists(ctx context.Co
 	// Init for current collection
 	v.rPoolIPathsByRef = make(map[string]*string)
 
-	// Get ResourcePools with InventoryLists for later retrieval
+	// Get ResourcePools with InventoryLists and store for later retrieval
 	rps, err := v.client.AllResourcePoolWithInventoryLists(ctx)
 	if err != nil {
 		errs.AddPartial(1, err)
@@ -147,6 +146,22 @@ func (v *vcenterMetricScraper) collectAllRPoolsWithInventoryLists(ctx context.Co
 	}
 	for i := range rps {
 		v.rPoolIPathsByRef[rps[i].Reference().Value] = &rps[i].InventoryPath
+	}
+}
+
+// collectAllVAppsWithInventoryLists collects and store all vApps with their InventoryLists
+func (v *vcenterMetricScraper) collectAllVAppsWithInventoryLists(ctx context.Context, errs *scrapererror.ScrapeErrors) {
+	// Init for current collection
+	v.vAppIPathsByRef = make(map[string]*string)
+
+	// Get vApps with InventoryLists and store for later retrieval
+	vApps, err := v.client.AllVAppWithInventoryLists(ctx)
+	if err != nil {
+		errs.AddPartial(1, err)
+		return
+	}
+	for i := range vApps {
+		v.vAppIPathsByRef[vApps[i].Reference().Value] = &vApps[i].InventoryPath
 	}
 }
 
@@ -196,7 +211,7 @@ func (v *vcenterMetricScraper) collectComputes(ctx context.Context, dc *mo.Datac
 	}
 
 	for i := range crs {
-		// Store mapping of datastores to group of ComputeResource refs
+		// Store relationship between each Datastore and the ComputeResources that use it
 		for _, dsRef := range crs[i].Datastore {
 			uniqueCSRefs := v.dsRefToComputeRefs[dsRef.Value]
 			if uniqueCSRefs == nil {
@@ -295,12 +310,11 @@ func (v *vcenterMetricScraper) collectVMs(ctx context.Context, dc *mo.Datacenter
 
 // clearCollectData clears collection data after it is no longer needed
 func (v *vcenterMetricScraper) clearCollectData() {
-	v.vmRefToComputeRef = nil
-	v.vmRefToRPoolRef = nil
 	v.dsRefToComputeRefs = nil
 	v.datacenters = nil
 	v.datastores = nil
 	v.rPoolIPathsByRef = nil
+	v.vAppIPathsByRef = nil
 	v.computesByRef = nil
 	v.hostsByRef = nil
 	v.hostPerfMetricsByRef = nil
@@ -312,322 +326,209 @@ func (v *vcenterMetricScraper) clearCollectData() {
 // buildMetrics creates all of the metrics from the stored collected data
 func (v *vcenterMetricScraper) buildMetrics(dc *mo.Datacenter, errs *scrapererror.ScrapeErrors) {
 	// Init for current collection
-	v.vmRefToComputeRef = make(map[string]string)
-	v.vmRefToRPoolRef = make(map[string]string)
 	now := pcommon.NewTimestampFromTime(time.Now())
 
 	v.buildDatastores(now, dc, errs)
 	v.buildResourcePools(now, dc, errs)
-	v.buildHosts(now, dc, errs)
-	for _, cr := range v.computesByRef {
-		// v.buildHostsForCompute(now, dc, cr, errs)
-		poweredOnVMs, poweredOffVMs := v.buildVmsForCompute(now, dc, cr, errs)
-		if cr.Reference().Type == "ClusterComputeResource" {
-			v.buildClusters(now, dc, cr, poweredOnVMs, poweredOffVMs)
-		}
-	}
+	vmRefToComputeRef := v.buildHosts(now, dc, errs)
+	clusterVMStatesByCRRef := v.buildVMs(now, dc, vmRefToComputeRef, errs)
+	v.buildClusters(now, dc, clusterVMStatesByCRRef, errs)
 }
 
-// buildDatastores builds the Datastore metrics and resources from the collected data
+// buildDatastores builds the Datastore metrics and resources from the collected Datastores
 func (v *vcenterMetricScraper) buildDatastores(
 	colTime pcommon.Timestamp,
 	dc *mo.Datacenter,
 	errs *scrapererror.ScrapeErrors,
 ) {
 	for _, ds := range v.datastores {
-		uniqueCSRefs := v.dsRefToComputeRefs[ds.Reference().Value]
-		crs := []*mo.ComputeResource{}
-		if uniqueCSRefs == nil {
-			v.buildDatastoreMetrics(colTime, dc, ds, crs)
-			continue
-		}
-
-		for crRef, _ := range uniqueCSRefs {
-			cr := v.computesByRef[crRef]
-			// This shouldn't be possible as dsRefToComputeRefs is populated during collecting ComputeResources, but better be safe
-			if cr == nil {
-				errs.AddPartial(1, fmt.Errorf("no ComputeResource collected for Datastore [%s]'s ComputeResource ref: %s", ds.Name, crRef))
-				continue
-			}
-			crs = append(crs, cr)
-		}
-		v.buildDatastoreMetrics(colTime, dc, ds, crs)
+		v.buildDatastoreMetrics(colTime, dc, ds, errs)
 	}
 }
 
-// buildDatastores builds a resource and metrics for a given collected Datastore
+// buildDatastoreMetrics builds a resource and metrics for a given collected Datastore
 func (v *vcenterMetricScraper) buildDatastoreMetrics(
 	colTime pcommon.Timestamp,
 	dc *mo.Datacenter,
 	ds *mo.Datastore,
-	crs []*mo.ComputeResource,
+	errs *scrapererror.ScrapeErrors,
 ) {
-	v.recordDatastoreStats(colTime, ds)
+	// Get a list of ComputeResources for this Datastore if there is one
+	crs := []*mo.ComputeResource{}
+	uniqueCSRefs := v.dsRefToComputeRefs[ds.Reference().Value]
+	for crRef, _ := range uniqueCSRefs {
+		cr := v.computesByRef[crRef]
+		// This shouldn't be possible as dsRefToComputeRefs is populated during collecting ComputeResources, but better be safe
+		if cr == nil {
+			errs.AddPartial(1, fmt.Errorf("no ComputeResource collected for Datastore [%s]'s ComputeResource ref: %s", ds.Name, crRef))
+			continue
+		}
+		crs = append(crs, cr)
+	}
 
+	// Create Datastore resource builder
 	rb := v.createDatastoreResourceBuilder(dc, ds, crs)
+
+	// Record Datastore metric data points
+	v.recordDatastoreStats(colTime, ds)
 	v.mb.EmitForResource(metadata.WithResource(rb.Emit()))
 }
 
+// buildResourcePools builds ResourcePool metrics and resources from the collected ResourcePools
 func (v *vcenterMetricScraper) buildResourcePools(
 	colTime pcommon.Timestamp,
 	dc *mo.Datacenter,
 	errs *scrapererror.ScrapeErrors,
 ) {
 	for _, rp := range v.rPoolsByRef {
+		// Don't make metrics for vApps
+		if rp.Reference().Type == "VirtualApp" {
+			continue
+		}
+
 		if err := v.buildResourcePoolMetrics(colTime, dc, rp); err != nil {
 			errs.AddPartial(1, err)
 		}
 	}
 }
 
-// buildResourcePoolMetricsForCompute builds a resource and metrics for a given collected ResourcePool
+// buildResourcePoolMetrics builds a resource and metrics for a given collected ResourcePool
 func (v *vcenterMetricScraper) buildResourcePoolMetrics(colTime pcommon.Timestamp, dc *mo.Datacenter, rp *mo.ResourcePool,
 ) error {
+	// Get related ResourcePool compute info
 	crRef := rp.Owner
 	cr := v.computesByRef[crRef.Value]
-	for _, vmRef := range rp.Vm {
-		v.vmRefToComputeRef[vmRef.Value] = crRef.Value
-		v.vmRefToRPoolRef[vmRef.Value] = rp.Reference().Value
+	if cr == nil {
+		return fmt.Errorf("no collected ComputeResource found for ResourcePool [%s]'s parent ref: %s", rp.Name, crRef.Value)
 	}
 
+	// Create ResourcePool resource builder
 	rb, err := v.createResourcePoolResourceBuilder(dc, cr, rp)
 	if err != nil {
 		return err
 	}
 
+	// Record ResourcePool metric data points
 	v.recordResourcePoolStats(colTime, rp)
 	v.mb.EmitForResource(metadata.WithResource(rb.Emit()))
 
 	return nil
 }
 
-// // buildHostsForCompute builds Host metrics and resources from the collected data for a single ComputeResource
-// func (v *vcenterMetricScraper) buildHostsForCompute(
-// 	colTime pcommon.Timestamp,
-// 	dc *mo.Datacenter,
-// 	cr *mo.ComputeResource,
-// 	errs *scrapererror.ScrapeErrors,
-// ) {
-// 	hsRefs := cr.Host
-// 	if hsRefs == nil || len(hsRefs) == 0 {
-// 		errs.AddPartial(1, fmt.Errorf("no Host refs for ComputeResource: %s", cr.Name))
-// 		return
-// 	}
-
-// 	for i := range hsRefs {
-// 		if err := v.buildHostMetricsForCompute(colTime, dc, cr, &hsRefs[i]); err != nil {
-// 			errs.AddPartial(1, err)
-// 		}
-// 	}
-// }
-
-// // buildHostMetricsForCompute builds a resource and metrics for a given collected Host
-// func (v *vcenterMetricScraper) buildHostMetricsForCompute(
-// 	colTime pcommon.Timestamp,
-// 	dc *mo.Datacenter,
-// 	cr *mo.ComputeResource,
-// 	hsRef *types.ManagedObjectReference,
-// ) error {
-// 	hs := v.hostsByRef[hsRef.Value]
-// 	if hs == nil {
-// 		return fmt.Errorf("no collected Host for ComputeResource [%s]'s Host ref: %s", cr.Name, hsRef.Value)
-// 	}
-// 	for _, vmRef := range hs.Vm {
-// 		v.vmToComputeMap[vmRef.Value] = cr.Reference().Value
-// 	}
-
-// 	v.recordHostSystemStats(colTime, hs)
-// 	hostPerfMetrics := v.hostPerfMetricsByRef[hsRef.Value]
-// 	if hostPerfMetrics != nil {
-// 		v.recordHostPerformanceMetrics(hostPerfMetrics)
-// 	}
-
-// 	rb := v.createHostResourceBuilder(dc, cr, hs)
-// 	v.mb.EmitForResource(metadata.WithResource(rb.Emit()))
-
-// 	return nil
-// }
-
-// buildHosts builds Host metrics and resources from the collected data
+// buildHosts builds Host metrics and resources from the collected Hosts
+// returns a map of of each ComputeResource for each VM
 func (v *vcenterMetricScraper) buildHosts(
 	colTime pcommon.Timestamp,
 	dc *mo.Datacenter,
 	errs *scrapererror.ScrapeErrors,
-) {
+) map[string]string {
+	vmRefToComputeRef := map[string]string{}
+
 	for _, hs := range v.hostsByRef {
-		if err := v.buildHostMetrics(colTime, dc, hs); err != nil {
+		if err := v.buildHostMetrics(colTime, dc, hs, vmRefToComputeRef); err != nil {
 			errs.AddPartial(1, err)
 		}
 	}
+
+	return vmRefToComputeRef
 }
 
-// buildHostMetrics builds a resource and metrics
+// buildHostMetrics builds a resource and metrics for a given collected Host
 func (v *vcenterMetricScraper) buildHostMetrics(
 	colTime pcommon.Timestamp,
 	dc *mo.Datacenter,
 	hs *mo.HostSystem,
+	vmRefToComputeRef map[string]string,
 ) error {
-	v.recordHostSystemStats(colTime, hs)
-	hostPerfMetrics := v.hostPerfMetricsByRef[hs.Reference().Value]
-	if hostPerfMetrics != nil {
-		v.recordHostPerformanceMetrics(hostPerfMetrics)
-	}
-
+	// Get related Host compute info
 	crRef := hs.Parent
 	if crRef == nil {
 		return fmt.Errorf("no parent found for Host: %s", hs.Name)
 	}
-
 	cr := v.computesByRef[crRef.Value]
 	if cr == nil {
 		return fmt.Errorf("no collected ComputeResource found for Host [%s]'s parent ref: %s", hs.Name, crRef.Value)
 	}
 
+	// Store VM to ComputeResource relationship for all child VMs
+	for _, vmRef := range hs.Vm {
+		vmRefToComputeRef[vmRef.Value] = cr.Reference().Value
+	}
+
+	// Create Host resource builder
 	rb := v.createHostResourceBuilder(dc, cr, hs)
+
+	// Record Host metric data points
+	v.recordHostSystemStats(colTime, hs)
+	hostPerfMetrics := v.hostPerfMetricsByRef[hs.Reference().Value]
+	if hostPerfMetrics != nil {
+		v.recordHostPerformanceMetrics(hostPerfMetrics)
+	}
 	v.mb.EmitForResource(metadata.WithResource(rb.Emit()))
 
 	return nil
 }
 
-func (v *vcenterMetricScraper) buildClusters(
-	now pcommon.Timestamp,
-	dc *mo.Datacenter,
-	cr *mo.ComputeResource,
-	poweredOnVMs, poweredOffVMs int64,
-) {
-	v.recordClusterStats(now, cr, poweredOnVMs, poweredOffVMs)
-
-	rb := v.createClusterResourceBuilder(dc, cr)
-	v.mb.EmitForResource(metadata.WithResource(rb.Emit()))
-}
-
-func (v *vcenterMetricScraper) buildVmsForCompute(
+// buildVMs builds VM metrics and resources from the collected VMs
+// returns a map of all VM State counts for each ComputeResource
+func (v *vcenterMetricScraper) buildVMs(
 	colTime pcommon.Timestamp,
 	dc *mo.Datacenter,
-	cr *mo.ComputeResource,
+	vmRefToComputeRef map[string]string,
 	errs *scrapererror.ScrapeErrors,
-) (poweredOnVMs int64, poweredOffVMs int64) {
+) map[string]*clusterVMStates {
+	vmStatesByCRRef := map[string]*clusterVMStates{}
+
 	for _, vm := range v.vmsByRef {
-		incOn, incOff, err := v.buildVMForCompute(colTime, dc, cr, vm)
-		if incOff {
-			poweredOffVMs++
-		}
-
-		if incOn {
-			poweredOnVMs++
-		}
-
-		if err != nil {
+		if err := v.buildVMMetrics(colTime, dc, vm, vmRefToComputeRef, vmStatesByCRRef); err != nil {
 			errs.AddPartial(1, err)
 		}
 	}
 
-	return poweredOnVMs, poweredOffVMs
+	return vmStatesByCRRef
 }
 
-func (v *vcenterMetricScraper) buildVMForCompute(
+// buildVMMetrics builds a resource and metrics for a given collected VM
+func (v *vcenterMetricScraper) buildVMMetrics(
 	colTime pcommon.Timestamp,
 	dc *mo.Datacenter,
-	cr *mo.ComputeResource,
 	vm *mo.VirtualMachine,
-) (incOn bool, incOff bool, err error) {
-	crRef, ok := v.vmRefToComputeRef[vm.Reference().Value]
-	if !ok {
-		return incOn, incOff, err
+	vmRefToComputeRef map[string]string,
+	vmStatesByCRRef map[string]*clusterVMStates,
+) error {
+	// Get related VM compute info
+	crRef := vmRefToComputeRef[vm.Reference().Value]
+	if crRef == "" {
+		return fmt.Errorf("no ComputeResource ref found for VM: %s", vm.Name)
+	}
+	cr := v.computesByRef[crRef]
+	if cr == nil {
+		return fmt.Errorf("no collected ComputeResource for VM [%s]'s ComputeResource ref: %s", vm.Name, crRef)
 	}
 
-	if crRef != cr.Reference().Value {
-		return incOn, incOff, err
+	// Get related VM host info
+	hsRef := vm.Summary.Runtime.Host
+	if hsRef == nil {
+		return fmt.Errorf("no Host ref for VM: %s", vm.Name)
+	}
+	hs := v.hostsByRef[hsRef.Value]
+	if hs == nil {
+		return fmt.Errorf("no collected Host for VM [%s]'s Host ref: %s", vm.Name, hsRef.Value)
 	}
 
-	if string(vm.Runtime.PowerState) == "poweredOff" {
-		incOff = true
-	} else {
-		incOn = true
-	}
-
-	// vms are optional without a resource pool
+	// VMs may not have a ResourcePool reported (templates)
+	// But grab it if available
 	rpRef := vm.ResourcePool
 	var rp *mo.ResourcePool
 	if rpRef != nil {
 		rp = v.rPoolsByRef[rpRef.Value]
 	}
 
-	if rp != nil {
-		rpCompute := rp.Owner
-		// not part of this cluster
-		if rpCompute.Reference().Value != cr.Reference().Value {
-			return incOn, incOff, err
-		}
-		stored, ok := v.vmRefToRPoolRef[vm.Reference().Value]
-		if ok {
-			rp = v.rPoolsByRef[stored]
-		}
-	}
-
-	if vm.Config == nil {
-		return incOn, incOff, fmt.Errorf("config empty for VM: %s", vm.Name)
-	}
-
-	// Get related VM host info
-	hsRef := vm.Summary.Runtime.Host
-	if hsRef == nil {
-		return incOn, incOff, fmt.Errorf("no Host ref for VM: %s", vm.Name)
-	}
-	hs := v.hostsByRef[hsRef.Value]
-	if hs == nil {
-		return incOn, incOff, fmt.Errorf("no collected Host for VM [%s]'s Host ref: %s", vm.Name, hsRef.Value)
-	}
-
-	rb, err := v.createVMResourceBuilder(dc, cr, hs, rp, vm)
-	if err != nil {
-		return incOn, incOff, err
-	}
-
-	perfMetrics := v.vmPerfMetricsByRef[vm.Reference().Value]
-	v.recordVMStats(colTime, vm, hs)
-	if perfMetrics != nil {
-		v.recordVMPerformanceMetrics(perfMetrics)
-	}
-	v.mb.EmitForResource(metadata.WithResource(rb.Emit()))
-
-	return incOn, incOff, err
-}
-
-func (v *vcenterMetricScraper) buildVMs(
-	colTime pcommon.Timestamp,
-	dc *mo.Datacenter,
-	errs *scrapererror.ScrapeErrors,
-) map[string]*clusterVMStates {
-	clusterVMStatesByCRRef := map[string]*clusterVMStates{}
-
-	for _, vm := range v.vmsByRef {
-		if err := v.buildVMMetrics(colTime, dc, vm, clusterVMStatesByCRRef); err != nil {
-			errs.AddPartial(1, err)
-		}
-	}
-
-	return clusterVMStatesByCRRef
-}
-
-func (v *vcenterMetricScraper) buildVMMetrics(
-	colTime pcommon.Timestamp,
-	dc *mo.Datacenter,
-	vm *mo.VirtualMachine,
-	clusterVMStatesByCRRef map[string]*clusterVMStates,
-) error {
-	crRef, ok := v.vmRefToComputeRef[vm.Reference().Value]
-	if !ok {
-		return nil
-	}
-
-	vmStates := clusterVMStatesByCRRef[crRef]
+	// Update cluster's VM power state counts if applicable
+	vmStates := vmStatesByCRRef[crRef]
 	if vmStates == nil {
-		vmStates = &clusterVMStates{
-			poweredOff: 0,
-			poweredOn:  0,
-		}
-		clusterVMStatesByCRRef[crRef] = vmStates
+		vmStates = &clusterVMStates{poweredOff: 0, poweredOn: 0}
+		vmStatesByCRRef[crRef] = vmStates
 	}
 	if string(vm.Runtime.PowerState) == "poweredOff" {
 		vmStates.poweredOff++
@@ -635,44 +536,13 @@ func (v *vcenterMetricScraper) buildVMMetrics(
 		vmStates.poweredOn++
 	}
 
-	// vms are optional without a resource pool
-	rpRef := vm.ResourcePool
-	var rp *mo.ResourcePool
-	if rpRef != nil {
-		rp = v.rPoolsByRef[rpRef.Value]
-	}
-
-	if rp != nil {
-		rpCompute := rp.Owner
-		// not part of this cluster
-		if rpCompute.Reference().Value != cr.Reference().Value {
-			return incOn, incOff, err
-		}
-		stored, ok := v.vmToRPool[vm.Reference().Value]
-		if ok {
-			rp = stored
-		}
-	}
-
-	if vm.Config == nil {
-		return incOn, incOff, fmt.Errorf("config empty for VM: %s", vm.Name)
-	}
-
-	// Get related VM host info
-	hsRef := vm.Summary.Runtime.Host
-	if hsRef == nil {
-		return incOn, incOff, fmt.Errorf("no Host ref for VM: %s", vm.Name)
-	}
-	hs := v.hostsByRef[hsRef.Value]
-	if hs == nil {
-		return incOn, incOff, fmt.Errorf("no collected Host for VM [%s]'s Host ref: %s", vm.Name, hsRef.Value)
-	}
-
+	// Create VM resource builder
 	rb, err := v.createVMResourceBuilder(dc, cr, hs, rp, vm)
 	if err != nil {
-		return incOn, incOff, err
+		return err
 	}
 
+	// Record VM metric data points
 	perfMetrics := v.vmPerfMetricsByRef[vm.Reference().Value]
 	v.recordVMStats(colTime, vm, hs)
 	if perfMetrics != nil {
@@ -680,5 +550,45 @@ func (v *vcenterMetricScraper) buildVMMetrics(
 	}
 	v.mb.EmitForResource(metadata.WithResource(rb.Emit()))
 
-	return incOn, incOff, err
+	return err
+}
+
+// buildClusters builds Cluster metrics and resources from the collected ComputeResources
+func (v *vcenterMetricScraper) buildClusters(
+	colTime pcommon.Timestamp,
+	dc *mo.Datacenter,
+	vmStatesByCRRef map[string]*clusterVMStates,
+	errs *scrapererror.ScrapeErrors,
+) {
+	for crRef, cr := range v.computesByRef {
+		// Don't make metrics for anything that's not a Cluster (otherwise it should be the same as a HostSystem)
+		if cr.Reference().Type != "ClusterComputeResource" {
+			continue
+		}
+
+		vmStates := vmStatesByCRRef[crRef]
+		if err := v.buildClusterMetrics(colTime, dc, cr, vmStates); err != nil {
+			errs.AddPartial(1, err)
+		}
+	}
+}
+
+// buildClusterMetrics builds a resource and metrics for a given collected ComputeCluster
+func (v *vcenterMetricScraper) buildClusterMetrics(
+	colTime pcommon.Timestamp,
+	dc *mo.Datacenter,
+	cr *mo.ComputeResource,
+	vmStates *clusterVMStates,
+) (err error) {
+	// Create Cluster resource builder
+	rb := v.createClusterResourceBuilder(dc, cr)
+
+	if vmStates == nil {
+		err = fmt.Errorf("no VM power counts found for Cluster: %s", cr.Name)
+	}
+	// Record Cluster metric data points
+	v.recordClusterStats(colTime, cr, vmStates)
+	v.mb.EmitForResource(metadata.WithResource(rb.Emit()))
+
+	return err
 }

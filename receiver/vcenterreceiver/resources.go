@@ -91,16 +91,31 @@ func (v *vcenterMetricScraper) createVMResourceBuilder(
 		rb.SetVcenterClusterName(cr.Name)
 	}
 	rb.SetVcenterHostName(hs.Name)
-	if rp != nil {
-		rb.SetVcenterResourcePoolName(rp.Name)
 
+	// Likely a VM Template
+	if rp == nil {
+		rb.SetVcenterVMName(vm.Name)
+		rb.SetVcenterVMID(vm.Config.InstanceUuid)
+
+		return rb, nil
+	}
+
+	if rp.Reference().Type == "VirtualApp" {
+		rb.SetVcenterVirtualAppName(rp.Name)
+		iPath := v.vAppIPathsByRef[rp.Reference().Value]
+		if iPath == nil {
+			return nil, fmt.Errorf("no inventory path found for VM [%s]'s collected vApp: %s", vm.Name, rp.Name)
+		}
+		rb.SetVcenterVirtualAppInventoryPath(*iPath)
+	} else {
+		rb.SetVcenterResourcePoolName(rp.Name)
 		iPath := v.rPoolIPathsByRef[rp.Reference().Value]
 		if iPath == nil {
 			return nil, fmt.Errorf("no inventory path found for VM [%s]'s collected ResourcePool: %s", vm.Name, rp.Name)
 		}
 		rb.SetVcenterResourcePoolInventoryPath(*iPath)
 	}
-	rb.SetVcenterVMName(vm.Summary.Config.Name)
+	rb.SetVcenterVMName(vm.Name)
 	rb.SetVcenterVMID(vm.Config.InstanceUuid)
 
 	return rb, nil

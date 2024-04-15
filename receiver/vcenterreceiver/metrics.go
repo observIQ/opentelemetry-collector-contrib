@@ -14,10 +14,14 @@ import (
 func (v *vcenterMetricScraper) recordClusterStats(
 	colTime pcommon.Timestamp,
 	cr *mo.ComputeResource,
-	poweredOnVMs, poweredOffVMs int64,
+	vmStates *clusterVMStates,
 ) {
-	v.mb.RecordVcenterClusterVMCountDataPoint(colTime, poweredOnVMs, metadata.AttributeVMCountPowerStateOn)
-	v.mb.RecordVcenterClusterVMCountDataPoint(colTime, poweredOffVMs, metadata.AttributeVMCountPowerStateOff)
+	if vmStates != nil {
+		poweredOnVMs := vmStates.poweredOn
+		poweredOffVMs := vmStates.poweredOff
+		v.mb.RecordVcenterClusterVMCountDataPoint(colTime, poweredOnVMs, metadata.AttributeVMCountPowerStateOn)
+		v.mb.RecordVcenterClusterVMCountDataPoint(colTime, poweredOffVMs, metadata.AttributeVMCountPowerStateOff)
+	}
 
 	s := cr.Summary.GetComputeResourceSummary()
 	v.mb.RecordVcenterClusterCPULimitDataPoint(colTime, int64(s.TotalCpu))
