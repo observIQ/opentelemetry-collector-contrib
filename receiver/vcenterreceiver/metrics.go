@@ -11,46 +11,75 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver/internal/metadata"
 )
 
-func (v *vcenterMetricScraper) recordClusterStats(
-	colTime pcommon.Timestamp,
-	cr *mo.ComputeResource,
-	vmStates *clusterVMStates,
+// recordDatastoreStats records stat metrics for a vSphere Datastore
+func (v *vcenterMetricScraper) recordDatastoreStats(
+	ts pcommon.Timestamp,
+	ds *mo.Datastore,
 ) {
-	if vmStates != nil {
-		poweredOnVMs := vmStates.poweredOn
-		poweredOffVMs := vmStates.poweredOff
-		v.mb.RecordVcenterClusterVMCountDataPoint(colTime, poweredOnVMs, metadata.AttributeVMCountPowerStateOn)
-		v.mb.RecordVcenterClusterVMCountDataPoint(colTime, poweredOffVMs, metadata.AttributeVMCountPowerStateOff)
+	s := ds.Summary
+	diskUsage := s.Capacity - s.FreeSpace
+	diskUtilization := float64(diskUsage) / float64(s.Capacity) * 100
+	v.mb.RecordVcenterDatastoreDiskUsageDataPoint(ts, diskUsage, metadata.AttributeDiskStateUsed)
+	v.mb.RecordVcenterDatastoreDiskUsageDataPoint(ts, s.FreeSpace, metadata.AttributeDiskStateAvailable)
+	v.mb.RecordVcenterDatastoreDiskUtilizationDataPoint(ts, diskUtilization)
+}
+
+// recordClusterStats records stat metrics for a vSphere Cluster
+func (v *vcenterMetricScraper) recordClusterStats(
+	ts pcommon.Timestamp,
+	cr *mo.ComputeResource,
+	vmStateInfo *clusterVMStates,
+) {
+	if vmStateInfo != nil {
+		poweredOnVMs := vmStateInfo.poweredOn
+		poweredOffVMs := vmStateInfo.poweredOff
+		v.mb.RecordVcenterClusterVMCountDataPoint(ts, poweredOnVMs, metadata.AttributeVMCountPowerStateOn)
+		v.mb.RecordVcenterClusterVMCountDataPoint(ts, poweredOffVMs, metadata.AttributeVMCountPowerStateOff)
 	}
 
 	s := cr.Summary.GetComputeResourceSummary()
-	v.mb.RecordVcenterClusterCPULimitDataPoint(colTime, int64(s.TotalCpu))
-	v.mb.RecordVcenterClusterCPUEffectiveDataPoint(colTime, int64(s.EffectiveCpu))
-	v.mb.RecordVcenterClusterMemoryEffectiveDataPoint(colTime, s.EffectiveMemory)
-	v.mb.RecordVcenterClusterMemoryLimitDataPoint(colTime, s.TotalMemory)
-	v.mb.RecordVcenterClusterHostCountDataPoint(colTime, int64(s.NumHosts-s.NumEffectiveHosts), false)
-	v.mb.RecordVcenterClusterHostCountDataPoint(colTime, int64(s.NumEffectiveHosts), true)
+	v.mb.RecordVcenterClusterCPULimitDataPoint(ts, int64(s.TotalCpu))
+	v.mb.RecordVcenterClusterCPUEffectiveDataPoint(ts, int64(s.EffectiveCpu))
+	v.mb.RecordVcenterClusterMemoryEffectiveDataPoint(ts, s.EffectiveMemory)
+	v.mb.RecordVcenterClusterMemoryLimitDataPoint(ts, s.TotalMemory)
+	v.mb.RecordVcenterClusterHostCountDataPoint(ts, int64(s.NumHosts-s.NumEffectiveHosts), false)
+	v.mb.RecordVcenterClusterHostCountDataPoint(ts, int64(s.NumEffectiveHosts), true)
 }
 
-func (v *vcenterMetricScraper) recordHostSystemStats(
-	colTime pcommon.Timestamp,
-	hs *mo.HostSystem,
+// recordResourcePoolStats records stat metrics for a vSphere Resource Pool
+func (v *vcenterMetricScraper) recordResourcePoolStats(
+	ts pcommon.Timestamp,
+	rp *mo.ResourcePool,
 ) {
+	s := rp.Summary.GetResourcePoolSummary()
+	if s.QuickStats != nil {
+		v.mb.RecordVcenterResourcePoolCPUUsageDataPoint(ts, s.QuickStats.OverallCpuUsage)
+		v.mb.RecordVcenterResourcePoolMemoryUsageDataPoint(ts, s.QuickStats.GuestMemoryUsage)
+	}
+
+	v.mb.RecordVcenterResourcePoolCPUSharesDataPoint(ts, int64(s.Config.CpuAllocation.Shares.Shares))
+	v.mb.RecordVcenterResourcePoolMemorySharesDataPoint(ts, int64(s.Config.MemoryAllocation.Shares.Shares))
+
+}
+
+// recordClusterStats records stat metrics for a vSphere Host
+func (v *vcenterMetricScraper) recordHostSystemStats(ts pcommon.Timestamp, hs *mo.HostSystem) {
 	s := hs.Summary
 	h := s.Hardware
 	z := s.QuickStats
 
-	v.mb.RecordVcenterHostMemoryUsageDataPoint(colTime, int64(z.OverallMemoryUsage))
+	v.mb.RecordVcenterHostMemoryUsageDataPoint(ts, int64(z.OverallMemoryUsage))
 	memUtilization := 100 * float64(z.OverallMemoryUsage) / float64(h.MemorySize>>20)
-	v.mb.RecordVcenterHostMemoryUtilizationDataPoint(colTime, memUtilization)
+	v.mb.RecordVcenterHostMemoryUtilizationDataPoint(ts, memUtilization)
 
-	v.mb.RecordVcenterHostCPUUsageDataPoint(colTime, int64(z.OverallCpuUsage))
+	v.mb.RecordVcenterHostCPUUsageDataPoint(ts, int64(z.OverallCpuUsage))
 	cpuUtilization := 100 * float64(z.OverallCpuUsage) / float64(int32(h.NumCpuCores)*h.CpuMhz)
-	v.mb.RecordVcenterHostCPUUtilizationDataPoint(colTime, cpuUtilization)
+	v.mb.RecordVcenterHostCPUUtilizationDataPoint(ts, cpuUtilization)
 }
 
+// recordVMStats records stat metrics for a vSphere Virtual Machine
 func (v *vcenterMetricScraper) recordVMStats(
-	colTime pcommon.Timestamp,
+	ts pcommon.Timestamp,
 	vm *mo.VirtualMachine,
 	hs *mo.HostSystem,
 ) {
@@ -61,22 +90,22 @@ func (v *vcenterMetricScraper) recordVMStats(
 
 	if totalMemory := vm.Summary.Config.MemorySizeMB; totalMemory > 0 && memUsage > 0 {
 		memoryUtilization := float64(memUsage) / float64(totalMemory) * 100
-		v.mb.RecordVcenterVMMemoryUtilizationDataPoint(colTime, memoryUtilization)
+		v.mb.RecordVcenterVMMemoryUtilizationDataPoint(ts, memoryUtilization)
 	}
 
-	v.mb.RecordVcenterVMMemoryUsageDataPoint(colTime, int64(memUsage))
-	v.mb.RecordVcenterVMMemoryBalloonedDataPoint(colTime, int64(balloonedMem))
-	v.mb.RecordVcenterVMMemorySwappedDataPoint(colTime, int64(swappedMem))
-	v.mb.RecordVcenterVMMemorySwappedSsdDataPoint(colTime, swappedSSDMem)
+	v.mb.RecordVcenterVMMemoryUsageDataPoint(ts, int64(memUsage))
+	v.mb.RecordVcenterVMMemoryBalloonedDataPoint(ts, int64(balloonedMem))
+	v.mb.RecordVcenterVMMemorySwappedDataPoint(ts, int64(swappedMem))
+	v.mb.RecordVcenterVMMemorySwappedSsdDataPoint(ts, swappedSSDMem)
 
 	diskUsed := vm.Summary.Storage.Committed
 	diskFree := vm.Summary.Storage.Uncommitted
 
-	v.mb.RecordVcenterVMDiskUsageDataPoint(colTime, diskUsed, metadata.AttributeDiskStateUsed)
-	v.mb.RecordVcenterVMDiskUsageDataPoint(colTime, diskFree, metadata.AttributeDiskStateAvailable)
+	v.mb.RecordVcenterVMDiskUsageDataPoint(ts, diskUsed, metadata.AttributeDiskStateUsed)
+	v.mb.RecordVcenterVMDiskUsageDataPoint(ts, diskFree, metadata.AttributeDiskStateAvailable)
 	if diskFree != 0 {
 		diskUtilization := float64(diskUsed) / float64(diskFree+diskUsed) * 100
-		v.mb.RecordVcenterVMDiskUtilizationDataPoint(colTime, diskUtilization)
+		v.mb.RecordVcenterVMDiskUtilizationDataPoint(ts, diskUtilization)
 	}
 
 	cpuUsage := vm.Summary.QuickStats.OverallCpuUsage
@@ -84,7 +113,7 @@ func (v *vcenterMetricScraper) recordVMStats(
 		// Most likely the VM is unavailable or is unreachable.
 		return
 	}
-	v.mb.RecordVcenterVMCPUUsageDataPoint(colTime, int64(cpuUsage))
+	v.mb.RecordVcenterVMCPUUsageDataPoint(ts, int64(cpuUsage))
 
 	// https://communities.vmware.com/t5/VMware-code-Documents/Resource-Management/ta-p/2783456
 	// VirtualMachine.runtime.maxCpuUsage is a property of the virtual machine, indicating the limit value.
@@ -98,34 +127,7 @@ func (v *vcenterMetricScraper) recordVMStats(
 		// This shouldn't happen, but protect against division by zero.
 		return
 	}
-	v.mb.RecordVcenterVMCPUUtilizationDataPoint(colTime, 100*float64(cpuUsage)/float64(cpuLimit))
-}
-
-func (v *vcenterMetricScraper) recordDatastoreStats(
-	colTime pcommon.Timestamp,
-	ds *mo.Datastore,
-) {
-	s := ds.Summary
-	diskUsage := s.Capacity - s.FreeSpace
-	diskUtilization := float64(diskUsage) / float64(s.Capacity) * 100
-	v.mb.RecordVcenterDatastoreDiskUsageDataPoint(colTime, diskUsage, metadata.AttributeDiskStateUsed)
-	v.mb.RecordVcenterDatastoreDiskUsageDataPoint(colTime, s.FreeSpace, metadata.AttributeDiskStateAvailable)
-	v.mb.RecordVcenterDatastoreDiskUtilizationDataPoint(colTime, diskUtilization)
-}
-
-func (v *vcenterMetricScraper) recordResourcePoolStats(
-	colTime pcommon.Timestamp,
-	rp *mo.ResourcePool,
-) {
-	s := rp.Summary.GetResourcePoolSummary()
-	if s.QuickStats != nil {
-		v.mb.RecordVcenterResourcePoolCPUUsageDataPoint(colTime, s.QuickStats.OverallCpuUsage)
-		v.mb.RecordVcenterResourcePoolMemoryUsageDataPoint(colTime, s.QuickStats.GuestMemoryUsage)
-	}
-
-	v.mb.RecordVcenterResourcePoolCPUSharesDataPoint(colTime, int64(s.Config.CpuAllocation.Shares.Shares))
-	v.mb.RecordVcenterResourcePoolMemorySharesDataPoint(colTime, int64(s.Config.MemoryAllocation.Shares.Shares))
-
+	v.mb.RecordVcenterVMCPUUtilizationDataPoint(ts, 100*float64(cpuUsage)/float64(cpuLimit))
 }
 
 var hostPerfMetricList = []string{
@@ -167,73 +169,101 @@ var vmPerfMetricList = []string{
 	"virtualDisk.totalReadLatency.average",
 }
 
-func (v *vcenterMetricScraper) recordVMPerformanceMetrics(entityMetric *performance.EntityMetric) {
-	for _, val := range entityMetric.Value {
-		for j, nestedValue := range val.Value {
-			si := entityMetric.SampleInfo[j]
-			switch val.Name {
-			// Performance monitoring level 1 metrics
-			case "net.bytesTx.average":
-				v.mb.RecordVcenterVMNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
-			case "net.bytesRx.average":
-				v.mb.RecordVcenterVMNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
-			case "net.usage.average":
-				v.mb.RecordVcenterVMNetworkUsageDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, val.Instance)
-			case "net.packetsTx.summation":
-				v.mb.RecordVcenterVMNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
-			case "net.packetsRx.summation":
-				v.mb.RecordVcenterVMNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
-
-			// Performance monitoring level 2 metrics required
-			case "disk.totalReadLatency.average":
-				v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead, metadata.AttributeDiskTypePhysical, val.Instance)
-			case "virtualDisk.totalReadLatency.average":
-				v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead, metadata.AttributeDiskTypeVirtual, val.Instance)
-			case "disk.totalWriteLatency.average":
-				v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite, metadata.AttributeDiskTypePhysical, val.Instance)
-			case "virtualDisk.totalWriteLatency.average":
-				v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite, metadata.AttributeDiskTypeVirtual, val.Instance)
-			case "disk.maxTotalLatency.latest":
-				v.mb.RecordVcenterVMDiskLatencyMaxDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, val.Instance)
-			}
-		}
-	}
-}
-
+// recordHostPerformanceMetrics records performance metrics for a vSphere Host
 func (v *vcenterMetricScraper) recordHostPerformanceMetrics(entityMetric *performance.EntityMetric) {
 	for _, val := range entityMetric.Value {
 		for j, nestedValue := range val.Value {
 			si := entityMetric.SampleInfo[j]
 			switch val.Name {
-			// Performance monitoring level 1 metrics
+			/******************************************/
+			// Performance Monitoring Level 1 Metrics //
+			/******************************************/
+			// (per device requires level 4)
 			case "net.usage.average":
 				v.mb.RecordVcenterHostNetworkUsageDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, val.Instance)
-			case "net.bytesTx.average":
-				v.mb.RecordVcenterHostNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
-			case "net.bytesRx.average":
-				v.mb.RecordVcenterHostNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
-			case "net.packetsTx.summation":
-				v.mb.RecordVcenterHostNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
-			case "net.packetsRx.summation":
-				v.mb.RecordVcenterHostNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
-
-			// Following requires performance level 2
-			case "net.errorsRx.summation":
-				v.mb.RecordVcenterHostNetworkPacketErrorsDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
-			case "net.errorsTx.summation":
-				v.mb.RecordVcenterHostNetworkPacketErrorsDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
-			case "disk.totalWriteLatency.average":
-				v.mb.RecordVcenterHostDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite, val.Instance)
-			case "disk.totalReadLatency.average":
-				v.mb.RecordVcenterHostDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead, val.Instance)
+			// (per device requires level 3)
 			case "disk.maxTotalLatency.latest":
 				v.mb.RecordVcenterHostDiskLatencyMaxDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, val.Instance)
-
-			// Following requires performance level 4
+			/******************************************/
+			// Following Requires Performance Level 2 //
+			/******************************************/
+			// (per device requires level 3)
+			case "net.bytesTx.average":
+				v.mb.RecordVcenterHostNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
+			// (per device requires level 3)
+			case "net.bytesRx.average":
+				v.mb.RecordVcenterHostNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
+			// (per device requires level 3)
+			case "net.packetsTx.summation":
+				v.mb.RecordVcenterHostNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
+			// (per device requires level 3)
+			case "net.packetsRx.summation":
+				v.mb.RecordVcenterHostNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
+			// (per device requires level 3)
+			case "net.errorsRx.summation":
+				v.mb.RecordVcenterHostNetworkPacketErrorsDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
+			// (per device requires level 3)
+			case "net.errorsTx.summation":
+				v.mb.RecordVcenterHostNetworkPacketErrorsDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
+			// (per device requires level 3)
+			case "disk.totalWriteLatency.average":
+				v.mb.RecordVcenterHostDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite, val.Instance)
+			// (per device requires level 3)
+			case "disk.totalReadLatency.average":
+				v.mb.RecordVcenterHostDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead, val.Instance)
+			// (per device requires level 3)
 			case "disk.read.average":
 				v.mb.RecordVcenterHostDiskThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead, val.Instance)
+			// (per device requires level 3)
 			case "disk.write.average":
 				v.mb.RecordVcenterHostDiskThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite, val.Instance)
+			}
+		}
+	}
+}
+
+// recordVMPerformanceMetrics records performance metrics for a vSphere Virtual Machine
+func (v *vcenterMetricScraper) recordVMPerformanceMetrics(entityMetric *performance.EntityMetric) {
+	for _, val := range entityMetric.Value {
+		for j, nestedValue := range val.Value {
+			si := entityMetric.SampleInfo[j]
+			switch val.Name {
+			/******************************************/
+			// Performance Monitoring Level 1 Metrics //
+			/******************************************/
+			// (per device requires level 4)
+			case "net.usage.average":
+				v.mb.RecordVcenterVMNetworkUsageDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, val.Instance)
+			// (per device requires level 3)
+			case "disk.maxTotalLatency.latest":
+				v.mb.RecordVcenterVMDiskLatencyMaxDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, val.Instance)
+			// (per device requires level 3)
+			case "virtualDisk.totalReadLatency.average":
+				v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead, metadata.AttributeDiskTypeVirtual, val.Instance)
+			// (per device requires level 3)
+			case "virtualDisk.totalWriteLatency.average":
+				v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite, metadata.AttributeDiskTypeVirtual, val.Instance)
+			/******************************************/
+			// Following Requires Performance Level 2 //
+			/******************************************/
+			// (per device requires level 3)
+			case "net.bytesTx.average":
+				v.mb.RecordVcenterVMNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
+			// (per device requires level 3)
+			case "net.bytesRx.average":
+				v.mb.RecordVcenterVMNetworkThroughputDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
+			// (per device requires level 3)
+			case "net.packetsTx.summation":
+				v.mb.RecordVcenterVMNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionTransmitted, val.Instance)
+			// (per device requires level 3)
+			case "net.packetsRx.summation":
+				v.mb.RecordVcenterVMNetworkPacketCountDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeThroughputDirectionReceived, val.Instance)
+			// (per device requires level 3)
+			case "disk.totalReadLatency.average":
+				v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionRead, metadata.AttributeDiskTypePhysical, val.Instance)
+			// (per device requires level 3)
+			case "disk.totalWriteLatency.average":
+				v.mb.RecordVcenterVMDiskLatencyAvgDataPoint(pcommon.NewTimestampFromTime(si.Timestamp), nestedValue, metadata.AttributeDiskDirectionWrite, metadata.AttributeDiskTypePhysical, val.Instance)
 			}
 		}
 	}

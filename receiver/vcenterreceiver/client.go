@@ -168,11 +168,11 @@ func (vc *vcenterClient) HostSystems(ctx context.Context, containerMoRef vt.Mana
 	return hosts, nil
 }
 
-// ResourcePools returns the ResourcePools of the vSphere SDK
+// ResourcePools returns the ResourcePools (&VirtualApps) of the vSphere SDK
 func (vc *vcenterClient) ResourcePools(ctx context.Context, containerMoRef vt.ManagedObjectReference) ([]mo.ResourcePool, error) {
 	v, err := vc.vm.CreateContainerView(ctx, containerMoRef, []string{"ResourcePool"}, true)
 	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve ResourcePools: %w", err)
+		return nil, fmt.Errorf("unable to retrieve ResourcePools (&VirtualApps): %w", err)
 	}
 
 	var rps []mo.ResourcePool
@@ -183,30 +183,10 @@ func (vc *vcenterClient) ResourcePools(ctx context.Context, containerMoRef vt.Ma
 		"vm",
 	}, &rps)
 	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve ResourcePools: %w", err)
+		return nil, fmt.Errorf("unable to retrieve ResourcePools (&VirtualApps): %w", err)
 	}
 
 	return rps, nil
-}
-
-// AllResourcePoolWithInventoryLists returns the ResourcePools (with populated InventoryLists) of the vSphere SDK
-func (vc *vcenterClient) AllResourcePoolWithInventoryLists(ctx context.Context) ([]*object.ResourcePool, error) {
-	rps, err := vc.finder.ResourcePoolList(ctx, "*")
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve ResourcePools with InventoryLists: %w", err)
-	}
-
-	return rps, nil
-}
-
-// AllVAppWithInventoryLists returns the vApps (with populated InventoryLists) of the vSphere SDK
-func (vc *vcenterClient) AllVAppWithInventoryLists(ctx context.Context) ([]*object.VirtualApp, error) {
-	vApps, err := vc.finder.VirtualAppList(ctx, "*")
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve vApps with InventoryLists: %w", err)
-	}
-
-	return vApps, nil
 }
 
 // VMS returns the VirtualMachines of the vSphere SDK
@@ -241,19 +221,42 @@ func (vc *vcenterClient) VMs(ctx context.Context, containerMoRef vt.ManagedObjec
 	return vms, nil
 }
 
-type perfMetricsQueryResult struct {
-	counters     map[string]*vt.PerfCounterInfo
+// ResourcePoolInventoryListObjects returns the ResourcePools (with populated InventoryLists) of the vSphere SDK
+func (vc *vcenterClient) ResourcePoolInventoryListObjects(ctx context.Context) ([]*object.ResourcePool, error) {
+	rps, err := vc.finder.ResourcePoolList(ctx, "*")
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve ResourcePools with InventoryLists: %w", err)
+	}
+
+	return rps, nil
+}
+
+// VAppInventoryListObjects returns the vApps (with populated InventoryLists) of the vSphere SDK
+func (vc *vcenterClient) VAppInventoryListObjects(ctx context.Context) ([]*object.VirtualApp, error) {
+	vApps, err := vc.finder.VirtualAppList(ctx, "*")
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve vApps with InventoryLists: %w", err)
+	}
+
+	return vApps, nil
+}
+
+// PerfMetricsQueryResult contains performance metric related data
+type PerfMetricsQueryResult struct {
+	// Contains performance metrics keyed by MoRef string
 	resultsByRef map[string]*performance.EntityMetric
 }
 
-func (vc *vcenterClient) perfMetricsQuery(
+// PerfMetricsQuery returns the requested performance metrics for the requested resources
+// over a given sample interval and sample count
+func (vc *vcenterClient) PerfMetricsQuery(
 	ctx context.Context,
 	spec vt.PerfQuerySpec,
 	names []string,
 	objs []vt.ManagedObjectReference,
-) (*perfMetricsQueryResult, error) {
+) (*PerfMetricsQueryResult, error) {
 	if vc.pm == nil {
-		return &perfMetricsQueryResult{}, nil
+		return &PerfMetricsQueryResult{}, nil
 	}
 	vc.pm.Sort = true
 	sample, err := vc.pm.SampleByName(ctx, spec, names, objs)
@@ -264,17 +267,12 @@ func (vc *vcenterClient) perfMetricsQuery(
 	if err != nil {
 		return nil, err
 	}
-	counterInfoByName, err := vc.pm.CounterInfoByName(ctx)
-	if err != nil {
-		return nil, err
-	}
 
 	resultsByRef := map[string]*performance.EntityMetric{}
 	for i := range result {
 		resultsByRef[result[i].Entity.Value] = &result[i]
 	}
-	return &perfMetricsQueryResult{
-		counters:     counterInfoByName,
+	return &PerfMetricsQueryResult{
 		resultsByRef: resultsByRef,
 	}, nil
 }

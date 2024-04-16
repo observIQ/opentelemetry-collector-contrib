@@ -11,17 +11,20 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver/internal/metadata"
 )
 
+// createDatastoreResourceBuilder returns a ResourceBuilder with
+// attributes set for a vSphere Datastore
 func (v *vcenterMetricScraper) createDatastoreResourceBuilder(
 	dc *mo.Datacenter,
 	ds *mo.Datastore,
-	crs []*mo.ComputeResource,
+	computes []*mo.ComputeResource,
 ) *metadata.ResourceBuilder {
 	rb := v.mb.NewResourceBuilder()
 	rb.SetVcenterDatacenterName(dc.Name)
 	rb.SetVcenterDatastoreName(ds.Name)
 
+	// Get list of associated cluster names
 	cNames := []any{}
-	for _, cr := range crs {
+	for _, cr := range computes {
 		if cr.Reference().Type == "ClusterComputeResource" {
 			cNames = append(cNames, cr.Name)
 		}
@@ -31,6 +34,8 @@ func (v *vcenterMetricScraper) createDatastoreResourceBuilder(
 	return rb
 }
 
+// createClusterResourceBuilder returns a ResourceBuilder with
+// attributes set for a vSphere Cluster
 func (v *vcenterMetricScraper) createClusterResourceBuilder(
 	dc *mo.Datacenter,
 	cr *mo.ComputeResource,
@@ -42,21 +47,8 @@ func (v *vcenterMetricScraper) createClusterResourceBuilder(
 	return rb
 }
 
-func (v *vcenterMetricScraper) createHostResourceBuilder(
-	dc *mo.Datacenter,
-	cr *mo.ComputeResource,
-	hs *mo.HostSystem,
-) *metadata.ResourceBuilder {
-	rb := v.mb.NewResourceBuilder()
-	rb.SetVcenterDatacenterName(dc.Name)
-	if cr.Reference().Type == "ClusterComputeResource" {
-		rb.SetVcenterClusterName(cr.Name)
-	}
-	rb.SetVcenterHostName(hs.Name)
-
-	return rb
-}
-
+// createResourcePoolResourceBuilder returns a ResourceBuilder with
+// attributes set for a vSphere Resource Pool
 func (v *vcenterMetricScraper) createResourcePoolResourceBuilder(
 	dc *mo.Datacenter,
 	cr *mo.ComputeResource,
@@ -78,6 +70,25 @@ func (v *vcenterMetricScraper) createResourcePoolResourceBuilder(
 	return rb, nil
 }
 
+// createHostResourceBuilder returns a ResourceBuilder with
+// attributes set for a vSphere Host
+func (v *vcenterMetricScraper) createHostResourceBuilder(
+	dc *mo.Datacenter,
+	cr *mo.ComputeResource,
+	hs *mo.HostSystem,
+) *metadata.ResourceBuilder {
+	rb := v.mb.NewResourceBuilder()
+	rb.SetVcenterDatacenterName(dc.Name)
+	if cr.Reference().Type == "ClusterComputeResource" {
+		rb.SetVcenterClusterName(cr.Name)
+	}
+	rb.SetVcenterHostName(hs.Name)
+
+	return rb
+}
+
+// createVMResourceBuilder returns a ResourceBuilder with
+// attributes set for a vSphere Virtual Machine
 func (v *vcenterMetricScraper) createVMResourceBuilder(
 	dc *mo.Datacenter,
 	cr *mo.ComputeResource,

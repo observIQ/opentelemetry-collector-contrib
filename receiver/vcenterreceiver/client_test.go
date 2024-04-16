@@ -135,26 +135,26 @@ func TestPerfMetricsQuery(t *testing.T) {
 		require.NoError(t, err)
 
 		spec := types.PerfQuerySpec{Format: string(types.PerfFormatNormal), IntervalId: int32(20)}
-		metrics, err := client.perfMetricsQuery(ctx, spec, hostPerfMetricList, []types.ManagedObjectReference{hs.Reference()})
+		metrics, err := client.PerfMetricsQuery(ctx, spec, hostPerfMetricList, []types.ManagedObjectReference{hs.Reference()})
 		require.NoError(t, err)
 		require.NotEmpty(t, metrics.resultsByRef, 0)
 	}, esx)
 }
 
-func TestAllResourcePoolWithInventoryLists(t *testing.T) {
+func TestResourcePoolInventoryListObjects(t *testing.T) {
 	simulator.Test(func(ctx context.Context, c *vim25.Client) {
 		finder := find.NewFinder(c)
 		client := vcenterClient{
 			vimDriver: c,
 			finder:    finder,
 		}
-		rps, err := client.AllResourcePoolWithInventoryLists(ctx)
+		rps, err := client.ResourcePoolInventoryListObjects(ctx)
 		require.NoError(t, err)
 		require.NotEmpty(t, rps, 0)
 	})
 }
 
-func TestAllVAppWithInventoryLists(t *testing.T) {
+func TestVAppInventoryListObjects(t *testing.T) {
 	// Currently skipping as the Simulator has no vApps by default and setting
 	// vApps appears to be broken
 	t.Skip()
@@ -166,7 +166,7 @@ func TestAllVAppWithInventoryLists(t *testing.T) {
 			vimDriver: c,
 			finder:    finder,
 		}
-		vApps, err := client.AllVAppWithInventoryLists(ctx)
+		vApps, err := client.VAppInventoryListObjects(ctx)
 		require.NoError(t, err)
 		require.NotEmpty(t, vApps, 0)
 	}, vpx)
