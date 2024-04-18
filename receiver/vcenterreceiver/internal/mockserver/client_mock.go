@@ -114,10 +114,20 @@ func routeRetreiveProperties(t *testing.T, body map[string]any) ([]byte, error) 
 
 	switch {
 	case content == "group-d1" && contentType == "Folder":
+		if propSetArray {
+			arr := specSet["propSet"].([]any)
+			for _, i := range arr {
+				m, ok := i.(map[string]any)
+				require.True(t, ok)
+				if m["pathSet"] == "parentVApp" && m["type"] == "VirtualMachine" {
+					return loadResponse("datacenter-folder.xml")
+				}
+			}
+		}
 		return loadResponse("datacenter.xml")
 
 	case content == "datacenter-3" && contentType == "Datacenter":
-		return loadResponse("datacenter-properties.xml")
+		return loadResponse("datacenter-child-properties.xml")
 
 	case content == "domain-c8" && contentType == "ClusterComputeResource":
 		if propSetArray {
@@ -126,18 +136,9 @@ func routeRetreiveProperties(t *testing.T, body map[string]any) ([]byte, error) 
 				spec := prop.(map[string]any)
 				specType := spec["type"].(string)
 				if specType == "ResourcePool" {
-					return loadResponse("resource-pool.xml")
+					return loadResponse("cluster-children.xml")
 				}
 			}
-		}
-		path := propSet["pathSet"].(string)
-		switch path {
-		case "datastore":
-			return loadResponse("cluster-datastore.xml")
-		case "summary":
-			return loadResponse("cluster-summary.xml")
-		case "host":
-			return loadResponse("host-list.xml")
 		}
 
 	case content == "PerfMgr" && contentType == "PerformanceManager":
@@ -150,86 +151,62 @@ func routeRetreiveProperties(t *testing.T, body map[string]any) ([]byte, error) 
 				m, ok := i.(map[string]any)
 				require.True(t, ok)
 				if m["type"] == "ClusterComputeResource" {
-					return loadResponse("host-cluster.xml")
+					return loadResponse("host-folder-clusters.xml")
 				}
 			}
 		}
-		return loadResponse("host-parent.xml")
-
-	case content == "datastore-1003" && contentType == "Datastore":
-		if objectSetArray {
-			return loadResponse("datastore-list.xml")
-		}
-		return loadResponse("datastore-summary.xml")
-
-	case contentType == "HostSystem":
-		if ps, ok := propSet["pathSet"].([]any); ok {
-			for _, v := range ps {
-				if v == "summary.hardware" || v == "summary.hardware.cpuMhz" {
-					return loadResponse("host-properties.xml")
-				}
-			}
-		} else {
-			ps, ok := propSet["pathSet"].(string)
-			require.True(t, ok)
-			if ps == "name" {
-				return loadResponse("host-names.xml")
-			}
-			if ps == "summary.hardware" {
-				return loadResponse("host-properties.xml")
-			}
-
-		}
+		return loadResponse("host-folder-parents.xml")
 
 	case content == "group-v4" && contentType == "Folder":
 		if propSetArray {
-			return loadResponse("vm-group.xml")
+			arr := specSet["propSet"].([]any)
+			for _, i := range arr {
+				m, ok := i.(map[string]any)
+				require.True(t, ok)
+				if m["pathSet"] == "parentVApp" && m["type"] == "VirtualMachine" {
+					return loadResponse("vm-folder-parents.xml")
+				}
+			}
+			return loadResponse("vm-folder-children.xml")
 		}
-		if propSet == nil {
-			return loadResponse("vm-folder.xml")
-		}
-		return loadResponse("vm-folder-parent.xml")
 
-	case content == "vm-1040" && contentType == "VirtualMachine":
-		if propSet["pathSet"] == "summary.runtime.host" {
-			return loadResponse("vm-host.xml")
+	case contentType == "ContainerView":
+		if propSet["type"] == "Datacenter" {
+			return loadResponse("datacenter.xml")
 		}
-		return loadResponse("vm-properties.xml")
-
-	case contentType == "ContainerView" && propSet["type"] == "VirtualMachine":
-		return loadResponse("vm-default-properties.xml")
+		if propSet["type"] == "Datastore" {
+			return loadResponse("datastore-default-properties.xml")
+		}
+		if propSet["type"] == "ComputeResource" {
+			return loadResponse("compute-default-properties.xml")
+		}
+		if propSet["type"] == "HostSystem" {
+			return loadResponse("host-default-properties.xml")
+		}
+		if propSet["type"] == "ResourcePool" {
+			return loadResponse("resource-pool-default-properties.xml")
+		}
+		if propSet["type"] == "VirtualMachine" {
+			return loadResponse("vm-default-properties.xml")
+		}
 
 	case (content == "group-v1034" || content == "group-v1001") && contentType == "Folder":
 		return loadResponse("vm-empty-folder.xml")
 
-	case contentType == "ResourcePool":
-		if ps, ok := propSet["pathSet"].([]any); ok {
-			for _, prop := range ps {
-				if prop == "summary" {
-					return loadResponse("resource-pool-summary.xml")
-				}
-			}
-		}
-
-		if ps, ok := propSet["pathSet"].(string); ok {
-			if ps == "owner" {
-				return loadResponse("resource-pool-single.xml")
-			}
-		}
-
+	case content == "resgroup-9" && contentType == "ResourcePool":
 		if ss, ok := objectSet["selectSet"].(map[string]any); ok && ss["path"] == "resourcePool" {
-			return loadResponse("resource-pool-group.xml")
+			return loadResponse("resource-pool-children.xml")
 		}
 
-	case objectSetArray:
-		objectArray := specSet["objectSet"].([]any)
-		for _, i := range objectArray {
-			m, ok := i.(map[string]any)
-			require.True(t, ok)
-			mObj := m["obj"].(map[string](any))
-			typeString := mObj["-type"]
-			if typeString == "HostSystem" {
-				return loadResponse("host-names.xml")
+	case content == "resgroup-v10" && contentType == "VirtualApp":
+		if propSetArray {
+			arr := specSet["propSet"].([]any)
+			for _, propSetRaw := range arr {
+				propSet, ok := propSetRaw.(map[string]any)
+				require.True(t, ok)
+				if propSet["type"] == "VirtualMachine" {
+					return loadResponse("virtual-app-children.xml")
+				}
 			}
 		}
 	}

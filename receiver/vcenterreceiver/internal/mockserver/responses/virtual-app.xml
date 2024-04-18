@@ -3,12 +3,10 @@
     <soapenv:Body>
         <RetrievePropertiesResponse xmlns="urn:vim25">
             <returnval>
-                <obj type="ClusterComputeResource">domain-c8</obj>
+                <obj type="VirtualApp">resgroup-v10</obj>
                 <propSet>
-                    <name>datastore</name>
-                    <val xsi:type="ArrayOfManagedObjectReference">
-                        <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-1003</ManagedObjectReference>
-                    </val>
+                    <name>name</name>
+                    <val xsi:type="xsd:string">v-app-1</val>
                 </propSet>
             </returnval>
         </RetrievePropertiesResponse>

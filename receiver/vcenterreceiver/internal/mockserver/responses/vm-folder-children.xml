@@ -3,6 +3,13 @@
     <soapenv:Body>
         <RetrievePropertiesResponse xmlns="urn:vim25">
             <returnval>
+                <obj type="VirtualApp">resgroup-v10</obj>
+                <propSet>
+                    <name>name</name>
+                    <val xsi:type="xsd:string">v-app-1</val>
+                </propSet>
+            </returnval>
+            <returnval>
                 <obj type="VirtualMachine">vm-6005</obj>
                 <propSet>
                     <name>name</name>
@@ -10,10 +17,10 @@
                 </propSet>
             </returnval>
             <returnval>
-                <obj type="VirtualMachine">vm-6004</obj>
+                <obj type="VirtualMachine">vm-1040</obj>
                 <propSet>
                     <name>name</name>
-                    <val xsi:type="xsd:string">debian</val>
+                    <val xsi:type="xsd:string">CentOS 7</val>
                 </propSet>
             </returnval>
             <returnval>
@@ -44,21 +51,6 @@
                 <propSet>
                     <name>name</name>
                     <val xsi:type="xsd:string">Discovered virtual machine</val>
-                </propSet>
-            </returnval>
-            <returnval>
-                <obj type="Folder">group-v1022</obj>
-                <propSet>
-                    <name>childType</name>
-                    <val xsi:type="ArrayOfString">
-                        <string xsi:type="xsd:string">Folder</string>
-                        <string xsi:type="xsd:string">VirtualMachine</string>
-                        <string xsi:type="xsd:string">VirtualApp</string>
-                    </val>
-                </propSet>
-                <propSet>
-                    <name>name</name>
-                    <val xsi:type="xsd:string">Workload VMs</val>
                 </propSet>
             </returnval>
         </RetrievePropertiesResponse>

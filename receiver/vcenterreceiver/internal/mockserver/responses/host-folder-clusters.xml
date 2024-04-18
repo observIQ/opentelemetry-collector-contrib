@@ -9,7 +9,7 @@
                     <val xsi:type="xsd:string">Cluster</val>
                 </propSet>
                 <propSet>
-                    <name>resourcePool</name>
+                    <name>Resources</name>
                     <val type="ResourcePool" xsi:type="ManagedObjectReference">resgroup-9</val>
                 </propSet>
             </returnval>

@@ -3,10 +3,10 @@
     <soapenv:Body>
         <RetrievePropertiesResponse xmlns="urn:vim25">
             <returnval>
-                <obj type="VirtualMachine">vm-1040</obj>
+                <obj type="VirtualApp">resgroup-v10</obj>
                 <propSet>
                     <name>name</name>
-                    <val xsi:type="xsd:string">CentOS 7</val>
+                    <val xsi:type="xsd:string">v-app-1</val>
                 </propSet>
             </returnval>
         </RetrievePropertiesResponse>

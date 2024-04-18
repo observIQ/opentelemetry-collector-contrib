@@ -5,6 +5,22 @@
             <returnval>
                 <obj type="ClusterComputeResource">domain-c8</obj>
                 <propSet>
+                    <name>name</name>
+                    <val xsi:type="xsd:string">Cluster</val>
+                </propSet>
+                <propSet>
+                    <name>datastore</name>
+                    <val xsi:type="ArrayOfManagedObjectReference">
+                        <ManagedObjectReference type="Datastore" xsi:type="ManagedObjectReference">datastore-1003</ManagedObjectReference>
+                    </val>
+                </propSet>
+                <propSet>
+                    <name>host</name>
+                    <val xsi:type="ArrayOfManagedObjectReference">
+                        <ManagedObjectReference type="HostSystem" xsi:type="ManagedObjectReference">host-1002</ManagedObjectReference>
+                    </val>
+                </propSet>
+                <propSet>
                     <name>summary</name>
                     <val xsi:type="ClusterComputeResourceSummary">
                         <totalCpu>280044</totalCpu>
