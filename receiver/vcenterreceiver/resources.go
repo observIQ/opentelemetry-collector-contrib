@@ -61,7 +61,7 @@ func (v *vcenterMetricScraper) createResourcePoolResourceBuilder(
 	}
 	rb.SetVcenterResourcePoolName(rp.Name)
 
-	iPath := v.rPoolIPathsByRef[rp.Reference().Value]
+	iPath := v.scrapeData.rPoolIPathsByRef[rp.Reference().Value]
 	if iPath == nil {
 		return nil, fmt.Errorf("no inventory path found for collected ResourcePool: %s", rp.Name)
 	}
@@ -113,14 +113,14 @@ func (v *vcenterMetricScraper) createVMResourceBuilder(
 
 	if rp.Reference().Type == "VirtualApp" {
 		rb.SetVcenterVirtualAppName(rp.Name)
-		iPath := v.vAppIPathsByRef[rp.Reference().Value]
+		iPath := v.scrapeData.vAppIPathsByRef[rp.Reference().Value]
 		if iPath == nil {
 			return nil, fmt.Errorf("no inventory path found for VM [%s]'s collected vApp: %s", vm.Name, rp.Name)
 		}
 		rb.SetVcenterVirtualAppInventoryPath(*iPath)
 	} else {
 		rb.SetVcenterResourcePoolName(rp.Name)
-		iPath := v.rPoolIPathsByRef[rp.Reference().Value]
+		iPath := v.scrapeData.rPoolIPathsByRef[rp.Reference().Value]
 		if iPath == nil {
 			return nil, fmt.Errorf("no inventory path found for VM [%s]'s collected ResourcePool: %s", vm.Name, rp.Name)
 		}

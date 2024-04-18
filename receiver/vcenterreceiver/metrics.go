@@ -28,7 +28,7 @@ func (v *vcenterMetricScraper) recordDatastoreStats(
 func (v *vcenterMetricScraper) recordClusterStats(
 	ts pcommon.Timestamp,
 	cr *mo.ComputeResource,
-	vmStateInfo *clusterVMStates,
+	vmStateInfo *vmStateInfo,
 ) {
 	if vmStateInfo != nil {
 		poweredOnVMs := vmStateInfo.poweredOn
