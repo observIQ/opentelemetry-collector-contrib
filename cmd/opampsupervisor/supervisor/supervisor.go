@@ -140,6 +140,13 @@ func NewSupervisor(logger *zap.Logger, configFile string) (*Supervisor, error) {
 		connectedToOpAMPServer:       make(chan struct{}),
 		effectiveConfig:              &atomic.Value{},
 	}
+
+	var err error
+	s.opampServerPort, err = s.findRandomPort()
+	if err != nil {
+		return nil, err
+	}
+
 	if err := s.createTemplates(); err != nil {
 		return nil, err
 	}
@@ -246,11 +253,6 @@ func (s *Supervisor) loadConfig(configFile string) error {
 // shuts down the Collector. This only needs to happen
 // once per Collector binary.
 func (s *Supervisor) getBootstrapInfo() (err error) {
-	s.opampServerPort, err = s.findRandomPort()
-	if err != nil {
-		return err
-	}
-
 	var k = koanf.New(".")
 
 	var cfg bytes.Buffer
@@ -478,11 +480,6 @@ func (s *Supervisor) startOpAMPServer() error {
 	s.opampServer = server.New(newLoggerFromZap(s.logger))
 
 	var err error
-	s.opampServerPort, err = s.findRandomPort()
-	if err != nil {
-		return err
-	}
-
 	err = s.opampServer.Start(newServerSettings(flattenedSettings{
 		endpoint:         fmt.Sprintf("localhost:%d", s.opampServerPort),
 		onConnectingFunc: func(_ *http.Request) {},
@@ -963,10 +960,6 @@ func (s *Supervisor) runAgentProcess() {
 			// the agent process exit is expected for restart command and will not attempt to restart
 			if s.agentRestarting.Load() {
 				continue
-			}
-
-			if s.shuttingDown {
-				return
 			}
 
 			s.logger.Debug("Agent process exited unexpectedly. Will restart in a bit...", zap.Int("pid", s.commander.Pid()), zap.Int("exit_code", s.commander.ExitCode()))
