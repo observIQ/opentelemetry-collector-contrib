@@ -23,7 +23,6 @@ import (
 	semconv "go.opentelemetry.io/collector/semconv/v1.18.0"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
-	"gopkg.in/yaml.v3"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/opampcustommessages"
 )
@@ -269,7 +268,7 @@ func (o *opampAgent) composeEffectiveConfig() *protobufs.EffectiveConfig {
 		return nil
 	}
 
-	conf, err := yaml.Marshal(o.effectiveConfig.ToStringMap())
+	conf, err := bestEffortMarshal(o.effectiveConfig.ToStringMap())
 	if err != nil {
 		o.logger.Error("cannot unmarshal effectiveConfig", zap.Any("conf", o.effectiveConfig), zap.Error(err))
 		return nil
