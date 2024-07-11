@@ -61,7 +61,6 @@ var (
 
 const (
 	persistentStateFilePath = "persistent_state.yaml"
-	agentConfigFilePath     = "effective.yaml"
 )
 
 const maxBufferedCustomMessages = 10
@@ -178,7 +177,7 @@ func NewSupervisor(logger *zap.Logger, configFile string) (*Supervisor, error) {
 		return nil, fmt.Errorf("could not get bootstrap info from the Collector: %w", err)
 	}
 
-	healthCheckPort, err := s.findRandomPort()
+	healthCheckPort, err := findRandomPort()
 
 	if err != nil {
 		return nil, fmt.Errorf("could not find port for health check: %w", err)
@@ -275,7 +274,7 @@ func (s *Supervisor) loadConfig(configFile string) error {
 // shuts down the Collector. This only needs to happen
 // once per Collector binary.
 func (s *Supervisor) getBootstrapInfo() (err error) {
-	s.opampServerPort, err = s.findRandomPort()
+	s.opampServerPort, err = findRandomPort()
 	if err != nil {
 		return err
 	}
@@ -462,7 +461,7 @@ func (s *Supervisor) startOpAMPServer() error {
 	s.opampServer = server.New(newLoggerFromZap(s.logger))
 
 	var err error
-	s.opampServerPort, err = s.findRandomPort()
+	s.opampServerPort, err = findRandomPort()
 	if err != nil {
 		return err
 	}
@@ -842,7 +841,7 @@ func (s *Supervisor) setupOwnMetrics(_ context.Context, settings *protobufs.Tele
 	} else {
 		s.logger.Debug("Enabling own metrics pipeline in the config")
 
-		port, err := s.findRandomPort()
+		port, err := findRandomPort()
 
 		if err != nil {
 			s.logger.Error("Could not setup own metrics", zap.Error(err))
@@ -1306,24 +1305,6 @@ func (s *Supervisor) persistentStateFile() string {
 	return filepath.Join(s.config.Storage.Directory, persistentStateFilePath)
 }
 
-func (s *Supervisor) findRandomPort() (int, error) {
-	l, err := net.Listen("tcp", "localhost:0")
-
-	if err != nil {
-		return 0, err
-	}
-
-	port := l.Addr().(*net.TCPAddr).Port
-
-	err = l.Close()
-
-	if err != nil {
-		return 0, err
-	}
-
-	return port, nil
-}
-
 // The default koanf behavior is to override lists in the config.
 // Instead, we provide this function, which merges the source and destination config's
 // extension lists by concatenating the two.
@@ -1343,4 +1324,22 @@ func configMergeFunc(src, dest map[string]any) error {
 	}
 
 	return nil
+}
+
+func findRandomPort() (int, error) {
+	l, err := net.Listen("tcp", "localhost:0")
+
+	if err != nil {
+		return 0, err
+	}
+
+	port := l.Addr().(*net.TCPAddr).Port
+
+	err = l.Close()
+
+	if err != nil {
+		return 0, err
+	}
+
+	return port, nil
 }
