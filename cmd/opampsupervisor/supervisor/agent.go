@@ -22,11 +22,11 @@ type agent interface {
 	Start() error
 	// Stop stops the agent
 	Stop() error
-	// AgentDescription returns an AgentDescription that describes the current agent
-	AgentDescription() *protobufs.AgentDescription
+	// AgentDescription returns an AgentDescription for this agent
+	AgentDescription() (*protobufs.AgentDescription, error)
 	// Reconfigure reconfigures the agent with the new remote config
 	Reconfigure(*protobufs.AgentRemoteConfig) error
-	// Restart restarts the agent process
+	// Restart restarts the agent
 	Restart() error
 }
 
@@ -62,7 +62,7 @@ func newOpentelemetryCollectorAgent(
 		remoteConfig:          initialConfig,
 		currentRenderedConfig: renderedConfig,
 		wg:                    &sync.WaitGroup{},
-	}
+	}, nil
 }
 
 func (a opentelemetryCollectorAgent) Start() error {

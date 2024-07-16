@@ -42,25 +42,10 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/cmd/opampsupervisor/supervisor/healthchecker"
 )
 
-var (
-	//go:embed templates/bootstrap_pipeline.yaml
-	bootstrapConfTpl string
-
-	//go:embed templates/extraconfig.yaml
-	extraConfigTpl string
-
-	//go:embed templates/opampextension.yaml
-	opampextensionTpl string
-
-	//go:embed templates/owntelemetry.yaml
-	ownTelemetryTpl string
-
+const (
 	lastRecvRemoteConfigFile     = "last_recv_remote_config.dat"
 	lastRecvOwnMetricsConfigFile = "last_recv_own_metrics_config.dat"
-)
-
-const (
-	persistentStateFilePath = "persistent_state.yaml"
+	persistentStateFilePath      = "persistent_state.yaml"
 )
 
 const maxBufferedCustomMessages = 10
