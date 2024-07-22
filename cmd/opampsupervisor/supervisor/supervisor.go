@@ -16,7 +16,6 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
-	"text/template"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -43,18 +42,6 @@ import (
 )
 
 var (
-	//go:embed templates/bootstrap_pipeline.yaml
-	bootstrapConfTpl string
-
-	//go:embed templates/extraconfig.yaml
-	extraConfigTpl string
-
-	//go:embed templates/opampextension.yaml
-	opampextensionTpl string
-
-	//go:embed templates/owntelemetry.yaml
-	ownTelemetryTpl string
-
 	lastRecvRemoteConfigFile     = "last_recv_remote_config.dat"
 	lastRecvOwnMetricsConfigFile = "last_recv_own_metrics_config.dat"
 )
@@ -69,9 +56,9 @@ const maxBufferedCustomMessages = 10
 // Supervisor implements supervising of OpenTelemetry Collector and uses OpAMPClient
 // to work with an OpAMP Server.
 type Supervisor struct {
-	logger      *zap.Logger
-	pidProvider pidProvider
+	logger *zap.Logger
 
+	renderer configRenderer
 	// Commander that starts/stops the Agent process.
 	commander *commander.Commander
 
@@ -88,11 +75,6 @@ type Supervisor struct {
 
 	// Supervisor's persistent state
 	persistentState *persistentState
-
-	bootstrapTemplate      *template.Template
-	opampextensionTemplate *template.Template
-	extraConfigTemplate    *template.Template
-	ownTelemetryTemplate   *template.Template
 
 	agentConn *atomic.Value
 
@@ -141,7 +123,6 @@ type Supervisor struct {
 func NewSupervisor(logger *zap.Logger, configFile string) (*Supervisor, error) {
 	s := &Supervisor{
 		logger:                       logger,
-		pidProvider:                  defaultPIDProvider{},
 		hasNewConfig:                 make(chan struct{}, 1),
 		agentConfigOwnMetricsSection: &atomic.Value{},
 		mergedConfig:                 &atomic.Value{},
@@ -151,9 +132,6 @@ func NewSupervisor(logger *zap.Logger, configFile string) (*Supervisor, error) {
 		doneChan:                     make(chan struct{}),
 		customMessageToServer:        make(chan *protobufs.CustomMessage, maxBufferedCustomMessages),
 		agentConn:                    &atomic.Value{},
-	}
-	if err := s.createTemplates(); err != nil {
-		return nil, err
 	}
 
 	if err := s.loadConfig(configFile); err != nil {
@@ -174,17 +152,23 @@ func NewSupervisor(logger *zap.Logger, configFile string) (*Supervisor, error) {
 		return nil, err
 	}
 
-	if err = s.getBootstrapInfo(); err != nil {
-		return nil, fmt.Errorf("could not get bootstrap info from the Collector: %w", err)
+	s.opampServerPort, err = s.findRandomPort()
+	if err != nil {
+		return nil, fmt.Errorf("could not find port for opamp server: %w", err)
 	}
 
 	healthCheckPort, err := s.findRandomPort()
-
 	if err != nil {
 		return nil, fmt.Errorf("could not find port for health check: %w", err)
 	}
 
 	s.agentHealthCheckEndpoint = fmt.Sprintf("localhost:%d", healthCheckPort)
+
+	s.renderer = newConfigRenderer(s.agentHealthCheckEndpoint, s.opampServerPort, s.config.Agent.OrphanDetectionInterval, defaultPIDProvider{})
+
+	if err = s.getBootstrapInfo(); err != nil {
+		return nil, fmt.Errorf("could not get bootstrap info from the Collector: %w", err)
+	}
 
 	logger.Debug("Supervisor starting",
 		zap.String("id", s.persistentState.InstanceID.String()))
@@ -228,25 +212,6 @@ func NewSupervisor(logger *zap.Logger, configFile string) (*Supervisor, error) {
 	return s, nil
 }
 
-func (s *Supervisor) createTemplates() error {
-	var err error
-
-	if s.bootstrapTemplate, err = template.New("bootstrap").Parse(bootstrapConfTpl); err != nil {
-		return err
-	}
-	if s.extraConfigTemplate, err = template.New("extraconfig").Parse(extraConfigTpl); err != nil {
-		return err
-	}
-	if s.opampextensionTemplate, err = template.New("opampextension").Parse(opampextensionTpl); err != nil {
-		return err
-	}
-	if s.ownTelemetryTemplate, err = template.New("owntelemetry").Parse(ownTelemetryTpl); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (s *Supervisor) loadConfig(configFile string) error {
 	if configFile == "" {
 		return errors.New("path to config file cannot be empty")
@@ -275,11 +240,8 @@ func (s *Supervisor) loadConfig(configFile string) error {
 // shuts down the Collector. This only needs to happen
 // once per Collector binary.
 func (s *Supervisor) getBootstrapInfo() (err error) {
-	s.opampServerPort, err = s.findRandomPort()
-	if err != nil {
-		return err
-	}
 
+	// TODO: Render bootstrap config
 	bootstrapConfig, err := s.composeBootstrapConfig()
 	if err != nil {
 		return err
@@ -714,58 +676,6 @@ func (s *Supervisor) composeBootstrapConfig() ([]byte, error) {
 	return k.Marshal(yaml.Parser())
 }
 
-func (s *Supervisor) composeExtraLocalConfig() []byte {
-	var cfg bytes.Buffer
-	resourceAttrs := map[string]string{}
-	ad := s.agentDescription.Load().(*protobufs.AgentDescription)
-	for _, attr := range ad.IdentifyingAttributes {
-		resourceAttrs[attr.Key] = attr.Value.GetStringValue()
-	}
-	for _, attr := range ad.NonIdentifyingAttributes {
-		resourceAttrs[attr.Key] = attr.Value.GetStringValue()
-	}
-	tplVars := map[string]any{
-		"Healthcheck":        s.agentHealthCheckEndpoint,
-		"ResourceAttributes": resourceAttrs,
-		"SupervisorPort":     s.opampServerPort,
-	}
-	err := s.extraConfigTemplate.Execute(
-		&cfg,
-		tplVars,
-	)
-	if err != nil {
-		s.logger.Error("Could not compose local config", zap.Error(err))
-		return nil
-	}
-
-	return cfg.Bytes()
-}
-
-func (s *Supervisor) composeOpAMPExtensionConfig() []byte {
-	orphanPollInterval := 5 * time.Second
-	if s.config.Agent.OrphanDetectionInterval > 0 {
-		orphanPollInterval = s.config.Agent.OrphanDetectionInterval
-	}
-
-	var cfg bytes.Buffer
-	tplVars := map[string]any{
-		"InstanceUid":      s.persistentState.InstanceID.String(),
-		"SupervisorPort":   s.opampServerPort,
-		"PID":              s.pidProvider.PID(),
-		"PPIDPollInterval": orphanPollInterval,
-	}
-	err := s.opampextensionTemplate.Execute(
-		&cfg,
-		tplVars,
-	)
-	if err != nil {
-		s.logger.Error("Could not compose local config", zap.Error(err))
-		return nil
-	}
-
-	return cfg.Bytes()
-}
-
 func (s *Supervisor) loadInitialMergedConfig() error {
 	var lastRecvRemoteConfig, lastRecvOwnMetricsConfig []byte
 	var err error
@@ -879,64 +789,12 @@ func (s *Supervisor) setupOwnMetrics(_ context.Context, settings *protobufs.Tele
 // 2) the own metrics config section
 // 3) the local override config that is hard-coded in the Supervisor.
 func (s *Supervisor) composeMergedConfig(config *protobufs.AgentRemoteConfig) (configChanged bool, err error) {
-	var k = koanf.New("::")
-
-	if c := config.GetConfig(); c != nil {
-		// Sort to make sure the order of merging is stable.
-		var names []string
-		for name := range c.ConfigMap {
-			if name == "" {
-				// skip instance config
-				continue
-			}
-			names = append(names, name)
-		}
-
-		sort.Strings(names)
-
-		// Append instance config as the last item.
-		names = append(names, "")
-
-		// Merge received configs.
-		for _, name := range names {
-			item := c.ConfigMap[name]
-			if item == nil {
-				continue
-			}
-			var k2 = koanf.New("::")
-			err = k2.Load(rawbytes.Provider(item.Body), yaml.Parser())
-			if err != nil {
-				return false, fmt.Errorf("cannot parse config named %s: %w", name, err)
-			}
-			err = k.Merge(k2)
-			if err != nil {
-				return false, fmt.Errorf("cannot merge config named %s: %w", name, err)
-			}
-		}
-	}
-
-	// Merge own metrics config.
-	ownMetricsCfg, ok := s.agentConfigOwnMetricsSection.Load().(string)
-	if ok {
-		if err = k.Load(rawbytes.Provider([]byte(ownMetricsCfg)), yaml.Parser(), koanf.WithMergeFunc(configMergeFunc)); err != nil {
-			return false, err
-		}
-	}
-
-	// Merge local config last since it has the highest precedence.
-	if err = k.Load(rawbytes.Provider(s.composeExtraLocalConfig()), yaml.Parser(), koanf.WithMergeFunc(configMergeFunc)); err != nil {
-		return false, err
-	}
-
-	if err = k.Load(rawbytes.Provider(s.composeOpAMPExtensionConfig()), yaml.Parser(), koanf.WithMergeFunc(configMergeFunc)); err != nil {
-		return false, err
-	}
-
-	// The merged final result is our new merged config.
-	newMergedConfigBytes, err := k.Marshal(yaml.Parser())
-	if err != nil {
-		return false, err
-	}
+	newMergedConfigBytes, err := s.renderer.Render(
+		s.persistentState.InstanceID.String(),
+		config,
+		nil,
+		s.agentDescription.Load().(*protobufs.AgentDescription),
+	)
 
 	// Check if supervisor's merged config is changed.
 	newMergedConfig := string(newMergedConfigBytes)
