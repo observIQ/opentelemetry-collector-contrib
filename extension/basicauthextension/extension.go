@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/collector/client"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension/auth"
+	"go.opentelemetry.io/collector/extension/auth/websocket"
 	creds "google.golang.org/grpc/credentials"
 )
 
@@ -40,6 +41,7 @@ func newClientAuthExtension(cfg *Config) auth.Client {
 	return auth.NewClient(
 		auth.WithClientRoundTripper(ba.roundTripper),
 		auth.WithClientPerRPCCredentials(ba.perRPCCredentials),
+		auth.WithClientWebsocketDialer(ba.websocketDialer),
 	)
 }
 
@@ -229,5 +231,30 @@ func (ba *basicAuth) perRPCCredentials() (creds.PerRPCCredentials, error) {
 		metadata: map[string]string{
 			"authorization": fmt.Sprintf("Basic %s", encoded),
 		},
+	}, nil
+}
+
+type basicAuthWebsocketDialer struct {
+	base     websocket.Dialer
+	authData *ClientAuthSettings
+}
+
+func (b *basicAuthWebsocketDialer) Dial(url string, headers http.Header) (websocket.Conn, http.Response, error) {
+	newHeaders := headers.Clone()
+	encoded := base64.StdEncoding.EncodeToString([]byte(b.authData.Username + ":" + string(b.authData.Password)))
+
+	headers.Set("Authorization", fmt.Sprintf("Basic %s", encoded))
+
+	return b.base.Dial(url, newHeaders)
+}
+
+func (ba *basicAuth) websocketDialer(base websocket.Dialer) (websocket.Dialer, error) {
+	if strings.Contains(ba.clientAuth.Username, ":") {
+		return nil, errInvalidFormat
+	}
+
+	return &basicAuthWebsocketDialer{
+		base:     base,
+		authData: ba.clientAuth,
 	}, nil
 }

@@ -63,3 +63,5 @@ retract (
 	v0.76.1
 	v0.65.0
 )
+
+replace go.opentelemetry.io/collector/extension/auth => ../../../opentelemetry-collector/extension/auth
