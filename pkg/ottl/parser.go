@@ -10,10 +10,7 @@ import (
 
 	"github.com/alecthomas/participle/v2"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/trace/noop"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -240,7 +237,7 @@ type StatementSequence[K any] struct {
 	statements        []*Statement[K]
 	errorMode         ErrorMode
 	telemetrySettings component.TelemetrySettings
-	tracer            trace.Tracer
+	meter             metric.Meter
 }
 
 type StatementSequenceOption[K any] func(*StatementSequence[K])
@@ -260,14 +257,12 @@ func NewStatementSequence[K any](statements []*Statement[K], telemetrySettings c
 		statements:        statements,
 		errorMode:         PropagateError,
 		telemetrySettings: telemetrySettings,
-		tracer:            &noop.Tracer{},
 	}
-	if telemetrySettings.TracerProvider != nil {
-		s.tracer = telemetrySettings.TracerProvider.Tracer("ottl")
-	}
+
 	for _, op := range options {
 		op(&s)
 	}
+
 	return s
 }
 
@@ -276,44 +271,20 @@ func NewStatementSequence[K any](statements []*Statement[K], telemetrySettings c
 // When the ErrorMode of the StatementSequence is `ignore`, errors are logged and execution continues to the next statement.
 // When the ErrorMode of the StatementSequence is `silent`, errors are not logged and execution continues to the next statement.
 func (s *StatementSequence[K]) Execute(ctx context.Context, tCtx K) error {
-	ctx, sequenceSpan := s.tracer.Start(ctx, "ottl/StatementSequenceExecution")
-	defer sequenceSpan.End()
 	s.telemetrySettings.Logger.Debug(
 		"initial TransformContext",
 		zap.Any("TransformContext", tCtx),
-		zap.String(logAttributeTraceID, sequenceSpan.SpanContext().TraceID().String()),
-		zap.String(logAttributeSpanID, sequenceSpan.SpanContext().SpanID().String()),
 	)
 	for _, statement := range s.statements {
-		statementCtx, statementSpan := s.tracer.Start(ctx, "ottl/StatementExecution")
-		statementSpan.SetAttributes(
-			attribute.KeyValue{
-				Key:   "statement",
-				Value: attribute.StringValue(statement.origText),
-			},
-		)
-		_, condition, err := statement.Execute(statementCtx, tCtx)
-		statementSpan.SetAttributes(
-			attribute.KeyValue{
-				Key:   "condition.matched",
-				Value: attribute.BoolValue(condition),
-			},
-		)
+		_, condition, err := statement.Execute(ctx, tCtx)
 		s.telemetrySettings.Logger.Debug(
 			"TransformContext after statement execution",
 			zap.String("statement", statement.origText),
 			zap.Bool("condition matched", condition),
 			zap.Any("TransformContext", tCtx),
-			zap.String(logAttributeTraceID, statementSpan.SpanContext().TraceID().String()),
-			zap.String(logAttributeSpanID, statementSpan.SpanContext().SpanID().String()),
 		)
 		if err != nil {
-			statementSpan.RecordError(err)
-			errMsg := fmt.Sprintf("failed to execute statement '%s': %v", statement.origText, err)
-			statementSpan.SetStatus(codes.Error, errMsg)
 			if s.errorMode == PropagateError {
-				sequenceSpan.SetStatus(codes.Error, errMsg)
-				statementSpan.End()
 				err = fmt.Errorf("failed to execute statement: %v, %w", statement.origText, err)
 				return err
 			}
@@ -322,16 +293,10 @@ func (s *StatementSequence[K]) Execute(ctx context.Context, tCtx K) error {
 					"failed to execute statement",
 					zap.Error(err),
 					zap.String("statement", statement.origText),
-					zap.String(logAttributeTraceID, statementSpan.SpanContext().TraceID().String()),
-					zap.String(logAttributeSpanID, statementSpan.SpanContext().SpanID().String()),
 				)
 			}
-		} else {
-			statementSpan.SetStatus(codes.Ok, "statement executed successfully")
 		}
-		statementSpan.End()
 	}
-	sequenceSpan.SetStatus(codes.Ok, "statement sequence executed successfully")
 	return nil
 }
 
