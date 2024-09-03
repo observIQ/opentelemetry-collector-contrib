@@ -79,6 +79,7 @@ type Capabilities struct {
 	AcceptsRemoteConfig            bool `mapstructure:"accepts_remote_config"`
 	AcceptsRestartCommand          bool `mapstructure:"accepts_restart_command"`
 	AcceptsOpAMPConnectionSettings bool `mapstructure:"accepts_opamp_connection_settings"`
+	AcceptsPackageAvailable        bool `mapstructure:"accepts_package_available"`
 	ReportsEffectiveConfig         bool `mapstructure:"reports_effective_config"`
 	ReportsOwnMetrics              bool `mapstructure:"reports_own_metrics"`
 	ReportsHealth                  bool `mapstructure:"reports_health"`
@@ -114,6 +115,10 @@ func (c Capabilities) SupportedCapabilities() protobufs.AgentCapabilities {
 
 	if c.AcceptsOpAMPConnectionSettings {
 		supportedCapabilities |= protobufs.AgentCapabilities_AgentCapabilities_AcceptsOpAMPConnectionSettings
+	}
+
+	if c.AcceptsPackageAvailable {
+		supportedCapabilities |= protobufs.AgentCapabilities_AgentCapabilities_AcceptsPackages
 	}
 
 	return supportedCapabilities
@@ -156,6 +161,9 @@ type Agent struct {
 	BootstrapTimeout        time.Duration    `mapstructure:"bootstrap_timeout"`
 	HealthCheckPort         int              `mapstructure:"health_check_port"`
 	PassthroughLogs         bool             `mapstructure:"passthrough_logs"`
+	// SigningKeyPaths is a list of paths to cosign signing keys.
+	// These keys will be used to verify agent packages offered by the remote server.
+	SigningKeyPaths []string `mapstructure:"signing_key_paths"`
 }
 
 func (a Agent) Validate() error {
@@ -178,6 +186,13 @@ func (a Agent) Validate() error {
 	_, err := os.Stat(a.Executable)
 	if err != nil {
 		return fmt.Errorf("could not stat agent::executable path: %w", err)
+	}
+
+	for i, p := range a.SigningKeyPaths {
+		_, err := os.Stat(p)
+		if err != nil {
+			return fmt.Errorf("could not stat agent::signing_key_paths[%d] path: %w", i, err)
+		}
 	}
 
 	return nil
@@ -219,6 +234,7 @@ func DefaultSupervisor() Supervisor {
 			AcceptsRemoteConfig:            false,
 			AcceptsRestartCommand:          false,
 			AcceptsOpAMPConnectionSettings: false,
+			AcceptsPackageAvailable:        false,
 			ReportsEffectiveConfig:         true,
 			ReportsOwnMetrics:              true,
 			ReportsHealth:                  true,
