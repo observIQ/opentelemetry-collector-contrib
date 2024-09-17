@@ -402,11 +402,11 @@ func (c *mySQLClient) getReplicaStatusStats() ([]ReplicaStatusStats, error) {
 		return nil, err
 	}
 
+	query := "SHOW REPLICA STATUS"
 	if version < "8.0.22" {
-		return nil, nil
+		query = "SHOW SLAVE STATUS"
 	}
 
-	query := "SHOW REPLICA STATUS"
 	rows, err := c.client.Query(query)
 
 	if err != nil {
@@ -427,17 +427,29 @@ func (c *mySQLClient) getReplicaStatusStats() ([]ReplicaStatusStats, error) {
 			switch strings.ToLower(col) {
 			case "replica_io_state":
 				dest = append(dest, &s.replicaIOState)
+			case "slave_io_state":
+				dest = append(dest, &s.replicaIOState)
 			case "source_host":
+				dest = append(dest, &s.sourceHost)
+			case "master_host":
 				dest = append(dest, &s.sourceHost)
 			case "source_user":
 				dest = append(dest, &s.sourceUser)
+			case "master_user":
+				dest = append(dest, &s.sourceUser)
 			case "source_port":
+				dest = append(dest, &s.sourcePort)
+			case "master_port":
 				dest = append(dest, &s.sourcePort)
 			case "connect_retry":
 				dest = append(dest, &s.connectRetry)
 			case "source_log_file":
 				dest = append(dest, &s.sourceLogFile)
+			case "master_log_file":
+				dest = append(dest, &s.sourceLogFile)
 			case "read_source_log_pos":
+				dest = append(dest, &s.readSourceLogPos)
+			case "read_master_log_pos":
 				dest = append(dest, &s.readSourceLogPos)
 			case "relay_log_file":
 				dest = append(dest, &s.relayLogFile)
@@ -445,9 +457,15 @@ func (c *mySQLClient) getReplicaStatusStats() ([]ReplicaStatusStats, error) {
 				dest = append(dest, &s.relayLogPos)
 			case "relay_source_log_file":
 				dest = append(dest, &s.relaySourceLogFile)
+			case "relay_master_log_file":
+				dest = append(dest, &s.relaySourceLogFile)
 			case "replica_io_running":
 				dest = append(dest, &s.replicaIORunning)
+			case "slave_io_running":
+				dest = append(dest, &s.replicaIORunning)
 			case "replica_sql_running":
+				dest = append(dest, &s.replicaSQLRunning)
+			case "slave_sql_running":
 				dest = append(dest, &s.replicaSQLRunning)
 			case "replicate_do_db":
 				dest = append(dest, &s.replicateDoDB)
@@ -469,6 +487,8 @@ func (c *mySQLClient) getReplicaStatusStats() ([]ReplicaStatusStats, error) {
 				dest = append(dest, &s.skipCounter)
 			case "exec_source_log_pos":
 				dest = append(dest, &s.execSourceLogPos)
+			case "exec_master_log_pos":
+				dest = append(dest, &s.execSourceLogPos)
 			case "relay_log_space":
 				dest = append(dest, &s.relayLogSpace)
 			case "until_condition":
@@ -479,19 +499,35 @@ func (c *mySQLClient) getReplicaStatusStats() ([]ReplicaStatusStats, error) {
 				dest = append(dest, &s.untilLogPos)
 			case "source_ssl_allowed":
 				dest = append(dest, &s.sourceSSLAllowed)
+			case "master_ssl_allowed":
+				dest = append(dest, &s.sourceSSLAllowed)
 			case "source_ssl_ca_file":
+				dest = append(dest, &s.sourceSSLCAFile)
+			case "master_ssl_ca_file":
 				dest = append(dest, &s.sourceSSLCAFile)
 			case "source_ssl_ca_path":
 				dest = append(dest, &s.sourceSSLCAPath)
+			case "master_ssl_ca_path":
+				dest = append(dest, &s.sourceSSLCAPath)
 			case "source_ssl_cert":
+				dest = append(dest, &s.sourceSSLCert)
+			case "master_ssl_cert":
 				dest = append(dest, &s.sourceSSLCert)
 			case "source_ssl_cipher":
 				dest = append(dest, &s.sourceSSLCipher)
+			case "master_ssl_cipher":
+				dest = append(dest, &s.sourceSSLCipher)
 			case "source_ssl_key":
+				dest = append(dest, &s.sourceSSLKey)
+			case "master_ssl_key":
 				dest = append(dest, &s.sourceSSLKey)
 			case "seconds_behind_source":
 				dest = append(dest, &s.secondsBehindSource)
+			case "seconds_behind_master":
+				dest = append(dest, &s.secondsBehindSource)
 			case "source_ssl_verify_server_cert":
+				dest = append(dest, &s.sourceSSLVerifyServerCert)
+			case "master_ssl_verify_server_cert":
 				dest = append(dest, &s.sourceSSLVerifyServerCert)
 			case "last_io_errno":
 				dest = append(dest, &s.lastIOErrno)
@@ -505,9 +541,15 @@ func (c *mySQLClient) getReplicaStatusStats() ([]ReplicaStatusStats, error) {
 				dest = append(dest, &s.replicateIgnoreServerIDs)
 			case "source_server_id":
 				dest = append(dest, &s.sourceServerID)
+			case "master_server_id":
+				dest = append(dest, &s.sourceServerID)
 			case "source_uuid":
 				dest = append(dest, &s.sourceUUID)
+			case "master_uuid":
+				dest = append(dest, &s.sourceUUID)
 			case "source_info_file":
+				dest = append(dest, &s.sourceInfoFile)
+			case "master_info_file":
 				dest = append(dest, &s.sourceInfoFile)
 			case "sql_delay":
 				dest = append(dest, &s.sqlDelay)
@@ -515,9 +557,15 @@ func (c *mySQLClient) getReplicaStatusStats() ([]ReplicaStatusStats, error) {
 				dest = append(dest, &s.sqlRemainingDelay)
 			case "replica_sql_running_state":
 				dest = append(dest, &s.replicaSQLRunningState)
+			case "slave_sql_running_state":
+				dest = append(dest, &s.replicaSQLRunningState)
 			case "source_retry_count":
 				dest = append(dest, &s.sourceRetryCount)
+			case "master_retry_count":
+				dest = append(dest, &s.sourceRetryCount)
 			case "source_bind":
+				dest = append(dest, &s.sourceBind)
+			case "master_bind":
 				dest = append(dest, &s.sourceBind)
 			case "last_io_error_timestamp":
 				dest = append(dest, &s.lastIOErrorTimestamp)
@@ -525,7 +573,11 @@ func (c *mySQLClient) getReplicaStatusStats() ([]ReplicaStatusStats, error) {
 				dest = append(dest, &s.lastSQLErrorTimestamp)
 			case "source_ssl_crl":
 				dest = append(dest, &s.sourceSSLCrl)
+			case "master_ssl_crl":
+				dest = append(dest, &s.sourceSSLCrl)
 			case "source_ssl_crlpath":
+				dest = append(dest, &s.sourceSSLCrlpath)
+			case "master_ssl_crlpath":
 				dest = append(dest, &s.sourceSSLCrlpath)
 			case "retrieved_gtid_set":
 				dest = append(dest, &s.retrievedGtidSet)
@@ -539,9 +591,15 @@ func (c *mySQLClient) getReplicaStatusStats() ([]ReplicaStatusStats, error) {
 				dest = append(dest, &s.channelName)
 			case "source_tls_version":
 				dest = append(dest, &s.sourceTLSVersion)
+			case "master_tls_version":
+				dest = append(dest, &s.sourceTLSVersion)
 			case "source_public_key_path":
 				dest = append(dest, &s.sourcePublicKeyPath)
+			case "master_public_key_path":
+				dest = append(dest, &s.sourcePublicKeyPath)
 			case "get_source_public_key":
+				dest = append(dest, &s.getSourcePublicKey)
+			case "get_master_public_key":
 				dest = append(dest, &s.getSourcePublicKey)
 			case "network_namespace":
 				dest = append(dest, &s.networkNamespace)
