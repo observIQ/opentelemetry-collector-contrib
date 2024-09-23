@@ -33,8 +33,18 @@ func CopyMetricDetails(from, to pmetric.Metric) {
 }
 
 func FilterAttrs(metric pmetric.Metric, filterAttrKeys []string) {
-	if len(filterAttrKeys) == 0 {
+	// filterAttrKeys being nil means the filter is to be skipped.
+	if filterAttrKeys == nil {
 		return
+	}
+	// filterAttrKeys being empty means it is explicitly expected to filter
+	// against an empty label set, which is functionally the same as removing
+	// all attributes.
+	if len(filterAttrKeys) == 0 {
+		RangeDataPointAttributes(metric, func(attrs pcommon.Map) bool {
+			attrs.Clear()
+			return true
+		})
 	}
 	RangeDataPointAttributes(metric, func(attrs pcommon.Map) bool {
 		attrs.RemoveIf(func(k string, _ pcommon.Value) bool {
