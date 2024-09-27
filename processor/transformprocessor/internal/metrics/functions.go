@@ -24,16 +24,9 @@ func DataPointFunctions() map[string]ottl.Factory[ottldatapoint.TransformContext
 	datapointFunctions := ottl.CreateFactoryMap[ottldatapoint.TransformContext](
 		newConvertSummarySumValToSumFactory(),
 		newConvertSummaryCountValToSumFactory(),
+		newConvertDatapointSumToGaugeFactory(),
+		newConvertDatapointGaugeToSumFactory(),
 	)
-
-	if !UseConvertBetweenSumAndGaugeMetricContext.IsEnabled() {
-		for _, f := range []ottl.Factory[ottldatapoint.TransformContext]{
-			newConvertDatapointSumToGaugeFactory(),
-			newConvertDatapointGaugeToSumFactory(),
-		} {
-			datapointFunctions[f.Name()] = f
-		}
-	}
 
 	for k, v := range datapointFunctions {
 		functions[k] = v
@@ -53,16 +46,9 @@ func MetricFunctions() map[string]ottl.Factory[ottlmetric.TransformContext] {
 		newAggregateOnAttributesFactory(),
 		newconvertExponentialHistToExplicitHistFactory(),
 		newAggregateOnAttributeValueFactory(),
+		newConvertSumToGaugeFactory(),
+		newConvertGaugeToSumFactory(),
 	)
-
-	if UseConvertBetweenSumAndGaugeMetricContext.IsEnabled() {
-		for _, f := range []ottl.Factory[ottlmetric.TransformContext]{
-			newConvertSumToGaugeFactory(),
-			newConvertGaugeToSumFactory(),
-		} {
-			metricFunctions[f.Name()] = f
-		}
-	}
 
 	for k, v := range metricFunctions {
 		functions[k] = v
