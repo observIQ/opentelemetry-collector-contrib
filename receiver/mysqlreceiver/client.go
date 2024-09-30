@@ -211,7 +211,7 @@ func newMySQLClient(conf *Config) (client, error) {
 func (c *mySQLClient) Connect() error {
 	clientDB, err := sql.Open("mysql", c.connStr)
 	if err != nil {
-		return fmt.Errorf("unable to connect to database: %w", err)
+		return fmt.Errorf("unable to connect to database!: %w", err)
 	}
 	c.client = clientDB
 	return nil
