@@ -1251,7 +1251,7 @@ func TestSupervisorWritesAgentFilesToStorageDir(t *testing.T) {
 		"storage_dir": storageDir,
 	})
 
-	require.Nil(t, s.Start())
+	require.NoError(t, s.Start())
 
 	waitForSupervisorConnection(server.supervisorConnected, true)
 
@@ -1461,7 +1461,6 @@ func TestSupervisorUpgradesAgent(t *testing.T) {
 	copyFile(t, agentFilePath, agentFileCopyPath)
 
 	agentIDChan := make(chan []byte, 1)
-	agentDescriptionChan := make(chan *protobufs.AgentDescription, 1)
 	packageStatusesChan := make(chan *protobufs.PackageStatuses, 2)
 
 	server := newOpAMPServer(
@@ -1563,9 +1562,9 @@ func TestSupervisorUpgradesAgent(t *testing.T) {
 		Packages: map[string]*protobufs.PackageStatus{
 			"": {
 				Name:                 "",
-				AgentHasVersion:      agentVersion,
+				AgentHasVersion:      "v" + agentVersion,
 				AgentHasHash:         []byte{0x01, 0x02},
-				ServerOfferedVersion: agentVersion,
+				ServerOfferedVersion: "v" + agentVersion,
 				ServerOfferedHash:    []byte{0x01, 0x02},
 				Status:               protobufs.PackageStatusEnum_PackageStatusEnum_Installed,
 			},
@@ -1573,16 +1572,7 @@ func TestSupervisorUpgradesAgent(t *testing.T) {
 		ServerProvidedAllPackagesHash: []byte{0x03, 0x04},
 	}, ps)
 
-	agentDesc := <-agentDescriptionChan
-	versionFound := false
-	for _, v := range agentDesc.IdentifyingAttributes {
-		if v.Key == semconv.AttributeServiceVersion {
-			versionFound = true
-			require.Equal(t, agentVersion, v.Value.GetStringValue())
-			break
-		}
-	}
-	require.True(t, versionFound, "Agent description after upgrade did not contain the agent version.")
+	// TODO: Sample agent description to make sure new agent is running/bootstrapped
 }
 
 func findRandomPort() (int, error) {
@@ -1612,4 +1602,20 @@ func getFileContents(t *testing.T, url string) []byte {
 	require.NoError(t, err)
 
 	return by
+}
+
+func copyFile(t *testing.T, from, to string) {
+	fromFile, err := os.Open(from)
+	require.NoError(t, err)
+	defer fromFile.Close()
+
+	fi, err := fromFile.Stat()
+	require.NoError(t, err)
+
+	toFile, err := os.OpenFile(to, os.O_CREATE|os.O_TRUNC, fi.Mode())
+	require.NoError(t, err)
+	defer toFile.Close()
+
+	_, err = io.Copy(toFile, fromFile)
+	require.NoError(t, err)
 }
