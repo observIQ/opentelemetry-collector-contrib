@@ -171,7 +171,7 @@ func (i *Input) Stop() error {
 	return i.stopRemoteSession()
 }
 
-// readOnInterval will read events with respect to the polling interval.
+// readOnInterval will read events with respect to the polling interval until it reaches the end of the channel.
 func (i *Input) readOnInterval(ctx context.Context) {
 	defer i.wg.Done()
 
@@ -183,30 +183,7 @@ func (i *Input) readOnInterval(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			i.readToEnd(ctx)
-		}
-	}
-}
-
-// readToEnd will read events from the subscription until it reaches the end of the channel.
-func (i *Input) readToEnd(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			if count := i.read(ctx); count == 0 {
-				if i.isRemote() {
-					if err := i.startRemoteSession(); err != nil {
-						i.Logger().Error("Failed to re-establish remote session", zap.String("server", i.remote.Server), zap.Error(err))
-						return
-					}
-					if err := i.subscription.Open(i.startAt, uintptr(i.remoteSessionHandle), i.channel, i.bookmark); err != nil {
-						i.Logger().Error("Failed to re-open subscription for remote server", zap.String("server", i.remote.Server), zap.Error(err))
-					}
-				}
-				return
-			}
+			i.read(ctx)
 		}
 	}
 }
@@ -216,6 +193,24 @@ func (i *Input) read(ctx context.Context) int {
 	events, err := i.subscription.Read(i.maxReads)
 	if err != nil {
 		i.Logger().Error("Failed to read events from subscription", zap.Error(err))
+		if i.isRemote() && (errors.Is(err, windows.ERROR_INVALID_HANDLE) || errors.Is(err, errSubscriptionHandleNotOpen)) {
+			i.Logger().Info("Resubscribing, closing remote subscription")
+			closeErr := i.subscription.Close()
+			if closeErr != nil {
+				i.Logger().Error("Failed to close remote subscription", zap.Error(closeErr))
+				return 0
+			}
+			i.Logger().Info("Resubscribing, creating remote subscription")
+			i.subscription = NewRemoteSubscription(i.remote.Server)
+			if err := i.startRemoteSession(); err != nil {
+				i.Logger().Error("Failed to re-establish remote session", zap.String("server", i.remote.Server), zap.Error(err))
+				return 0
+			}
+			if err := i.subscription.Open(i.startAt, uintptr(i.remoteSessionHandle), i.channel, i.bookmark); err != nil {
+				i.Logger().Error("Failed to re-open subscription for remote server", zap.String("server", i.remote.Server), zap.Error(err))
+				return 0
+			}
+		}
 		return 0
 	}
 
