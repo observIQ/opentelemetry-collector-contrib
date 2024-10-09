@@ -106,3 +106,5 @@ retract (
 	v0.76.1
 	v0.65.0
 )
+
+replace github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/collector v0.48.2 => github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/collector v0.48.3-0.20241010165122-5cd127bed904

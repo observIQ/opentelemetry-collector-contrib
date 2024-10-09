@@ -54,3 +54,5 @@ require (
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/GoogleCloudPlatform/opentelemetry-operations-go/extension/googleclientauthextension v0.48.2 => github.com/GoogleCloudPlatform/opentelemetry-operations-go/extension/googleclientauthextension v0.48.3-0.20241010165122-5cd127bed904
