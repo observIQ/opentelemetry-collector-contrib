@@ -237,10 +237,17 @@ func (c *kafkaTracesConsumer) Shutdown(context.Context) error {
 		return nil
 	}
 	c.cancelConsumeLoop()
+	c.settings.Logger.Info("Consume loop stopped")
 	if c.consumerGroup == nil {
 		return nil
 	}
-	return c.consumerGroup.Close()
+	c.settings.Logger.Info("Closing consumer group")
+	if err := c.consumerGroup.Close(); err != nil {
+		c.settings.Logger.Error("error closing consumer group", zap.Error(err))
+		return err
+	}
+	c.settings.Logger.Info("Consumer group closed successfully")
+	return nil
 }
 
 func newMetricsReceiver(config Config, set receiver.Settings, nextConsumer consumer.Metrics) (*kafkaMetricsConsumer, error) {
