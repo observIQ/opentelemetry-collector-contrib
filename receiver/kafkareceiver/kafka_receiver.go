@@ -211,7 +211,7 @@ func (c *kafkaTracesConsumer) Start(_ context.Context, host component.Host) erro
 		if err := c.consumeLoop(ctx, consumerGroup); !errors.Is(err, context.Canceled) {
 			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(err))
 		}
-		c.settings.Logger.Info("go routine received err", zap.Error(err))
+		fmt.Println("\n\nreturning from consumeLoop in go routine\n\n")
 	}()
 	<-consumerGroup.ready
 	return nil
