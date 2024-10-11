@@ -218,6 +218,7 @@ func (c *kafkaTracesConsumer) Start(_ context.Context, host component.Host) erro
 }
 
 func (c *kafkaTracesConsumer) consumeLoop(ctx context.Context, handler sarama.ConsumerGroupHandler) error {
+	var retErr error
 	for {
 		// `Consume` should be called inside an infinite loop, when a
 		// server-side rebalance happens, the consumer session will need to be
@@ -228,9 +229,12 @@ func (c *kafkaTracesConsumer) consumeLoop(ctx context.Context, handler sarama.Co
 		// check if context was cancelled, signaling that the consumer should stop
 		if err := ctx.Err(); err != nil {
 			c.settings.Logger.Info("Consumer stopped", zap.Error(err))
-			return err
+			retErr = err
+			break
 		}
 	}
+	c.settings.Logger.Info("returning from consumeLoop with retErr", zap.Error(retErr))
+	return retErr
 }
 
 func (c *kafkaTracesConsumer) Shutdown(context.Context) error {
