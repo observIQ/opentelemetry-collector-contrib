@@ -225,9 +225,9 @@ func (c *kafkaTracesConsumer) consumeLoop(ctx context.Context, handler sarama.Co
 			c.settings.Logger.Error("Error from consumer", zap.Error(err))
 		}
 		// check if context was cancelled, signaling that the consumer should stop
-		if ctx.Err() != nil {
-			c.settings.Logger.Info("Consumer stopped", zap.Error(ctx.Err()))
-			return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			c.settings.Logger.Info("Consumer stopped", zap.Error(err))
+			return err
 		}
 	}
 }
