@@ -211,14 +211,12 @@ func (c *kafkaTracesConsumer) Start(_ context.Context, host component.Host) erro
 		if err := c.consumeLoop(ctx, consumerGroup); !errors.Is(err, context.Canceled) {
 			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(err))
 		}
-		fmt.Println("\n\nreturning from consumeLoop in go routine\n\n")
 	}()
 	<-consumerGroup.ready
 	return nil
 }
 
 func (c *kafkaTracesConsumer) consumeLoop(ctx context.Context, handler sarama.ConsumerGroupHandler) error {
-	var retErr error
 	for {
 		// `Consume` should be called inside an infinite loop, when a
 		// server-side rebalance happens, the consumer session will need to be
@@ -227,14 +225,11 @@ func (c *kafkaTracesConsumer) consumeLoop(ctx context.Context, handler sarama.Co
 			c.settings.Logger.Error("Error from consumer", zap.Error(err))
 		}
 		// check if context was cancelled, signaling that the consumer should stop
-		if err := ctx.Err(); err != nil {
-			c.settings.Logger.Info("Consumer stopped", zap.Error(err))
-			retErr = err
-			break
+		if ctx.Err() != nil {
+			c.settings.Logger.Info("Consumer stopped", zap.Error(ctx.Err()))
+			return ctx.Err()
 		}
 	}
-	c.settings.Logger.Info("returning from consumeLoop with retErr", zap.Error(retErr))
-	return retErr
 }
 
 func (c *kafkaTracesConsumer) Shutdown(context.Context) error {
@@ -242,17 +237,10 @@ func (c *kafkaTracesConsumer) Shutdown(context.Context) error {
 		return nil
 	}
 	c.cancelConsumeLoop()
-	c.settings.Logger.Info("Consume loop stopped")
 	if c.consumerGroup == nil {
 		return nil
 	}
-	c.settings.Logger.Info("Closing consumer group")
-	if err := c.consumerGroup.Close(); err != nil {
-		c.settings.Logger.Error("error closing consumer group", zap.Error(err))
-		return err
-	}
-	c.settings.Logger.Info("Consumer group closed successfully")
-	return nil
+	return c.consumerGroup.Close()
 }
 
 func newMetricsReceiver(config Config, set receiver.Settings, nextConsumer consumer.Metrics) (*kafkaMetricsConsumer, error) {
@@ -440,8 +428,10 @@ func (c *kafkaLogsConsumer) Start(_ context.Context, host component.Host) error 
 	}
 	go func() {
 		if err := c.consumeLoop(ctx, logsConsumerGroup); err != nil {
+			c.settings.Logger.Info("reporting fatal component status")
 			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(err))
 		}
+		c.settings.Logger.Info("returned from consume loop")
 	}()
 	<-logsConsumerGroup.ready
 	return nil
@@ -456,9 +446,9 @@ func (c *kafkaLogsConsumer) consumeLoop(ctx context.Context, handler sarama.Cons
 			c.settings.Logger.Error("Error from consumer", zap.Error(err))
 		}
 		// check if context was cancelled, signaling that the consumer should stop
-		if ctx.Err() != nil {
-			c.settings.Logger.Info("Consumer stopped", zap.Error(ctx.Err()))
-			return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			c.settings.Logger.Info("Consumer stopped", zap.Error(err))
+			return err
 		}
 	}
 }
@@ -468,10 +458,17 @@ func (c *kafkaLogsConsumer) Shutdown(context.Context) error {
 		return nil
 	}
 	c.cancelConsumeLoop()
+	c.settings.Logger.Info("called consume loop cancel func")
 	if c.consumerGroup == nil {
 		return nil
 	}
-	return c.consumerGroup.Close()
+	c.settings.Logger.Info("closing consumer group")
+	if err := c.consumerGroup.Close(); err != nil {
+		c.settings.Logger.Error("error closing consumer group", zap.Error(err))
+		return err
+	}
+	c.settings.Logger.Info("consumer group closed")
+	return nil
 }
 
 type tracesConsumerGroupHandler struct {
