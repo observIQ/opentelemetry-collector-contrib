@@ -1563,9 +1563,9 @@ func TestSupervisorUpgradesAgent(t *testing.T) {
 		Packages: map[string]*protobufs.PackageStatus{
 			"": {
 				Name:                 "",
-				AgentHasVersion:      "v" + agentVersion,
+				AgentHasVersion:      agentVersion,
 				AgentHasHash:         []byte{0x01, 0x02},
-				ServerOfferedVersion: "v" + agentVersion,
+				ServerOfferedVersion: agentVersion,
 				ServerOfferedHash:    []byte{0x01, 0x02},
 				Status:               protobufs.PackageStatusEnum_PackageStatusEnum_Installed,
 			},
