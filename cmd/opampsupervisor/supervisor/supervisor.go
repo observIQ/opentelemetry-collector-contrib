@@ -414,7 +414,13 @@ func (s *Supervisor) startOpAMPClient() error {
 		OpAMPServerURL: s.config.Server.Endpoint,
 		Header:         s.config.Server.Headers,
 		TLSConfig:      tlsConfig,
-		InstanceUid:    types.InstanceUid(s.persistentState.InstanceID),
+		Agents: []*types.Agent{
+			{
+				InstanceUid:      types.InstanceUid(s.persistentState.InstanceID),
+				AgentDescription: s.agentDescription.Load().(*protobufs.AgentDescription),
+				Capabilities:     s.config.Capabilities.SupportedCapabilities(),
+			},
+		},
 		Callbacks: types.Callbacks{
 			OnConnect: func(_ context.Context) {
 				s.logger.Debug("Connected to the server.")
@@ -445,14 +451,9 @@ func (s *Supervisor) startOpAMPClient() error {
 				return s.createEffectiveConfigMsg(), nil
 			},
 		},
-		Capabilities: s.config.Capabilities.SupportedCapabilities(),
 	}
-	ad := s.agentDescription.Load().(*protobufs.AgentDescription)
-	if err = s.opampClient.SetAgentDescription(ad); err != nil {
-		return err
-	}
-
-	if err = s.opampClient.SetHealth(&protobufs.ComponentHealth{Healthy: false}); err != nil {
+	if err = s.opampClient.PrepareStart(context.Background(), settings); err != nil {
+		s.logger.Error("Failed to prepare OpAMP client start", zap.Error(err))
 		return err
 	}
 
@@ -517,7 +518,7 @@ func (s *Supervisor) handleAgentOpAMPMessage(conn serverTypes.Connection, messag
 		if cfg, ok := message.EffectiveConfig.GetConfigMap().GetConfigMap()[""]; ok {
 			s.logger.Debug("Received effective config from agent")
 			s.effectiveConfig.Store(string(cfg.Body))
-			err := s.opampClient.UpdateEffectiveConfig(context.Background())
+			err := s.opampClient.UpdateEffectiveConfig(types.InstanceUid(s.persistentState.InstanceID), context.Background())
 			if err != nil {
 				s.logger.Error("The OpAMP client failed to update the effective config", zap.Error(err))
 			}
@@ -528,7 +529,7 @@ func (s *Supervisor) handleAgentOpAMPMessage(conn serverTypes.Connection, messag
 
 	// Proxy client capabilities to server
 	if message.CustomCapabilities != nil {
-		err := s.opampClient.SetCustomCapabilities(message.CustomCapabilities)
+		err := s.opampClient.SetCustomCapabilities(types.InstanceUid(s.persistentState.InstanceID), message.CustomCapabilities)
 		if err != nil {
 			s.logger.Error("Failed to send custom capabilities to OpAMP server")
 		}
@@ -558,7 +559,7 @@ func (s *Supervisor) forwardCustomMessagesToServerLoop() {
 		select {
 		case cm := <-s.customMessageToServer:
 			for {
-				sendingChan, err := s.opampClient.SendCustomMessage(cm)
+				sendingChan, err := s.opampClient.SendCustomMessage(types.InstanceUid(s.persistentState.InstanceID), cm)
 				switch {
 				case errors.Is(err, types.ErrCustomMessagePending):
 					s.logger.Debug("Custom message pending, waiting to send...")
@@ -1010,7 +1011,7 @@ func (s *Supervisor) startAgent() (agentStartStatus, error) {
 		// Don't start the agent if there is no config to run
 		s.logger.Info("No config present, not starting agent.")
 		// need to manually trigger updating effective config
-		err := s.opampClient.UpdateEffectiveConfig(context.Background())
+		err := s.opampClient.UpdateEffectiveConfig(types.InstanceUid(s.persistentState.InstanceID), context.Background())
 		if err != nil {
 			s.logger.Error("The OpAMP client failed to update the effective config", zap.Error(err))
 		}
@@ -1021,7 +1022,7 @@ func (s *Supervisor) startAgent() (agentStartStatus, error) {
 	if err != nil {
 		s.logger.Error("Cannot start the agent", zap.Error(err))
 		startErr := fmt.Errorf("Cannot start the agent: %w", err)
-		err = s.opampClient.SetHealth(&protobufs.ComponentHealth{Healthy: false, LastError: startErr.Error()})
+		err = s.opampClient.SetHealth(types.InstanceUid(s.persistentState.InstanceID), &protobufs.ComponentHealth{Healthy: false, LastError: startErr.Error()})
 		if err != nil {
 			s.logger.Error("Failed to report OpAMP client health", zap.Error(err))
 		}
@@ -1089,7 +1090,7 @@ func (s *Supervisor) healthCheck() {
 	}
 
 	// Report via OpAMP.
-	if err2 := s.opampClient.SetHealth(health); err2 != nil {
+	if err2 := s.opampClient.SetHealth(types.InstanceUid(s.persistentState.InstanceID), health); err2 != nil {
 		s.logger.Error("Could not report health to OpAMP server", zap.Error(err2))
 		return
 	}
@@ -1152,7 +1153,7 @@ func (s *Supervisor) runAgentProcess() {
 				"Agent process PID=%d exited unexpectedly, exit code=%d. Will restart in a bit...",
 				s.commander.Pid(), s.commander.ExitCode(),
 			)
-			err := s.opampClient.SetHealth(&protobufs.ComponentHealth{Healthy: false, LastError: errMsg})
+			err := s.opampClient.SetHealth(types.InstanceUid(s.persistentState.InstanceID), &protobufs.ComponentHealth{Healthy: false, LastError: errMsg})
 			if err != nil {
 				s.logger.Error("Could not report health to OpAMP server", zap.Error(err))
 			}
@@ -1233,6 +1234,7 @@ func (s *Supervisor) Shutdown() {
 
 	if s.opampClient != nil {
 		err := s.opampClient.SetHealth(
+			types.InstanceUid(s.persistentState.InstanceID),
 			&protobufs.ComponentHealth{
 				Healthy: false, LastError: "Supervisor is shutdown",
 			},
@@ -1274,7 +1276,7 @@ func (s *Supervisor) reportConfigStatus(status protobufs.RemoteConfigStatuses, e
 	if !s.config.Capabilities.ReportsRemoteConfig {
 		s.logger.Debug("supervisor is not configured to report remote config status")
 	}
-	err := s.opampClient.SetRemoteConfigStatus(&protobufs.RemoteConfigStatus{
+	err := s.opampClient.SetRemoteConfigStatus(types.InstanceUid(s.persistentState.InstanceID), &protobufs.RemoteConfigStatus{
 		LastRemoteConfigHash: s.remoteConfig.GetConfigHash(),
 		Status:               status,
 		ErrorMessage:         errorMessage,
@@ -1301,7 +1303,7 @@ func (s *Supervisor) onMessage(ctx context.Context, msg *types.MessageData) {
 
 	// Update the agent config if any messages have touched the config
 	if configChanged {
-		err := s.opampClient.UpdateEffectiveConfig(ctx)
+		err := s.opampClient.UpdateEffectiveConfig(types.InstanceUid(s.persistentState.InstanceID), ctx)
 		if err != nil {
 			s.logger.Error("The OpAMP client failed to update the effective config", zap.Error(err))
 		}
@@ -1388,7 +1390,7 @@ func (s *Supervisor) processAgentIdentificationMessage(msg *protobufs.AgentIdent
 		s.logger.Error("Failed to persist new instance ID, instance ID will revert on restart.", zap.String("new_id", newInstanceID.String()), zap.Error(err))
 	}
 
-	err = s.opampClient.SetAgentDescription(s.agentDescription.Load().(*protobufs.AgentDescription))
+	err = s.opampClient.SetAgentDescription(types.InstanceUid(s.persistentState.InstanceID), s.agentDescription.Load().(*protobufs.AgentDescription))
 	if err != nil {
 		s.logger.Error("Failed to send agent description to OpAMP server")
 	}
