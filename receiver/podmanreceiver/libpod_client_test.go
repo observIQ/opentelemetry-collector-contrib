@@ -2,14 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build !windows
-// +build !windows
 
 package podmanreceiver
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -61,12 +59,12 @@ func TestStats(t *testing.T) {
 	defer srv.Close()
 
 	config := &Config{
-		Endpoint: fmt.Sprintf("unix://%s", addr),
+		Endpoint: "unix://" + addr,
 	}
 
 	cli, err := newLibpodClient(zap.NewNop(), config)
 	assert.NotNil(t, cli)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	expectedStats := containerStats{
 		AvgCPU:        42.04781177856639,
@@ -117,12 +115,12 @@ func TestStatsError(t *testing.T) {
 	defer srv.Close()
 
 	config := &Config{
-		Endpoint: fmt.Sprintf("unix://%s", addr),
+		Endpoint: "unix://" + addr,
 	}
 
 	cli, err := newLibpodClient(zap.NewNop(), config)
 	assert.NotNil(t, cli)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	stats, err := cli.stats(context.Background(), nil)
 	assert.Nil(t, stats)
@@ -151,15 +149,14 @@ func TestList(t *testing.T) {
 	defer srv.Close()
 
 	config := &Config{
-		Endpoint: fmt.Sprintf("unix://%s", addr),
+		Endpoint: "unix://" + addr,
 	}
 
 	cli, err := newLibpodClient(zap.NewNop(), config)
 	assert.NotNil(t, cli)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	expectedContainer := container{
-
 		AutoRemove: false,
 		Command:    []string{"nginx", "-g", "daemon off;"},
 		Created:    "2022-05-28T11:25:35.999277074+02:00",
@@ -222,12 +219,12 @@ func TestEvents(t *testing.T) {
 	defer srv.Close()
 
 	config := &Config{
-		Endpoint: fmt.Sprintf("unix://%s", addr),
+		Endpoint: "unix://" + addr,
 	}
 
 	cli, err := newLibpodClient(zap.NewNop(), config)
 	assert.NotNil(t, cli)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	expectedEvents := []event{
 		{ID: "49a4c52afb06e6b36b2941422a0adf47421dbfbf40503dbe17bd56b4570b6681", Status: "start"},
@@ -239,7 +236,6 @@ func TestEvents(t *testing.T) {
 
 loop:
 	for {
-
 		select {
 		case err := <-errs:
 			if err != nil && !errors.Is(err, io.EOF) {
@@ -253,5 +249,4 @@ loop:
 	}
 
 	assert.Equal(t, expectedEvents, actualEvents)
-
 }

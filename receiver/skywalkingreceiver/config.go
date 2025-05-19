@@ -4,6 +4,7 @@
 package skywalkingreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/skywalkingreceiver"
 
 import (
+	"errors"
 	"fmt"
 
 	"go.opentelemetry.io/collector/component"
@@ -19,8 +20,8 @@ const (
 
 // Protocols is the configuration for the supported protocols.
 type Protocols struct {
-	GRPC *configgrpc.GRPCServerSettings `mapstructure:"grpc"`
-	HTTP *confighttp.HTTPServerSettings `mapstructure:"http"`
+	GRPC *configgrpc.ServerConfig `mapstructure:"grpc"`
+	HTTP *confighttp.ServerConfig `mapstructure:"http"`
 }
 
 // Config defines configuration for skywalking receiver.
@@ -28,13 +29,15 @@ type Config struct {
 	Protocols `mapstructure:"protocols"`
 }
 
-var _ component.Config = (*Config)(nil)
-var _ confmap.Unmarshaler = (*Config)(nil)
+var (
+	_ component.Config    = (*Config)(nil)
+	_ confmap.Unmarshaler = (*Config)(nil)
+)
 
 // Validate checks the receiver configuration is valid
 func (cfg *Config) Validate() error {
 	if cfg.GRPC == nil && cfg.HTTP == nil {
-		return fmt.Errorf("must specify at least one protocol when using the Skywalking receiver")
+		return errors.New("must specify at least one protocol when using the Skywalking receiver")
 	}
 
 	if cfg.GRPC != nil {
@@ -56,12 +59,12 @@ func (cfg *Config) Validate() error {
 // Unmarshal a config.Parser into the config struct.
 func (cfg *Config) Unmarshal(componentParser *confmap.Conf) error {
 	if componentParser == nil || len(componentParser.AllKeys()) == 0 {
-		return fmt.Errorf("empty config for Skywalking receiver")
+		return errors.New("empty config for Skywalking receiver")
 	}
 
 	// UnmarshalExact will not set struct properties to nil even if no key is provided,
 	// so set the protocol structs to nil where the keys were omitted.
-	err := componentParser.Unmarshal(cfg, confmap.WithErrorUnused())
+	err := componentParser.Unmarshal(cfg)
 	if err != nil {
 		return err
 	}

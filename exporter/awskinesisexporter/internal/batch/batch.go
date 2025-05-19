@@ -7,7 +7,7 @@ import (
 	"errors"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/kinesis/types" //nolint:staticcheck // Some encoding types uses legacy prototype version
+	"github.com/aws/aws-sdk-go-v2/service/kinesis/types"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awskinesisexporter/internal/compress"
@@ -29,7 +29,7 @@ type Batch struct {
 	maxBatchSize  int
 	maxRecordSize int
 
-	compression compress.Compressor
+	compressionType string
 
 	records []types.PutRecordsRequestEntry
 }
@@ -54,20 +54,18 @@ func WithMaxRecordSize(size int) Option {
 	}
 }
 
-func WithCompression(compressor compress.Compressor) Option {
+func WithCompressionType(compressionType string) Option {
 	return func(bt *Batch) {
-		if compressor != nil {
-			bt.compression = compressor
-		}
+		bt.compressionType = compressionType
 	}
 }
 
 func New(opts ...Option) *Batch {
 	bt := &Batch{
-		maxBatchSize:  MaxBatchedRecords,
-		maxRecordSize: MaxRecordSize,
-		compression:   compress.NewNoopCompressor(),
-		records:       make([]types.PutRecordsRequestEntry, 0, MaxRecordSize),
+		maxBatchSize:    MaxBatchedRecords,
+		maxRecordSize:   MaxRecordSize,
+		compressionType: "none",
+		records:         make([]types.PutRecordsRequestEntry, 0, MaxBatchedRecords),
 	}
 
 	for _, op := range opts {
@@ -78,7 +76,12 @@ func New(opts ...Option) *Batch {
 }
 
 func (b *Batch) AddRecord(raw []byte, key string) error {
-	record, err := b.compression.Do(raw)
+	compressor, err := compress.NewCompressor(b.compressionType)
+	if err != nil {
+		return err
+	}
+
+	record, err := compressor(raw)
 	if err != nil {
 		return err
 	}
@@ -98,7 +101,7 @@ func (b *Batch) AddRecord(raw []byte, key string) error {
 	return nil
 }
 
-// Chunk breaks up the iternal queue into blocks that can be used
+// Chunk breaks up the internal queue into blocks that can be used
 // to be written to he kinesis.PutRecords endpoint
 func (b *Batch) Chunk() (chunks [][]types.PutRecordsRequestEntry) {
 	// Using local copies to avoid mutating internal data

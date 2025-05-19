@@ -15,8 +15,8 @@ import (
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/collector/receiver/scrapererror"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden"
@@ -35,6 +35,8 @@ const (
 )
 
 func TestScraper(t *testing.T) {
+	clientConfig := confighttp.NewDefaultClientConfig()
+	clientConfig.Endpoint = defaultEndpoint
 	testcases := []struct {
 		desc              string
 		setupMockClient   func(t *testing.T) client
@@ -44,41 +46,40 @@ func TestScraper(t *testing.T) {
 	}{
 		{
 			desc: "Exits on failure to get app ids",
-			setupMockClient: func(t *testing.T) client {
+			setupMockClient: func(*testing.T) client {
 				mockClient := mocks.MockClient{}
 				mockClient.On("Applications").Return(nil, errors.New("could not retrieve app ids"))
 				return &mockClient
 			},
-			expectedMetricGen: func(t *testing.T) pmetric.Metrics {
+			expectedMetricGen: func(*testing.T) pmetric.Metrics {
 				return pmetric.NewMetrics()
 			},
 			config:      createDefaultConfig().(*Config),
-			expectedErr: errFailedAppIDCollection,
+			expectedErr: errors.Join(errFailedAppIDCollection, errors.New("could not retrieve app ids")),
 		},
 		{
 			desc: "No Matching Allowed Apps",
-			setupMockClient: func(t *testing.T) client {
+			setupMockClient: func(*testing.T) client {
 				mockClient := mocks.MockClient{}
 				mockClient.On("Applications").Return([]models.Application{}, nil)
 				return &mockClient
 			},
-			expectedMetricGen: func(t *testing.T) pmetric.Metrics {
+			expectedMetricGen: func(*testing.T) pmetric.Metrics {
 				return pmetric.NewMetrics()
 			},
-			config: &Config{ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
-				CollectionInterval: defaultCollectionInterval,
-			},
-				ApplicationNames: []string{"local-123", "local-987"},
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Endpoint: defaultEndpoint,
+			config: &Config{
+				ControllerConfig: scraperhelper.ControllerConfig{
+					CollectionInterval: defaultCollectionInterval,
 				},
+				ApplicationNames:     []string{"local-123", "local-987"},
+				ClientConfig:         clientConfig,
 				MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
 			},
 			expectedErr: errNoMatchingAllowedApps,
 		},
 		{
 			desc: "Successful Full Empty Collection",
-			setupMockClient: func(t *testing.T) client {
+			setupMockClient: func(*testing.T) client {
 				mockClient := mocks.MockClient{}
 				mockClient.On("ClusterStats").Return(&models.ClusterProperties{}, nil)
 				mockClient.On("Applications").Return([]models.Application{}, nil)
@@ -212,13 +213,12 @@ func TestScraper(t *testing.T) {
 				require.NoError(t, err)
 				return expectedMetrics
 			},
-			config: &Config{ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
-				CollectionInterval: defaultCollectionInterval,
-			},
-				ApplicationNames: []string{"streaming-example"},
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Endpoint: defaultEndpoint,
+			config: &Config{
+				ControllerConfig: scraperhelper.ControllerConfig{
+					CollectionInterval: defaultCollectionInterval,
 				},
+				ApplicationNames:     []string{"streaming-example"},
+				ClientConfig:         clientConfig,
 				MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
 			},
 			expectedErr: nil,
@@ -227,7 +227,7 @@ func TestScraper(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.desc, func(t *testing.T) {
-			scraper := newSparkScraper(zap.NewNop(), tc.config, receivertest.NewNopCreateSettings())
+			scraper := newSparkScraper(zap.NewNop(), tc.config, receivertest.NewNopSettings(metadata.Type))
 			scraper.client = tc.setupMockClient(t)
 
 			actualMetrics, err := scraper.scrape(context.Background())

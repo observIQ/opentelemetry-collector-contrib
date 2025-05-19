@@ -20,7 +20,7 @@ func TestGetDimensionUpdateFromMetadata(t *testing.T) {
 			Action:  translation.ActionRenameDimensionKeys,
 			Mapping: map[string]string{"name": "translated_name"},
 		},
-	}, 1)
+	}, 1, make(chan struct{}))
 	type args struct {
 		metadata         metadata.MetadataUpdate
 		metricTranslator *translation.MetricTranslator
@@ -197,7 +197,6 @@ func TestGetDimensionUpdateFromMetadata(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			converter, err := translation.NewMetricsConverter(
 				zap.NewNop(),
 				tt.args.metricTranslator,
@@ -205,6 +204,7 @@ func TestGetDimensionUpdateFromMetadata(t *testing.T) {
 				nil,
 				"-_.",
 				false,
+				true,
 			)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, getDimensionUpdateFromMetadata(tt.args.metadata, *converter))

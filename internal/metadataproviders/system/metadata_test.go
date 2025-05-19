@@ -5,6 +5,7 @@ package system
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -68,7 +69,7 @@ func TestHostID(t *testing.T) {
 		{
 			name:     "error",
 			resValue: "",
-			resError: fmt.Errorf("some error"),
+			resError: errors.New("some error"),
 			err:      `failed to obtain "host.id": some error`,
 			expected: "",
 		},
@@ -76,7 +77,7 @@ func TestHostID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := fakeLinuxSystemMetadataProvider()
-			p.newResource = func(ctx context.Context, o ...resource.Option) (*resource.Resource, error) {
+			p.newResource = func(_ context.Context, _ ...resource.Option) (*resource.Resource, error) {
 				if tt.resValue == "" {
 					return resource.NewSchemaless(), tt.resError
 				}
@@ -119,13 +120,13 @@ func fakeLinuxNameInfoProvider() nameInfoProvider {
 		osHostname: func() (string, error) {
 			return "my-linux-vm", nil
 		},
-		lookupCNAME: func(s string) (string, error) {
+		lookupCNAME: func(_ string) (string, error) {
 			return "my-linux-vm.abcdefghijklmnopqrstuvwxyz.xx.internal.foo.net.", nil
 		},
-		lookupHost: func(s string) ([]string, error) {
+		lookupHost: func(_ string) ([]string, error) {
 			return []string{"172.24.0.4"}, nil
 		},
-		lookupAddr: func(s string) ([]string, error) {
+		lookupAddr: func(_ string) ([]string, error) {
 			return []string{"my-linux-vm.internal.foo.net."}, nil
 		},
 	}
@@ -137,10 +138,10 @@ func fakeWindowsNameInfoProvider() nameInfoProvider {
 		osHostname: func() (string, error) {
 			return "my-windows-vm", nil
 		},
-		lookupCNAME: func(s string) (string, error) {
+		lookupCNAME: func(_ string) (string, error) {
 			return fqdn, nil
 		},
-		lookupHost: func(s string) ([]string, error) {
+		lookupHost: func(_ string) ([]string, error) {
 			return []string{"ffff::0000:1111:2222:3333%Ethernet", "1.2.3.4"}, nil
 		},
 		lookupAddr: func(s string) ([]string, error) {

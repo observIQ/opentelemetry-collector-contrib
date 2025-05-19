@@ -6,7 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type      = component.MustNewType("remotetap")
+	ScopeName = "github.com/open-telemetry/opentelemetry-collector-contrib/extension/remotetapextension"
+)
+
 const (
-	Type               = "remotetap"
 	ExtensionStability = component.StabilityLevelDevelopment
 )

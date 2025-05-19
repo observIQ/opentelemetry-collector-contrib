@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 
+	"go.opentelemetry.io/collector/extension/xextension/storage"
+	"go.uber.org/multierr"
+
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/internal/reader"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
 )
@@ -18,6 +21,10 @@ const knownFilesKey = "knownFiles"
 
 // Save syncs the most recent set of files to the database
 func Save(ctx context.Context, persister operator.Persister, rmds []*reader.Metadata) error {
+	return SaveKey(ctx, persister, rmds, knownFilesKey)
+}
+
+func SaveKey(ctx context.Context, persister operator.Persister, rmds []*reader.Metadata, key string, ops ...*storage.Operation) error {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 
@@ -26,24 +33,28 @@ func Save(ctx context.Context, persister operator.Persister, rmds []*reader.Meta
 		return fmt.Errorf("encode num files: %w", err)
 	}
 
-	var errs []error
+	var errs error
 	// Encode each known file
 	for _, rmd := range rmds {
 		if err := enc.Encode(rmd); err != nil {
-			errs = append(errs, fmt.Errorf("encode metadata: %w", err))
+			errs = multierr.Append(errs, fmt.Errorf("encode metadata: %w", err))
 		}
 	}
-
-	if err := persister.Set(ctx, knownFilesKey, buf.Bytes()); err != nil {
-		errs = append(errs, fmt.Errorf("persist known files: %w", err))
+	ops = append(ops, storage.SetOperation(key, buf.Bytes()))
+	if err := persister.Batch(ctx, ops...); err != nil {
+		errs = multierr.Append(errs, fmt.Errorf("persist known files: %w", err))
 	}
 
-	return errors.Join(errs...)
+	return errs
 }
 
 // Load loads the most recent set of files to the database
 func Load(ctx context.Context, persister operator.Persister) ([]*reader.Metadata, error) {
-	encoded, err := persister.Get(ctx, knownFilesKey)
+	return LoadKey(ctx, persister, knownFilesKey)
+}
+
+func LoadKey(ctx context.Context, persister operator.Persister, key string) ([]*reader.Metadata, error) {
+	encoded, err := persister.Get(ctx, key)
 	if err != nil {
 		return nil, err
 	}
@@ -61,12 +72,15 @@ func Load(ctx context.Context, persister operator.Persister) ([]*reader.Metadata
 	}
 
 	// Decode each of the known files
-	var errs []error
+	var errs error
 	rmds := make([]*reader.Metadata, 0, knownFileCount)
 	for i := 0; i < knownFileCount; i++ {
 		rmd := new(reader.Metadata)
 		if err = dec.Decode(rmd); err != nil {
 			return nil, err
+		}
+		if rmd.FileAttributes == nil {
+			rmd.FileAttributes = map[string]any{}
 		}
 
 		// Migrate readers that used FileAttributes.HeaderAttributes
@@ -79,7 +93,7 @@ func Load(ctx context.Context, persister operator.Persister) ([]*reader.Metadata
 				}
 				delete(rmd.FileAttributes, "HeaderAttributes")
 			default:
-				errs = append(errs, errors.New("migrate header attributes: unexpected format"))
+				errs = multierr.Append(errs, errors.New("migrate header attributes: unexpected format"))
 			}
 		}
 
@@ -87,5 +101,5 @@ func Load(ctx context.Context, persister operator.Persister) ([]*reader.Metadata
 		rmds = append(rmds, rmd)
 	}
 
-	return rmds, errors.Join(errs...)
+	return rmds, errs
 }

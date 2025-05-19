@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	pb "github.com/DataDog/datadog-agent/pkg/proto/pbgo/trace"
+	"github.com/DataDog/datadog-agent/comp/otelcol/otlp/testutil"
 	"github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes"
 	"github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes/source"
 	"github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/metrics"
@@ -16,10 +16,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	conventions "go.opentelemetry.io/otel/semconv/v1.6.1"
 	"go.uber.org/zap"
-
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/testutil"
 )
 
 type testProvider string
@@ -31,7 +29,10 @@ func (t testProvider) Source(context.Context) (source.Source, error) {
 func newTranslator(t *testing.T, logger *zap.Logger) *metrics.Translator {
 	set := componenttest.NewNopTelemetrySettings()
 	set.Logger = logger
+	attributesTranslator, err := attributes.NewTranslator(set)
+	require.NoError(t, err)
 	tr, err := metrics.NewTranslator(set,
+		attributesTranslator,
 		metrics.WithHistogramMode(metrics.HistogramModeDistributions),
 		metrics.WithNumberMode(metrics.NumberModeCumulativeToDelta),
 		metrics.WithFallbackSourceProvider(testProvider("fallbackHostname")),
@@ -62,8 +63,8 @@ func TestRunningMetrics(t *testing.T) {
 	tr := newTranslator(t, logger)
 
 	ctx := context.Background()
-	consumer := NewConsumer()
-	metadata, err := tr.MapMetrics(ctx, ms, consumer)
+	consumer := NewConsumer(nil)
+	metadata, err := tr.MapMetrics(ctx, ms, consumer, nil)
 	assert.NoError(t, err)
 
 	var runningHostnames []string
@@ -85,29 +86,29 @@ func TestTagsMetrics(t *testing.T) {
 
 	rm := rms.AppendEmpty()
 	baseAttrs := testutil.NewAttributeMap(map[string]string{
-		conventions.AttributeCloudProvider:      conventions.AttributeCloudProviderAWS,
-		conventions.AttributeCloudPlatform:      conventions.AttributeCloudPlatformAWSECS,
-		conventions.AttributeAWSECSTaskFamily:   "example-task-family",
-		conventions.AttributeAWSECSTaskRevision: "example-task-revision",
-		conventions.AttributeAWSECSLaunchtype:   conventions.AttributeAWSECSLaunchtypeFargate,
+		string(conventions.CloudProviderKey):      conventions.CloudProviderAWS.Value.AsString(),
+		string(conventions.CloudPlatformKey):      conventions.CloudPlatformAWSECS.Value.AsString(),
+		string(conventions.AWSECSTaskFamilyKey):   "example-task-family",
+		string(conventions.AWSECSTaskRevisionKey): "example-task-revision",
+		string(conventions.AWSECSLaunchtypeKey):   conventions.AWSECSLaunchtypeFargate.Value.AsString(),
 	})
 	baseAttrs.CopyTo(rm.Resource().Attributes())
-	rm.Resource().Attributes().PutStr(conventions.AttributeAWSECSTaskARN, "task-arn-1")
+	rm.Resource().Attributes().PutStr(string(conventions.AWSECSTaskARNKey), "task-arn-1")
 
 	rm = rms.AppendEmpty()
 	baseAttrs.CopyTo(rm.Resource().Attributes())
-	rm.Resource().Attributes().PutStr(conventions.AttributeAWSECSTaskARN, "task-arn-2")
+	rm.Resource().Attributes().PutStr(string(conventions.AWSECSTaskARNKey), "task-arn-2")
 
 	rm = rms.AppendEmpty()
 	baseAttrs.CopyTo(rm.Resource().Attributes())
-	rm.Resource().Attributes().PutStr(conventions.AttributeAWSECSTaskARN, "task-arn-3")
+	rm.Resource().Attributes().PutStr(string(conventions.AWSECSTaskARNKey), "task-arn-3")
 
 	logger, _ := zap.NewProduction()
 	tr := newTranslator(t, logger)
 
 	ctx := context.Background()
-	consumer := NewConsumer()
-	metadata, err := tr.MapMetrics(ctx, ms, consumer)
+	consumer := NewConsumer(nil)
+	metadata, err := tr.MapMetrics(ctx, ms, consumer, nil)
 	assert.NoError(t, err)
 
 	runningMetrics := consumer.runningMetrics(0, component.BuildInfo{}, metadata)
@@ -123,23 +124,4 @@ func TestTagsMetrics(t *testing.T) {
 	assert.ElementsMatch(t, runningHostnames, []string{"", "", ""})
 	assert.Len(t, runningMetrics, 3)
 	assert.ElementsMatch(t, runningTags, []string{"task_arn:task-arn-1", "task_arn:task-arn-2", "task_arn:task-arn-3"})
-}
-
-func TestConsumeAPMStats(t *testing.T) {
-	var md metrics.Metadata
-	c := NewConsumer()
-	for _, sp := range testutil.StatsPayloads {
-		c.ConsumeAPMStats(sp)
-	}
-	require.Len(t, c.as, len(testutil.StatsPayloads))
-	require.ElementsMatch(t, c.as, testutil.StatsPayloads)
-	_, _, out := c.All(0, component.BuildInfo{}, []string{}, md)
-	require.ElementsMatch(t, out, testutil.StatsPayloads)
-	_, _, out = c.All(0, component.BuildInfo{}, []string{"extra:key"}, md)
-	var copies []*pb.ClientStatsPayload
-	for _, sp := range testutil.StatsPayloads {
-		sp.Tags = append(sp.Tags, "extra:key")
-		copies = append(copies, sp)
-	}
-	require.ElementsMatch(t, out, copies)
 }

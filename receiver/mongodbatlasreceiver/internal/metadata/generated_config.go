@@ -2,7 +2,10 @@
 
 package metadata
 
-import "go.opentelemetry.io/collector/confmap"
+import (
+	"go.opentelemetry.io/collector/confmap"
+	"go.opentelemetry.io/collector/filter"
+)
 
 // MetricConfig provides common config for a particular metric.
 type MetricConfig struct {
@@ -15,7 +18,7 @@ func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
-	err := parser.Unmarshal(ms, confmap.WithErrorUnused())
+	err := parser.Unmarshal(ms)
 	if err != nil {
 		return err
 	}
@@ -31,8 +34,10 @@ type MetricsConfig struct {
 	MongodbatlasDiskPartitionIopsMax                      MetricConfig `mapstructure:"mongodbatlas.disk.partition.iops.max"`
 	MongodbatlasDiskPartitionLatencyAverage               MetricConfig `mapstructure:"mongodbatlas.disk.partition.latency.average"`
 	MongodbatlasDiskPartitionLatencyMax                   MetricConfig `mapstructure:"mongodbatlas.disk.partition.latency.max"`
+	MongodbatlasDiskPartitionQueueDepth                   MetricConfig `mapstructure:"mongodbatlas.disk.partition.queue.depth"`
 	MongodbatlasDiskPartitionSpaceAverage                 MetricConfig `mapstructure:"mongodbatlas.disk.partition.space.average"`
 	MongodbatlasDiskPartitionSpaceMax                     MetricConfig `mapstructure:"mongodbatlas.disk.partition.space.max"`
+	MongodbatlasDiskPartitionThroughput                   MetricConfig `mapstructure:"mongodbatlas.disk.partition.throughput"`
 	MongodbatlasDiskPartitionUsageAverage                 MetricConfig `mapstructure:"mongodbatlas.disk.partition.usage.average"`
 	MongodbatlasDiskPartitionUsageMax                     MetricConfig `mapstructure:"mongodbatlas.disk.partition.usage.max"`
 	MongodbatlasDiskPartitionUtilizationAverage           MetricConfig `mapstructure:"mongodbatlas.disk.partition.utilization.average"`
@@ -40,6 +45,7 @@ type MetricsConfig struct {
 	MongodbatlasProcessAsserts                            MetricConfig `mapstructure:"mongodbatlas.process.asserts"`
 	MongodbatlasProcessBackgroundFlush                    MetricConfig `mapstructure:"mongodbatlas.process.background_flush"`
 	MongodbatlasProcessCacheIo                            MetricConfig `mapstructure:"mongodbatlas.process.cache.io"`
+	MongodbatlasProcessCacheRatio                         MetricConfig `mapstructure:"mongodbatlas.process.cache.ratio"`
 	MongodbatlasProcessCacheSize                          MetricConfig `mapstructure:"mongodbatlas.process.cache.size"`
 	MongodbatlasProcessConnections                        MetricConfig `mapstructure:"mongodbatlas.process.connections"`
 	MongodbatlasProcessCPUChildrenNormalizedUsageAverage  MetricConfig `mapstructure:"mongodbatlas.process.cpu.children.normalized.usage.average"`
@@ -109,11 +115,17 @@ func DefaultMetricsConfig() MetricsConfig {
 		MongodbatlasDiskPartitionLatencyMax: MetricConfig{
 			Enabled: true,
 		},
+		MongodbatlasDiskPartitionQueueDepth: MetricConfig{
+			Enabled: false,
+		},
 		MongodbatlasDiskPartitionSpaceAverage: MetricConfig{
 			Enabled: true,
 		},
 		MongodbatlasDiskPartitionSpaceMax: MetricConfig{
 			Enabled: true,
+		},
+		MongodbatlasDiskPartitionThroughput: MetricConfig{
+			Enabled: false,
 		},
 		MongodbatlasDiskPartitionUsageAverage: MetricConfig{
 			Enabled: true,
@@ -135,6 +147,9 @@ func DefaultMetricsConfig() MetricsConfig {
 		},
 		MongodbatlasProcessCacheIo: MetricConfig{
 			Enabled: true,
+		},
+		MongodbatlasProcessCacheRatio: MetricConfig{
+			Enabled: false,
 		},
 		MongodbatlasProcessCacheSize: MetricConfig{
 			Enabled: true,
@@ -283,6 +298,13 @@ func DefaultMetricsConfig() MetricsConfig {
 // ResourceAttributeConfig provides common config for a particular resource attribute.
 type ResourceAttributeConfig struct {
 	Enabled bool `mapstructure:"enabled"`
+	// Experimental: MetricsInclude defines a list of filters for attribute values.
+	// If the list is not empty, only metrics with matching resource attribute values will be emitted.
+	MetricsInclude []filter.Config `mapstructure:"metrics_include"`
+	// Experimental: MetricsExclude defines a list of filters for attribute values.
+	// If the list is not empty, metrics with matching resource attribute values will not be emitted.
+	// MetricsInclude has higher priority than MetricsExclude.
+	MetricsExclude []filter.Config `mapstructure:"metrics_exclude"`
 
 	enabledSetByUser bool
 }
@@ -291,7 +313,7 @@ func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
-	err := parser.Unmarshal(rac, confmap.WithErrorUnused())
+	err := parser.Unmarshal(rac)
 	if err != nil {
 		return err
 	}

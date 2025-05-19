@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/otelcol/otelcoltest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azureblobreceiver/internal/metadata"
@@ -27,19 +28,52 @@ func TestLoadConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
-	assert.Equal(t, len(cfg.Receivers), 2)
+	assert.Len(t, cfg.Receivers, 2)
 
 	receiver := cfg.Receivers[component.NewID(metadata.Type)]
-	assert.Equal(t, factory.CreateDefaultConfig(), receiver)
+	assert.NoError(t, componenttest.CheckConfigStruct(receiver))
+	assert.Equal(
+		t,
+		&Config{
+			Authentication:   ConnectionStringAuth,
+			ConnectionString: goodConnectionString,
+			Logs:             LogsConfig{ContainerName: logsContainerName},
+			Traces:           TracesConfig{ContainerName: tracesContainerName},
+			Cloud:            defaultCloud,
+		},
+		receiver)
 
 	receiver = cfg.Receivers[component.NewIDWithName(metadata.Type, "2")].(*Config)
 	assert.NoError(t, componenttest.CheckConfigStruct(receiver))
 	assert.Equal(
 		t,
 		&Config{
-			ConnectionString: goodConnectionString,
-			Logs:             LogsConfig{ContainerName: logsContainerName},
-			Traces:           TracesConfig{ContainerName: tracesContainerName},
+			Authentication: ServicePrincipalAuth,
+			ServicePrincipal: ServicePrincipalConfig{
+				TenantID:     "mock-tenant-id",
+				ClientID:     "mock-client-id",
+				ClientSecret: "mock-client-secret",
+			},
+			StorageAccountURL: "https://accountName.blob.core.windows.net",
+			Logs:              LogsConfig{ContainerName: logsContainerName},
+			Traces:            TracesConfig{ContainerName: tracesContainerName},
+			Cloud:             defaultCloud,
 		},
 		receiver)
+}
+
+func TestMissingConnectionString(t *testing.T) {
+	factory := NewFactory()
+	cfg := factory.CreateDefaultConfig()
+	err := xconfmap.Validate(cfg)
+	assert.EqualError(t, err, `"ConnectionString" is not specified in config`)
+}
+
+func TestMissingServicePrincipalCredentials(t *testing.T) {
+	var err error
+	factory := NewFactory()
+	cfg := factory.CreateDefaultConfig()
+	cfg.(*Config).Authentication = ServicePrincipalAuth
+	err = xconfmap.Validate(cfg)
+	assert.EqualError(t, err, `"TenantID" is not specified in config; "ClientID" is not specified in config; "ClientSecret" is not specified in config; "StorageAccountURL" is not specified in config`)
 }

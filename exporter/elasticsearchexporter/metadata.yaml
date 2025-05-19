@@ -4,6 +4,15 @@ status:
   class: exporter
   stability:
     beta: [traces, logs]
-  distributions: [contrib, observiq]
+    development: [metrics, profiles]
+  distributions: [contrib]
   codeowners:
-    active: [JaredTan95]
+    active: [JaredTan95, carsonip, lahsivjar]
+
+tests:
+  config:
+    endpoints: [http://localhost:9200]
+    mapping:
+      # Set mapping mode to otel, since the default ("none") does
+      # not support all signals.
+      mode: otel

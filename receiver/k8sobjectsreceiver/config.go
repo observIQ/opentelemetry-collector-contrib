@@ -4,10 +4,12 @@
 package k8sobjectsreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sobjectsreceiver"
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/collector/component"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	apiWatch "k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -32,6 +34,14 @@ var modeMap = map[mode]bool{
 	WatchMode: true,
 }
 
+type ErrorMode string
+
+const (
+	PropagateError ErrorMode = "propagate"
+	IgnoreError    ErrorMode = "ignore"
+	SilentError    ErrorMode = "silent"
+)
+
 type K8sObjectsConfig struct {
 	Name             string               `mapstructure:"name"`
 	Group            string               `mapstructure:"group"`
@@ -49,7 +59,10 @@ type K8sObjectsConfig struct {
 type Config struct {
 	k8sconfig.APIConfig `mapstructure:",squash"`
 
-	Objects []*K8sObjectsConfig `mapstructure:"objects"`
+	Objects   []*K8sObjectsConfig `mapstructure:"objects"`
+	ErrorMode ErrorMode           `mapstructure:"error_mode"`
+
+	K8sLeaderElector *component.ID `mapstructure:"k8s_leader_elector"`
 
 	// For mocking purposes only.
 	makeDiscoveryClient func() (discovery.ServerResourcesInterface, error)
@@ -57,29 +70,13 @@ type Config struct {
 }
 
 func (c *Config) Validate() error {
-
-	validObjects, err := c.getValidObjects()
-	if err != nil {
-		return err
+	switch c.ErrorMode {
+	case PropagateError, IgnoreError, SilentError:
+	default:
+		return fmt.Errorf("invalid error_mode %q: must be one of 'propagate', 'ignore', or 'silent'", c.ErrorMode)
 	}
+
 	for _, object := range c.Objects {
-		gvrs, ok := validObjects[object.Name]
-		if !ok {
-			availableResource := make([]string, len(validObjects))
-			for k := range validObjects {
-				availableResource = append(availableResource, k)
-			}
-			return fmt.Errorf("resource %v not found. Valid resources are: %v", object.Name, availableResource)
-		}
-
-		gvr := gvrs[0]
-		for i := range gvrs {
-			if gvrs[i].Group == object.Group {
-				gvr = gvrs[i]
-				break
-			}
-		}
-
 		if object.Mode == "" {
 			object.Mode = defaultMode
 		} else if _, ok := modeMap[object.Mode]; !ok {
@@ -91,10 +88,8 @@ func (c *Config) Validate() error {
 		}
 
 		if object.Mode == PullMode && len(object.ExcludeWatchType) != 0 {
-			return fmt.Errorf("the Exclude config can only be used with watch mode")
+			return errors.New("the Exclude config can only be used with watch mode")
 		}
-
-		object.gvr = gvr
 	}
 	return nil
 }
@@ -149,7 +144,6 @@ func (c *Config) getValidObjects() (map[string][]*schema.GroupVersionResource, e
 				Resource: resource.Name,
 			})
 		}
-
 	}
 	return validObjects, nil
 }

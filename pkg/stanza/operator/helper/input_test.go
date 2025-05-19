@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/entry"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/testutil"
 )
 
 func TestInputConfigMissingBase(t *testing.T) {
@@ -20,9 +21,9 @@ func TestInputConfigMissingBase(t *testing.T) {
 		},
 	}
 
-	_, err := config.Build(testutil.Logger(t))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing required `type` field.")
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := config.Build(set)
+	require.ErrorContains(t, err, "missing required `type` field.")
 }
 
 func TestInputConfigMissingOutput(t *testing.T) {
@@ -35,7 +36,8 @@ func TestInputConfigMissingOutput(t *testing.T) {
 		},
 	}
 
-	_, err := config.Build(testutil.Logger(t))
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := config.Build(set)
 	require.NoError(t, err)
 }
 
@@ -50,17 +52,20 @@ func TestInputConfigValid(t *testing.T) {
 		},
 	}
 
-	_, err := config.Build(testutil.Logger(t))
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := config.Build(set)
 	require.NoError(t, err)
 }
 
 func TestInputOperatorCanProcess(t *testing.T) {
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	input := InputOperator{
 		WriterOperator: WriterOperator{
 			BasicOperator: BasicOperator{
-				OperatorID:    "test-id",
-				OperatorType:  "test-type",
-				SugaredLogger: testutil.Logger(t),
+				OperatorID:   "test-id",
+				OperatorType: "test-type",
+				set:          set,
 			},
 		},
 	}
@@ -68,12 +73,14 @@ func TestInputOperatorCanProcess(t *testing.T) {
 }
 
 func TestInputOperatorProcess(t *testing.T) {
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	input := InputOperator{
 		WriterOperator: WriterOperator{
 			BasicOperator: BasicOperator{
-				OperatorID:    "test-id",
-				OperatorType:  "test-type",
-				SugaredLogger: testutil.Logger(t),
+				OperatorID:   "test-id",
+				OperatorType: "test-type",
+				set:          set,
 			},
 		},
 	}
@@ -81,7 +88,7 @@ func TestInputOperatorProcess(t *testing.T) {
 	ctx := context.Background()
 	err := input.Process(ctx, entry)
 	require.Error(t, err)
-	require.Equal(t, err.Error(), "Operator can not process logs.")
+	require.Equal(t, "Operator can not process logs.", err.Error())
 }
 
 func TestInputOperatorNewEntry(t *testing.T) {
@@ -92,6 +99,9 @@ func TestInputOperatorNewEntry(t *testing.T) {
 
 	resourceExpr, err := ExprStringConfig("resource").Build()
 	require.NoError(t, err)
+
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 
 	input := InputOperator{
 		Attributer: Attributer{
@@ -106,9 +116,9 @@ func TestInputOperatorNewEntry(t *testing.T) {
 		},
 		WriterOperator: WriterOperator{
 			BasicOperator: BasicOperator{
-				OperatorID:    "test-id",
-				OperatorType:  "test-type",
-				SugaredLogger: testutil.Logger(t),
+				OperatorID:   "test-id",
+				OperatorType: "test-type",
+				set:          set,
 			},
 		},
 	}

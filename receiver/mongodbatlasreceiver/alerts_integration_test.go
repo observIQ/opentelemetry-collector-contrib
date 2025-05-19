@@ -34,11 +34,12 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/plogtest"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver/internal/metadata"
 )
 
 var testPayloads = []string{
-	"metric-threshold-closed.yaml",
-	"new-primary.yaml",
+	"metric-threshold-closed",
+	"new-primary",
 }
 
 const (
@@ -55,9 +56,9 @@ func TestAlertsReceiver(t *testing.T) {
 			_, testPort, err := net.SplitHostPort(testAddr)
 			require.NoError(t, err)
 
-			recv, err := fact.CreateLogsReceiver(
+			recv, err := fact.CreateLogs(
 				context.Background(),
-				receivertest.NewNopCreateSettings(),
+				receivertest.NewNopSettings(metadata.Type),
 				&Config{
 					Alerts: AlertConfig{
 						Enabled:  true,
@@ -77,10 +78,10 @@ func TestAlertsReceiver(t *testing.T) {
 				require.NoError(t, recv.Shutdown(context.Background()))
 			}()
 
-			payload, err := os.ReadFile(filepath.Join("testdata", "alerts", "sample-payloads", payloadName))
+			payload, err := os.ReadFile(filepath.Join("testdata", "alerts", "sample-payloads", payloadName+".json"))
 			require.NoError(t, err)
 
-			req, err := http.NewRequest("POST", fmt.Sprintf("http://localhost:%s", testPort), bytes.NewBuffer(payload))
+			req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%s", testPort), bytes.NewBuffer(payload))
 			require.NoError(t, err)
 
 			b64HMAC, err := calculateHMACb64(testSecret, payload)
@@ -93,7 +94,7 @@ func TestAlertsReceiver(t *testing.T) {
 
 			defer resp.Body.Close()
 
-			require.Equal(t, resp.StatusCode, http.StatusOK)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
 
 			require.Eventually(t, func() bool {
 				return sink.LogRecordCount() > 0
@@ -101,7 +102,7 @@ func TestAlertsReceiver(t *testing.T) {
 
 			logs := sink.AllLogs()[0]
 
-			expectedLogs, err := golden.ReadLogs(filepath.Join("testdata", "alerts", "golden", payloadName))
+			expectedLogs, err := golden.ReadLogs(filepath.Join("testdata", "alerts", "golden", payloadName+".yaml"))
 			require.NoError(t, err)
 
 			require.NoError(t, plogtest.CompareLogs(expectedLogs, logs, plogtest.IgnoreObservedTimestamp()))
@@ -110,6 +111,7 @@ func TestAlertsReceiver(t *testing.T) {
 }
 
 func TestAlertsReceiverTLS(t *testing.T) {
+	t.Skip("TODO: Cert files are invalid. See https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/32543")
 	for _, payloadName := range testPayloads {
 		t.Run(payloadName, func(t *testing.T) {
 			testAddr := testutil.GetAvailableLocalAddress(t)
@@ -119,17 +121,17 @@ func TestAlertsReceiverTLS(t *testing.T) {
 			_, testPort, err := net.SplitHostPort(testAddr)
 			require.NoError(t, err)
 
-			recv, err := fact.CreateLogsReceiver(
+			recv, err := fact.CreateLogs(
 				context.Background(),
-				receivertest.NewNopCreateSettings(),
+				receivertest.NewNopSettings(metadata.Type),
 				&Config{
 					Alerts: AlertConfig{
 						Enabled:  true,
 						Secret:   testSecret,
 						Mode:     alertModeListen,
 						Endpoint: testAddr,
-						TLS: &configtls.TLSServerSetting{
-							TLSSetting: configtls.TLSSetting{
+						TLS: &configtls.ServerConfig{
+							Config: configtls.Config{
 								CertFile: filepath.Join("testdata", "alerts", "cert", "server.crt"),
 								KeyFile:  filepath.Join("testdata", "alerts", "cert", "server.key"),
 							},
@@ -147,10 +149,10 @@ func TestAlertsReceiverTLS(t *testing.T) {
 				require.NoError(t, recv.Shutdown(context.Background()))
 			}()
 
-			payload, err := os.ReadFile(filepath.Join("testdata", "alerts", "sample-payloads", payloadName))
+			payload, err := os.ReadFile(filepath.Join("testdata", "alerts", "sample-payloads", payloadName+".json"))
 			require.NoError(t, err)
 
-			req, err := http.NewRequest("POST", fmt.Sprintf("https://localhost:%s", testPort), bytes.NewBuffer(payload))
+			req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("https://localhost:%s", testPort), bytes.NewBuffer(payload))
 			require.NoError(t, err)
 
 			b64HMAC, err := calculateHMACb64(testSecret, payload)
@@ -166,7 +168,7 @@ func TestAlertsReceiverTLS(t *testing.T) {
 
 			defer resp.Body.Close()
 
-			require.Equal(t, resp.StatusCode, http.StatusOK)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
 
 			require.Eventually(t, func() bool {
 				return sink.LogRecordCount() > 0
@@ -187,7 +189,7 @@ func TestAtlasPoll(t *testing.T) {
 
 	alerts := []mongodbatlas.Alert{}
 	for _, pl := range testPayloads {
-		payloadFile, err := os.ReadFile(filepath.Join("testdata", "alerts", "sample-payloads", pl))
+		payloadFile, err := os.ReadFile(filepath.Join("testdata", "alerts", "sample-payloads", pl+".json"))
 		require.NoError(t, err)
 
 		alert := mongodbatlas.Alert{}
@@ -207,9 +209,9 @@ func TestAtlasPoll(t *testing.T) {
 	sink := &consumertest.LogsSink{}
 	fact := NewFactory()
 
-	recv, err := fact.CreateLogsReceiver(
+	recv, err := fact.CreateLogs(
 		context.Background(),
-		receivertest.NewNopCreateSettings(),
+		receivertest.NewNopSettings(metadata.Type),
 		&Config{
 			Alerts: AlertConfig{
 				Enabled: true,
@@ -243,7 +245,7 @@ func TestAtlasPoll(t *testing.T) {
 	require.NoError(t, err)
 
 	logs := sink.AllLogs()[0]
-	expectedLogs, err := golden.ReadLogs(filepath.Join("testdata", "alerts", "golden", "retrieved-logs.json"))
+	expectedLogs, err := golden.ReadLogs(filepath.Join("testdata", "alerts", "golden", "retrieved-logs.yaml"))
 	require.NoError(t, err)
 	require.NoError(t, plogtest.CompareLogs(expectedLogs, logs, plogtest.IgnoreObservedTimestamp()))
 }
@@ -277,7 +279,7 @@ func clientWithCert(path string) (*http.Client, error) {
 	roots := x509.NewCertPool()
 	ok := roots.AppendCertsFromPEM(b)
 	if !ok {
-		return nil, errors.New("failed to append certficate as root certificate")
+		return nil, errors.New("failed to append certificate as root certificate")
 	}
 
 	return &http.Client{

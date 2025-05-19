@@ -14,12 +14,12 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 )
 
-func TestAddSingleGaugeNumberDataPoint(t *testing.T) {
+func TestPrometheusConverter_addGaugeNumberDataPoints(t *testing.T) {
 	ts := uint64(time.Now().UnixNano())
 	tests := []struct {
 		name   string
 		metric func() pmetric.Metric
-		want   func() map[string]*prompb.TimeSeries
+		want   func() map[uint64]*prompb.TimeSeries
 	}{
 		{
 			name: "gauge",
@@ -30,18 +30,19 @@ func TestAddSingleGaugeNumberDataPoint(t *testing.T) {
 					1, ts,
 				)
 			},
-			want: func() map[string]*prompb.TimeSeries {
+			want: func() map[uint64]*prompb.TimeSeries {
 				labels := []prompb.Label{
 					{Name: model.MetricNameLabel, Value: "test"},
 				}
-				return map[string]*prompb.TimeSeries{
-					timeSeriesSignature(pmetric.MetricTypeGauge.String(), &labels): {
+				return map[uint64]*prompb.TimeSeries{
+					timeSeriesSignature(labels): {
 						Labels: labels,
 						Samples: []prompb.Sample{
 							{
 								Value:     1,
 								Timestamp: convertTimeStamp(pcommon.Timestamp(ts)),
-							}},
+							},
+						},
 					},
 				}
 			},
@@ -50,29 +51,27 @@ func TestAddSingleGaugeNumberDataPoint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			metric := tt.metric()
+			converter := newPrometheusConverter()
 
-			gotSeries := make(map[string]*prompb.TimeSeries)
+			converter.addGaugeNumberDataPoints(
+				metric.Gauge().DataPoints(),
+				pcommon.NewResource(),
+				Settings{},
+				metric.Name(),
+			)
 
-			for x := 0; x < metric.Gauge().DataPoints().Len(); x++ {
-				addSingleGaugeNumberDataPoint(
-					metric.Gauge().DataPoints().At(x),
-					pcommon.NewResource(),
-					metric,
-					Settings{},
-					gotSeries,
-				)
-			}
-			assert.Equal(t, tt.want(), gotSeries)
+			assert.Equal(t, tt.want(), converter.unique)
+			assert.Empty(t, converter.conflicts)
 		})
 	}
 }
 
-func TestAddSingleSumNumberDataPoint(t *testing.T) {
+func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 	ts := pcommon.Timestamp(time.Now().UnixNano())
 	tests := []struct {
 		name   string
 		metric func() pmetric.Metric
-		want   func() map[string]*prompb.TimeSeries
+		want   func() map[uint64]*prompb.TimeSeries
 	}{
 		{
 			name: "sum",
@@ -84,18 +83,19 @@ func TestAddSingleSumNumberDataPoint(t *testing.T) {
 					1, uint64(ts.AsTime().UnixNano()),
 				)
 			},
-			want: func() map[string]*prompb.TimeSeries {
+			want: func() map[uint64]*prompb.TimeSeries {
 				labels := []prompb.Label{
 					{Name: model.MetricNameLabel, Value: "test"},
 				}
-				return map[string]*prompb.TimeSeries{
-					timeSeriesSignature(pmetric.MetricTypeSum.String(), &labels): {
+				return map[uint64]*prompb.TimeSeries{
+					timeSeriesSignature(labels): {
 						Labels: labels,
 						Samples: []prompb.Sample{
 							{
 								Value:     1,
 								Timestamp: convertTimeStamp(ts),
-							}},
+							},
+						},
 					},
 				}
 			},
@@ -112,12 +112,12 @@ func TestAddSingleSumNumberDataPoint(t *testing.T) {
 				m.Sum().DataPoints().At(0).Exemplars().AppendEmpty().SetDoubleValue(2)
 				return m
 			},
-			want: func() map[string]*prompb.TimeSeries {
+			want: func() map[uint64]*prompb.TimeSeries {
 				labels := []prompb.Label{
 					{Name: model.MetricNameLabel, Value: "test"},
 				}
-				return map[string]*prompb.TimeSeries{
-					timeSeriesSignature(pmetric.MetricTypeSum.String(), &labels): {
+				return map[uint64]*prompb.TimeSeries{
+					timeSeriesSignature(labels): {
 						Labels: labels,
 						Samples: []prompb.Sample{{
 							Value:     1,
@@ -145,24 +145,15 @@ func TestAddSingleSumNumberDataPoint(t *testing.T) {
 
 				return metric
 			},
-			want: func() map[string]*prompb.TimeSeries {
+			want: func() map[uint64]*prompb.TimeSeries {
 				labels := []prompb.Label{
 					{Name: model.MetricNameLabel, Value: "test_sum"},
 				}
-				createdLabels := []prompb.Label{
-					{Name: model.MetricNameLabel, Value: "test_sum" + createdSuffix},
-				}
-				return map[string]*prompb.TimeSeries{
-					timeSeriesSignature(pmetric.MetricTypeSum.String(), &labels): {
+				return map[uint64]*prompb.TimeSeries{
+					timeSeriesSignature(labels): {
 						Labels: labels,
 						Samples: []prompb.Sample{
 							{Value: 1, Timestamp: convertTimeStamp(ts)},
-						},
-					},
-					timeSeriesSignature(pmetric.MetricTypeSum.String(), &createdLabels): {
-						Labels: createdLabels,
-						Samples: []prompb.Sample{
-							{Value: float64(convertTimeStamp(ts)), Timestamp: convertTimeStamp(ts)},
 						},
 					},
 				}
@@ -181,12 +172,12 @@ func TestAddSingleSumNumberDataPoint(t *testing.T) {
 
 				return metric
 			},
-			want: func() map[string]*prompb.TimeSeries {
+			want: func() map[uint64]*prompb.TimeSeries {
 				labels := []prompb.Label{
 					{Name: model.MetricNameLabel, Value: "test_sum"},
 				}
-				return map[string]*prompb.TimeSeries{
-					timeSeriesSignature(pmetric.MetricTypeSum.String(), &labels): {
+				return map[uint64]*prompb.TimeSeries{
+					timeSeriesSignature(labels): {
 						Labels: labels,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
@@ -208,12 +199,12 @@ func TestAddSingleSumNumberDataPoint(t *testing.T) {
 
 				return metric
 			},
-			want: func() map[string]*prompb.TimeSeries {
+			want: func() map[uint64]*prompb.TimeSeries {
 				labels := []prompb.Label{
 					{Name: model.MetricNameLabel, Value: "test_sum"},
 				}
-				return map[string]*prompb.TimeSeries{
-					timeSeriesSignature(pmetric.MetricTypeSum.String(), &labels): {
+				return map[uint64]*prompb.TimeSeries{
+					timeSeriesSignature(labels): {
 						Labels: labels,
 						Samples: []prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
@@ -226,19 +217,18 @@ func TestAddSingleSumNumberDataPoint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			metric := tt.metric()
+			converter := newPrometheusConverter()
 
-			got := make(map[string]*prompb.TimeSeries)
+			converter.addSumNumberDataPoints(
+				metric.Sum().DataPoints(),
+				pcommon.NewResource(),
+				metric,
+				Settings{},
+				metric.Name(),
+			)
 
-			for x := 0; x < metric.Sum().DataPoints().Len(); x++ {
-				addSingleSumNumberDataPoint(
-					metric.Sum().DataPoints().At(x),
-					pcommon.NewResource(),
-					metric,
-					Settings{ExportCreatedMetric: true},
-					got,
-				)
-			}
-			assert.Equal(t, tt.want(), got)
+			assert.Equal(t, tt.want(), converter.unique)
+			assert.Empty(t, converter.conflicts)
 		})
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/testbed/datareceivers"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/testbed/datasenders"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/testbed/testbed"
@@ -23,10 +24,13 @@ import (
 var (
 	contribPerfResultsSummary = &testbed.PerformanceResults{}
 	resourceCheckPeriod, _    = time.ParseDuration("1m")
-	processorsConfig          = map[string]string{
-		"batch": `
+	processorsConfig          = []scenarios.ProcessorNameAndConfigBody{
+		{
+			Name: "batch",
+			Body: `
   batch:
 `,
+		},
 	}
 )
 
@@ -38,8 +42,8 @@ func TestMain(m *testing.M) {
 func TestStabilityTracesOpenCensus(t *testing.T) {
 	scenarios.Scenario10kItemsPerSecond(
 		t,
-		datasenders.NewOCTraceDataSender(testbed.DefaultHost, testbed.GetAvailablePort(t)),
-		datareceivers.NewOCDataReceiver(testbed.GetAvailablePort(t)),
+		datasenders.NewOCTraceDataSender(testbed.DefaultHost, testutil.GetAvailablePort(t)),
+		datareceivers.NewOCDataReceiver(testutil.GetAvailablePort(t)),
 		testbed.ResourceSpec{
 			ExpectedMaxCPU:      39,
 			ExpectedMaxRAM:      90,
@@ -48,14 +52,15 @@ func TestStabilityTracesOpenCensus(t *testing.T) {
 		contribPerfResultsSummary,
 		processorsConfig,
 		nil,
+		nil,
 	)
 }
 
 func TestStabilityTracesSAPM(t *testing.T) {
 	scenarios.Scenario10kItemsPerSecond(
 		t,
-		datasenders.NewSapmDataSender(testbed.GetAvailablePort(t), ""),
-		datareceivers.NewSapmDataReceiver(testbed.GetAvailablePort(t), ""),
+		datasenders.NewSapmDataSender(testutil.GetAvailablePort(t), ""),
+		datareceivers.NewSapmDataReceiver(testutil.GetAvailablePort(t), ""),
 		testbed.ResourceSpec{
 			ExpectedMaxCPU:      40,
 			ExpectedMaxRAM:      100,
@@ -64,14 +69,15 @@ func TestStabilityTracesSAPM(t *testing.T) {
 		contribPerfResultsSummary,
 		processorsConfig,
 		nil,
+		nil,
 	)
 }
 
 func TestStabilityTracesOTLP(t *testing.T) {
 	scenarios.Scenario10kItemsPerSecond(
 		t,
-		testbed.NewOTLPTraceDataSender(testbed.DefaultHost, testbed.GetAvailablePort(t)),
-		testbed.NewOTLPDataReceiver(testbed.GetAvailablePort(t)),
+		testbed.NewOTLPTraceDataSender(testbed.DefaultHost, testutil.GetAvailablePort(t)),
+		testbed.NewOTLPDataReceiver(testutil.GetAvailablePort(t)),
 		testbed.ResourceSpec{
 			ExpectedMaxCPU:      20,
 			ExpectedMaxRAM:      80,
@@ -80,14 +86,15 @@ func TestStabilityTracesOTLP(t *testing.T) {
 		contribPerfResultsSummary,
 		processorsConfig,
 		nil,
+		nil,
 	)
 }
 
 func TestStabilityTracesJaegerGRPC(t *testing.T) {
 	scenarios.Scenario10kItemsPerSecond(
 		t,
-		datasenders.NewJaegerGRPCDataSender(testbed.DefaultHost, testbed.GetAvailablePort(t)),
-		datareceivers.NewJaegerDataReceiver(testbed.GetAvailablePort(t)),
+		datasenders.NewJaegerGRPCDataSender(testbed.DefaultHost, testutil.GetAvailablePort(t)),
+		datareceivers.NewJaegerDataReceiver(testutil.GetAvailablePort(t)),
 		testbed.ResourceSpec{
 			ExpectedMaxCPU:      40,
 			ExpectedMaxRAM:      90,
@@ -96,14 +103,15 @@ func TestStabilityTracesJaegerGRPC(t *testing.T) {
 		contribPerfResultsSummary,
 		processorsConfig,
 		nil,
+		nil,
 	)
 }
 
 func TestStabilityTracesZipkin(t *testing.T) {
 	scenarios.Scenario10kItemsPerSecond(
 		t,
-		datasenders.NewZipkinDataSender(testbed.DefaultHost, testbed.GetAvailablePort(t)),
-		datareceivers.NewZipkinDataReceiver(testbed.GetAvailablePort(t)),
+		datasenders.NewZipkinDataSender(testbed.DefaultHost, testutil.GetAvailablePort(t)),
+		datareceivers.NewZipkinDataReceiver(testutil.GetAvailablePort(t)),
 		testbed.ResourceSpec{
 			ExpectedMaxCPU:      80,
 			ExpectedMaxRAM:      110,
@@ -111,6 +119,7 @@ func TestStabilityTracesZipkin(t *testing.T) {
 		},
 		contribPerfResultsSummary,
 		processorsConfig,
+		nil,
 		nil,
 	)
 }
@@ -127,6 +136,7 @@ func TestStabilityTracesDatadog(t *testing.T) {
 		},
 		contribPerfResultsSummary,
 		processorsConfig,
+		nil,
 		nil,
 	)
 }

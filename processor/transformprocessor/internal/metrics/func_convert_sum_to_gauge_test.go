@@ -83,12 +83,12 @@ func Test_convertSumToGauge(t *testing.T) {
 			metric := pmetric.NewMetric()
 			tt.input.CopyTo(metric)
 
-			ctx := ottlmetric.NewTransformContext(metric, pmetric.NewMetricSlice(), pcommon.NewInstrumentationScope(), pcommon.NewResource())
+			ctx := ottlmetric.NewTransformContext(metric, pmetric.NewMetricSlice(), pcommon.NewInstrumentationScope(), pcommon.NewResource(), pmetric.NewScopeMetrics(), pmetric.NewResourceMetrics())
 
 			exprFunc, _ := convertSumToGauge()
 
 			_, err := exprFunc(nil, ctx)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 
 			expected := pmetric.NewMetric()
 			tt.want(expected)

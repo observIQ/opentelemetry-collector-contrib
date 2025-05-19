@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	semconv "go.opentelemetry.io/collector/semconv/v1.8.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
 	"go.uber.org/zap"
 )
 
@@ -25,10 +25,12 @@ var (
 	bounds0  = []float64{1, 2, 4}
 	percent0 = []float64{10, 50, 90}
 
-	sum1       = "sum1"
-	gauge1     = "gauge1"
-	histogram1 = "histogram1"
-	summary1   = "summary1"
+	sum1                  = "sum1"
+	sum2                  = "sum2"
+	gauge1                = "gauge1"
+	histogram1            = "histogram1"
+	summary1              = "summary1"
+	exponentialHistogram1 = "exponentialHistogram1"
 
 	k1v1k2v2 = []*kv{
 		{"k1", "v1"},
@@ -97,6 +99,37 @@ func TestSum(t *testing.T) {
 			description: "Sum: round 5 - instance adjusted based on round 4",
 			metrics:     metrics(sumMetric(sum1, doublePoint(k1v1k2v2, t5, t5, 72))),
 			adjusted:    metrics(sumMetric(sum1, doublePoint(k1v1k2v2, t3, t5, 72))),
+		},
+	}
+	runScript(t, NewInitialPointAdjuster(zap.NewNop(), time.Minute, true), "job", "0", script)
+}
+
+func TestSumWithDifferentResources(t *testing.T) {
+	script := []*metricsAdjusterTest{
+		{
+			description: "Sum: round 1 - initial instance, start time is established",
+			metrics:     metricsFromResourceMetrics(resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t1, t1, 44))), resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t1, t1, 44)))),
+			adjusted:    metricsFromResourceMetrics(resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t1, t1, 44))), resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t1, t1, 44)))),
+		},
+		{
+			description: "Sum: round 2 - instance adjusted based on round 1 (metrics in different order)",
+			metrics:     metricsFromResourceMetrics(resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t2, t2, 66))), resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t2, t2, 66)))),
+			adjusted:    metricsFromResourceMetrics(resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t1, t2, 66))), resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t1, t2, 66)))),
+		},
+		{
+			description: "Sum: round 3 - instance reset (value less than previous value), start time is reset",
+			metrics:     metricsFromResourceMetrics(resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t3, t3, 55))), resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t3, t3, 55)))),
+			adjusted:    metricsFromResourceMetrics(resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t3, t3, 55))), resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t3, t3, 55)))),
+		},
+		{
+			description: "Sum: round 4 - instance adjusted based on round 3",
+			metrics:     metricsFromResourceMetrics(resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t4, t4, 72))), resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t4, t4, 72)))),
+			adjusted:    metricsFromResourceMetrics(resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t3, t4, 72))), resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t3, t4, 72)))),
+		},
+		{
+			description: "Sum: round 5 - instance adjusted based on round 4, sum2 metric resets but sum1 doesn't",
+			metrics:     metricsFromResourceMetrics(resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t5, t5, 72))), resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t5, t5, 10)))),
+			adjusted:    metricsFromResourceMetrics(resourceMetrics("job1", "instance1", sumMetric(sum1, doublePoint(k1v1k2v2, t3, t5, 72))), resourceMetrics("job2", "instance2", sumMetric(sum2, doublePoint(k1v1k2v2, t5, t5, 10)))),
 		},
 	}
 	runScript(t, NewInitialPointAdjuster(zap.NewNop(), time.Minute, true), "job", "0", script)
@@ -240,6 +273,67 @@ func TestHistogramFlagNoRecordedValueFirstObservation(t *testing.T) {
 			description: "Histogram: round 2 - instance unchanged",
 			metrics:     metrics(histogramMetric(histogram1, histogramPointNoValue(k1v1k2v2, tUnknown, t2))),
 			adjusted:    metrics(histogramMetric(histogram1, histogramPointNoValue(k1v1k2v2, tUnknown, t2))),
+		},
+	}
+
+	runScript(t, NewInitialPointAdjuster(zap.NewNop(), time.Minute, true), "job", "0", script)
+}
+
+// In TestExponentHistogram we exclude negative buckets on purpose as they are
+// not considered the main use case - response times that are most commonly
+// observed are never negative. Negative buckets would make the Sum() non
+// monotonic and cause unexpected resets.
+func TestExponentialHistogram(t *testing.T) {
+	script := []*metricsAdjusterTest{
+		{
+			description: "Exponential Histogram: round 1 - initial instance, start time is established",
+			metrics:     metrics(exponentialHistogramMetric(exponentialHistogram1, exponentialHistogramPoint(k1v1k2v2, t1, t1, 3, 1, 0, []uint64{}, -2, []uint64{4, 2, 3, 7}))),
+			adjusted:    metrics(exponentialHistogramMetric(exponentialHistogram1, exponentialHistogramPoint(k1v1k2v2, t1, t1, 3, 1, 0, []uint64{}, -2, []uint64{4, 2, 3, 7}))),
+		}, {
+			description: "Exponential Histogram: round 2 - instance adjusted based on round 1",
+			metrics:     metrics(exponentialHistogramMetric(exponentialHistogram1, exponentialHistogramPoint(k1v1k2v2, t2, t2, 3, 1, 0, []uint64{}, -2, []uint64{6, 2, 3, 7}))),
+			adjusted:    metrics(exponentialHistogramMetric(exponentialHistogram1, exponentialHistogramPoint(k1v1k2v2, t1, t2, 3, 1, 0, []uint64{}, -2, []uint64{6, 2, 3, 7}))),
+		}, {
+			description: "Exponential Histogram: round 3 - instance reset (value less than previous value), start time is reset",
+			metrics:     metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPoint(k1v1k2v2, t3, t3, 3, 1, 0, []uint64{}, -2, []uint64{5, 3, 2, 7}))),
+			adjusted:    metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPoint(k1v1k2v2, t3, t3, 3, 1, 0, []uint64{}, -2, []uint64{5, 3, 2, 7}))),
+		}, {
+			description: "Exponential Histogram: round 4 - instance adjusted based on round 3",
+			metrics:     metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPoint(k1v1k2v2, t4, t4, 3, 1, 0, []uint64{}, -2, []uint64{7, 4, 2, 12}))),
+			adjusted:    metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPoint(k1v1k2v2, t3, t4, 3, 1, 0, []uint64{}, -2, []uint64{7, 4, 2, 12}))),
+		},
+	}
+	runScript(t, NewInitialPointAdjuster(zap.NewNop(), time.Minute, true), "job", "0", script)
+}
+
+func TestExponentialHistogramFlagNoRecordedValue(t *testing.T) {
+	script := []*metricsAdjusterTest{
+		{
+			description: "Histogram: round 1 - initial instance, start time is established",
+			metrics:     metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPoint(k1v1k2v2, t1, t1, 0, 2, 2, []uint64{7, 4, 2, 12}, 3, []uint64{}))),
+			adjusted:    metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPoint(k1v1k2v2, t1, t1, 0, 2, 2, []uint64{7, 4, 2, 12}, 3, []uint64{}))),
+		},
+		{
+			description: "Histogram: round 2 - instance adjusted based on round 1",
+			metrics:     metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPointNoValue(k1v1k2v2, tUnknown, t2))),
+			adjusted:    metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPointNoValue(k1v1k2v2, t1, t2))),
+		},
+	}
+
+	runScript(t, NewInitialPointAdjuster(zap.NewNop(), time.Minute, true), "job", "0", script)
+}
+
+func TestExponentialHistogramFlagNoRecordedValueFirstObservation(t *testing.T) {
+	script := []*metricsAdjusterTest{
+		{
+			description: "Histogram: round 1 - initial instance, start time is unknown",
+			metrics:     metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPointNoValue(k1v1k2v2, tUnknown, t1))),
+			adjusted:    metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPointNoValue(k1v1k2v2, tUnknown, t1))),
+		},
+		{
+			description: "Histogram: round 2 - instance unchanged",
+			metrics:     metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPointNoValue(k1v1k2v2, tUnknown, t2))),
+			adjusted:    metrics(exponentialHistogramMetric(histogram1, exponentialHistogramPointNoValue(k1v1k2v2, tUnknown, t2))),
 		},
 	}
 
@@ -648,15 +742,33 @@ func runScript(t *testing.T, ma MetricsAdjuster, job, instance string, tests []*
 		t.Run(test.description, func(t *testing.T) {
 			adjusted := pmetric.NewMetrics()
 			test.metrics.CopyTo(adjusted)
-			// Add the instance/job to the input metrics.
-			adjusted.ResourceMetrics().At(0).Resource().Attributes().PutStr(semconv.AttributeServiceInstanceID, instance)
-			adjusted.ResourceMetrics().At(0).Resource().Attributes().PutStr(semconv.AttributeServiceName, job)
+			// Add the instance/job to the input metrics if they aren't already present.
+			for i := 0; i < adjusted.ResourceMetrics().Len(); i++ {
+				rm := adjusted.ResourceMetrics().At(i)
+				_, found := rm.Resource().Attributes().Get(string(semconv.ServiceNameKey))
+				if !found {
+					rm.Resource().Attributes().PutStr(string(semconv.ServiceNameKey), job)
+				}
+				_, found = rm.Resource().Attributes().Get(string(semconv.ServiceInstanceIDKey))
+				if !found {
+					rm.Resource().Attributes().PutStr(string(semconv.ServiceInstanceIDKey), instance)
+				}
+			}
 			assert.NoError(t, ma.AdjustMetrics(adjusted))
 
-			// Add the instance/job to the expected metrics as well.
-			test.adjusted.ResourceMetrics().At(0).Resource().Attributes().PutStr(semconv.AttributeServiceInstanceID, instance)
-			test.adjusted.ResourceMetrics().At(0).Resource().Attributes().PutStr(semconv.AttributeServiceName, job)
-			assert.EqualValues(t, test.adjusted, adjusted)
+			// Add the instance/job to the expected metrics as well if they aren't already present.
+			for i := 0; i < test.adjusted.ResourceMetrics().Len(); i++ {
+				rm := test.adjusted.ResourceMetrics().At(i)
+				_, found := rm.Resource().Attributes().Get(string(semconv.ServiceNameKey))
+				if !found {
+					rm.Resource().Attributes().PutStr(string(semconv.ServiceNameKey), job)
+				}
+				_, found = rm.Resource().Attributes().Get(string(semconv.ServiceInstanceIDKey))
+				if !found {
+					rm.Resource().Attributes().PutStr(string(semconv.ServiceInstanceIDKey), instance)
+				}
+			}
+			assert.Equal(t, test.adjusted, adjusted)
 		})
 	}
 }

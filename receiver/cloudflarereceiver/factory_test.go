@@ -16,15 +16,15 @@ import (
 func TestType(t *testing.T) {
 	factory := NewFactory()
 	ft := factory.Type()
-	require.EqualValues(t, metadata.Type, ft)
+	require.Equal(t, metadata.Type, ft)
 }
 
-func TestCreateLogsReceiver(t *testing.T) {
+func TestCreateLogs(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 
-	_, err := NewFactory().CreateLogsReceiver(
+	_, err := NewFactory().CreateLogs(
 		context.Background(),
-		receivertest.NewNopCreateSettings(),
+		receivertest.NewNopSettings(metadata.Type),
 		cfg,
 		nil,
 	)

@@ -55,6 +55,18 @@ func Test_splunkV2ToMetricsData(t *testing.T) {
 			hecConfig:       defaultTestingHecConfig,
 		},
 		{
+			name: "int_gauge_v7",
+			splunkDataPoint: func() *splunk.Event {
+				pt := buildDefaultSplunkDataPt()
+				delete(pt.Fields, "metric_name:single")
+				pt.Fields["metric_name"] = "single"
+				pt.Fields["_value"] = int64Ptr(13)
+				return pt
+			}(),
+			wantMetricsData: buildDefaultMetricsData(nanos),
+			hecConfig:       defaultTestingHecConfig,
+		},
+		{
 			name: "multiple",
 			splunkDataPoint: func() *splunk.Event {
 				pt := buildDefaultSplunkDataPt()
@@ -155,12 +167,13 @@ func Test_splunkV2ToMetricsData(t *testing.T) {
 				intPt.SetTimestamp(pcommon.Timestamp(nanos))
 				return metrics
 			}(),
-			hecConfig: &Config{HecToOtelAttrs: splunk.HecToOtelAttrs{
-				Source:     "mysource",
-				SourceType: "mysourcetype",
-				Index:      "myindex",
-				Host:       "myhost",
-			},
+			hecConfig: &Config{
+				HecToOtelAttrs: splunk.HecToOtelAttrs{
+					Source:     "mysource",
+					SourceType: "mysourcetype",
+					Index:      "myindex",
+					Host:       "myhost",
+				},
 			},
 		},
 		{
@@ -294,7 +307,7 @@ func Test_splunkV2ToMetricsData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			md, numDroppedTimeseries := splunkHecToMetricsData(zap.NewNop(), []*splunk.Event{tt.splunkDataPoint}, func(resource pcommon.Resource) {}, tt.hecConfig)
+			md, numDroppedTimeseries := splunkHecToMetricsData(zap.NewNop(), []*splunk.Event{tt.splunkDataPoint}, func(_ pcommon.Resource) {}, tt.hecConfig)
 			assert.Equal(t, tt.wantDroppedTimeseries, numDroppedTimeseries)
 			assert.NoError(t, pmetrictest.CompareMetrics(tt.wantMetricsData, md, pmetrictest.IgnoreMetricsOrder()))
 		})
@@ -441,9 +454,61 @@ func TestGroupMetricsByResource(t *testing.T) {
 		dataPt.SetTimestamp(pcommon.Timestamp(nanoseconds))
 		dataPt.Attributes().PutStr("field", "value2-1")
 	}
-	md, numDroppedTimeseries := splunkHecToMetricsData(zap.NewNop(), events, func(resource pcommon.Resource) {}, defaultTestingHecConfig)
+	md, numDroppedTimeseries := splunkHecToMetricsData(zap.NewNop(), events, func(_ pcommon.Resource) {}, defaultTestingHecConfig)
 	assert.Equal(t, 0, numDroppedTimeseries)
-	assert.EqualValues(t, metrics, md)
+	assert.Equal(t, metrics, md)
+}
+
+func TestConvertTimestamp(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		time     float64
+		expected pcommon.Timestamp
+	}{
+		{
+			name: "nanoseconds",
+			time: 1234567890123456789,
+			// not exact because of floating point accuracy
+			expected: pcommon.Timestamp(1234567890123456768),
+		},
+		{
+			name:     "microseconds",
+			time:     1234567890123456,
+			expected: pcommon.Timestamp(1234567890123456000),
+		},
+		{
+			name:     "milliseconds",
+			time:     1234567890456,
+			expected: pcommon.Timestamp(1234567890456000000),
+		},
+		{
+			name:     "seconds",
+			time:     1234567890,
+			expected: pcommon.Timestamp(1234567890000000000),
+		},
+		{
+			name: "dot nanoseconds",
+			time: 1234567890.123456789,
+			// not exact because of floating point accuracy
+			expected: pcommon.Timestamp(1234567890123456768),
+		},
+		{
+			name:     "dot microseconds",
+			time:     1234567890.123456,
+			expected: pcommon.Timestamp(1234567890123456000),
+		},
+		{
+			name:     "dot milliseconds",
+			time:     1234567890.456,
+			expected: pcommon.Timestamp(1234567890456000000),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, convertTimestamp(tt.time))
+		})
+	}
 }
 
 func buildDefaultMetricsData(time int64) pmetric.Metrics {

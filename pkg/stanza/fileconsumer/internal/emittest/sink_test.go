@@ -11,21 +11,23 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/emit"
 )
 
 func TestNextToken(t *testing.T) {
 	s, testCalls := sinkTest(t)
 	for _, c := range testCalls {
 		token := s.NextToken(t)
-		assert.Equal(t, c.token, token)
+		assert.Equal(t, c.Body, token)
 	}
 }
 
 func TestNextTokenTimeout(t *testing.T) {
-	s, testCalls := sinkTest(t, WithTimeout(10*time.Millisecond))
+	s, testCalls := sinkTest(t, WithTimeout(30*time.Millisecond))
 	for _, c := range testCalls {
 		token := s.NextToken(t)
-		assert.Equal(t, c.token, token)
+		assert.Equal(t, c.Body, token)
 	}
 
 	// Create a new T so we can expect it to fail without failing the overall test.
@@ -38,17 +40,17 @@ func TestNextTokens(t *testing.T) {
 	s, testCalls := sinkTest(t)
 	for i := 0; i < 5; i++ {
 		tokens := s.NextTokens(t, 2)
-		assert.Equal(t, testCalls[2*i].token, tokens[0])
-		assert.Equal(t, testCalls[2*i+1].token, tokens[1])
+		assert.Equal(t, testCalls[2*i].Body, tokens[0])
+		assert.Equal(t, testCalls[2*i+1].Body, tokens[1])
 	}
 }
 
 func TestNextTokensTimeout(t *testing.T) {
-	s, testCalls := sinkTest(t, WithTimeout(10*time.Millisecond))
+	s, testCalls := sinkTest(t, WithTimeout(30*time.Millisecond))
 	for i := 0; i < 5; i++ {
 		tokens := s.NextTokens(t, 2)
-		assert.Equal(t, testCalls[2*i].token, tokens[0])
-		assert.Equal(t, testCalls[2*i+1].token, tokens[1])
+		assert.Equal(t, testCalls[2*i].Body, tokens[0])
+		assert.Equal(t, testCalls[2*i+1].Body, tokens[1])
 	}
 
 	// Create a new T so we can expect it to fail without failing the overall test.
@@ -61,17 +63,17 @@ func TestNextCall(t *testing.T) {
 	s, testCalls := sinkTest(t)
 	for _, c := range testCalls {
 		token, attributes := s.NextCall(t)
-		require.Equal(t, c.token, token)
-		require.Equal(t, c.attrs, attributes)
+		require.Equal(t, c.Body, token)
+		require.Equal(t, c.Attributes, attributes)
 	}
 }
 
 func TestNextCallTimeout(t *testing.T) {
-	s, testCalls := sinkTest(t, WithTimeout(10*time.Millisecond))
+	s, testCalls := sinkTest(t, WithTimeout(30*time.Millisecond))
 	for _, c := range testCalls {
 		token, attributes := s.NextCall(t)
-		require.Equal(t, c.token, token)
-		require.Equal(t, c.attrs, attributes)
+		require.Equal(t, c.Body, token)
+		require.Equal(t, c.Attributes, attributes)
 	}
 
 	// Create a new T so we can expect it to fail without failing the overall test.
@@ -83,14 +85,14 @@ func TestNextCallTimeout(t *testing.T) {
 func TestExpectToken(t *testing.T) {
 	s, testCalls := sinkTest(t)
 	for _, c := range testCalls {
-		s.ExpectToken(t, c.token)
+		s.ExpectToken(t, c.Body)
 	}
 }
 
 func TestExpectTokenTimeout(t *testing.T) {
-	s, testCalls := sinkTest(t, WithTimeout(10*time.Millisecond))
+	s, testCalls := sinkTest(t, WithTimeout(30*time.Millisecond))
 	for _, c := range testCalls {
-		s.ExpectToken(t, c.token)
+		s.ExpectToken(t, c.Body)
 	}
 
 	// Create a new T so we can expect it to fail without failing the overall test.
@@ -102,14 +104,14 @@ func TestExpectTokenTimeout(t *testing.T) {
 func TestExpectTokens(t *testing.T) {
 	s, testCalls := sinkTest(t)
 	for i := 0; i < 5; i++ {
-		s.ExpectTokens(t, testCalls[2*i].token, testCalls[2*i+1].token)
+		s.ExpectTokens(t, testCalls[2*i].Body, testCalls[2*i+1].Body)
 	}
 }
 
 func TestExpectTokensTimeout(t *testing.T) {
-	s, testCalls := sinkTest(t, WithTimeout(10*time.Millisecond))
+	s, testCalls := sinkTest(t, WithTimeout(30*time.Millisecond))
 	for i := 0; i < 5; i++ {
-		s.ExpectTokens(t, testCalls[2*i].token, testCalls[2*i+1].token)
+		s.ExpectTokens(t, testCalls[2*i].Body, testCalls[2*i+1].Body)
 	}
 
 	// Create a new T so we can expect it to fail without failing the overall test.
@@ -121,19 +123,48 @@ func TestExpectTokensTimeout(t *testing.T) {
 func TestExpectCall(t *testing.T) {
 	s, testCalls := sinkTest(t)
 	for _, c := range testCalls {
-		s.ExpectCall(t, c.token, c.attrs)
+		s.ExpectCall(t, c.Body, c.Attributes)
 	}
 }
 
 func TestExpectCallTimeout(t *testing.T) {
-	s, testCalls := sinkTest(t, WithTimeout(10*time.Millisecond))
+	s, testCalls := sinkTest(t, WithTimeout(30*time.Millisecond))
 	for _, c := range testCalls {
-		s.ExpectCall(t, c.token, c.attrs)
+		s.ExpectCall(t, c.Body, c.Attributes)
 	}
 
 	// Create a new T so we can expect it to fail without failing the overall test.
 	tt := new(testing.T)
 	s.ExpectCall(tt, []byte("foo"), nil)
+	assert.True(t, tt.Failed())
+}
+
+func TestExpectCalls(t *testing.T) {
+	s, testCalls := sinkTest(t)
+	testCallsOutOfOrder := make([]emit.Token, 0, 10)
+	for i := 0; i < len(testCalls); i += 2 {
+		testCallsOutOfOrder = append(testCallsOutOfOrder, testCalls[i])
+	}
+	for i := 1; i < len(testCalls); i += 2 {
+		testCallsOutOfOrder = append(testCallsOutOfOrder, testCalls[i])
+	}
+	s.ExpectCalls(t, testCallsOutOfOrder...)
+}
+
+func TestExpectCallsTimeout(t *testing.T) {
+	s, testCalls := sinkTest(t, WithTimeout(30*time.Millisecond))
+	testCallsOutOfOrder := make([]emit.Token, 0, 10)
+	for i := 0; i < len(testCalls); i += 2 {
+		testCallsOutOfOrder = append(testCallsOutOfOrder, testCalls[i])
+	}
+	for i := 1; i < len(testCalls); i += 2 {
+		testCallsOutOfOrder = append(testCallsOutOfOrder, testCalls[i])
+	}
+	s.ExpectCalls(t, testCallsOutOfOrder...)
+
+	// Create a new T so we can expect it to fail without failing the overall test.
+	tt := new(testing.T)
+	s.ExpectCalls(tt, emit.Token{})
 	assert.True(t, tt.Failed())
 }
 
@@ -156,24 +187,24 @@ func TestExpectNoCallsFailure(t *testing.T) {
 func TestWithCallBuffer(t *testing.T) {
 	s, testCalls := sinkTest(t, WithCallBuffer(5))
 	for i := 0; i < 10; i++ {
-		s.ExpectCall(t, testCalls[i].token, testCalls[i].attrs)
+		s.ExpectCall(t, testCalls[i].Body, testCalls[i].Attributes)
 	}
 }
 
-func sinkTest(t *testing.T, opts ...SinkOpt) (*Sink, []*call) {
+func sinkTest(t *testing.T, opts ...SinkOpt) (*Sink, []emit.Token) {
 	s := NewSink(opts...)
-	testCalls := make([]*call, 0, 10)
+	testCalls := make([]emit.Token, 0, 10)
 	for i := 0; i < 10; i++ {
-		testCalls = append(testCalls, &call{
-			token: []byte(fmt.Sprintf("token-%d", i)),
-			attrs: map[string]any{
+		testCalls = append(testCalls, emit.Token{
+			Body: []byte(fmt.Sprintf("token-%d", i)),
+			Attributes: map[string]any{
 				"key": fmt.Sprintf("value-%d", i),
 			},
 		})
 	}
 	go func() {
 		for _, c := range testCalls {
-			require.NoError(t, s.Callback(context.Background(), c.token, c.attrs))
+			assert.NoError(t, s.Callback(context.Background(), [][]byte{c.Body}, c.Attributes, 0))
 		}
 	}()
 	return s, testCalls

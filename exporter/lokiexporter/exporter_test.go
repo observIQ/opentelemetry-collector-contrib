@@ -5,6 +5,7 @@ package lokiexporter // import "github.com/open-telemetry/opentelemetry-collecto
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,8 @@ import (
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/pdata/plog"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/lokiexporter/internal/metadata"
 )
 
 func TestPushLogData(t *testing.T) {
@@ -63,26 +66,26 @@ func TestPushLogData(t *testing.T) {
 			actualPushRequest := &push.PushRequest{}
 
 			// prepare
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				encPayload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 
 				decPayload, err := snappy.Decode(nil, encPayload)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 
 				err = proto.Unmarshal(decPayload, actualPushRequest)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}))
 			defer ts.Close()
 
+			clientConfig := confighttp.NewDefaultClientConfig()
+			clientConfig.Endpoint = ts.URL
 			cfg := &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Endpoint: ts.URL,
-				},
+				ClientConfig: clientConfig,
 			}
 
 			f := NewFactory()
-			exp, err := f.CreateLogsExporter(context.Background(), exportertest.NewNopCreateSettings(), cfg)
+			exp, err := f.CreateLogs(context.Background(), exportertest.NewNopSettings(metadata.Type), cfg)
 			require.NoError(t, err)
 
 			err = exp.Start(context.Background(), componenttest.NewNopHost())
@@ -239,29 +242,30 @@ func TestLogsToLokiRequestWithGroupingByTenant(t *testing.T) {
 			actualPushRequestPerTenant := map[string]*push.PushRequest{}
 
 			// prepare
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				encPayload, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 
 				decPayload, err := snappy.Decode(nil, encPayload)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 
 				pr := &push.PushRequest{}
 				err = proto.Unmarshal(decPayload, pr)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 
 				actualPushRequestPerTenant[r.Header.Get("X-Scope-OrgID")] = pr
 			}))
 			defer ts.Close()
 
+			clientConfig := confighttp.NewDefaultClientConfig()
+			clientConfig.Endpoint = ts.URL
+
 			cfg := &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Endpoint: ts.URL,
-				},
+				ClientConfig: clientConfig,
 			}
 
 			f := NewFactory()
-			exp, err := f.CreateLogsExporter(context.Background(), exportertest.NewNopCreateSettings(), cfg)
+			exp, err := f.CreateLogs(context.Background(), exportertest.NewNopSettings(metadata.Type), cfg)
 			require.NoError(t, err)
 
 			err = exp.Start(context.Background(), componenttest.NewNopHost())
@@ -273,10 +277,10 @@ func TestLogsToLokiRequestWithGroupingByTenant(t *testing.T) {
 
 			// actualPushRequest is populated within the test http server, we check it here as assertions are better done at the
 			// end of the test function
-			assert.Equal(t, len(actualPushRequestPerTenant), len(tC.expected))
+			assert.Len(t, actualPushRequestPerTenant, len(tC.expected))
 			for tenant, request := range actualPushRequestPerTenant {
 				pr, ok := tC.expected[tenant]
-				assert.Equal(t, ok, true)
+				assert.True(t, ok)
 
 				expectedLabel := pr.label
 				expectedLine := pr.line
@@ -335,5 +339,5 @@ func (p *badProtoForCoverage) Reset()         {}
 func (p *badProtoForCoverage) String() string { return "" }
 func (p *badProtoForCoverage) ProtoMessage()  {}
 func (p *badProtoForCoverage) Marshal() (dAtA []byte, err error) {
-	return nil, fmt.Errorf("this is a bad proto")
+	return nil, errors.New("this is a bad proto")
 }

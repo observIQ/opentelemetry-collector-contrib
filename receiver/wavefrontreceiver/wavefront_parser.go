@@ -4,6 +4,7 @@
 package wavefrontreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/wavefrontreceiver"
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -16,25 +17,27 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/carbonreceiver/protocol"
 )
 
-// WavefrontParser converts metrics in the Wavefront format, see
+// wavefrontParser converts metrics in the Wavefront format, see
 // https://docs.wavefront.com/wavefront_data_format.html#metrics-data-format-syntax,
 // into the internal format of the Collector
-type WavefrontParser struct {
+type wavefrontParser struct {
 	ExtractCollectdTags bool `mapstructure:"extract_collectd_tags"`
 }
 
-var _ (protocol.Parser) = (*WavefrontParser)(nil)
-var _ (protocol.ParserConfig) = (*WavefrontParser)(nil)
+var (
+	_ protocol.Parser       = (*wavefrontParser)(nil)
+	_ protocol.ParserConfig = (*wavefrontParser)(nil)
+)
 
-// Only two chars can be espcaped per Wavafront SDK, see
+// Only two chars can be escaped per Wavefront SDK, see
 // https://github.com/wavefrontHQ/wavefront-sdk-go/blob/2c5891318fcd83c35c93bba2b411640495473333/senders/formatter.go#L20
 var escapedCharReplacer = strings.NewReplacer(
 	`\"`, `"`, // Replaces escaped double-quotes
-	`\n`, "\n", // Repaces escaped new-line.
+	`\n`, "\n", // Replaces escaped new-line.
 )
 
 // BuildParser creates a new Parser instance that receives Wavefront metric data.
-func (wp *WavefrontParser) BuildParser() (protocol.Parser, error) {
+func (wp *wavefrontParser) BuildParser() (protocol.Parser, error) {
 	return wp, nil
 }
 
@@ -47,7 +50,7 @@ func (wp *WavefrontParser) BuildParser() (protocol.Parser, error) {
 //	"<metricName> <metricValue> [<timestamp>] source=<source> [pointTags]"
 //
 // Detailed description of each element is available on the link above.
-func (wp *WavefrontParser) Parse(line string) (pmetric.Metric, error) {
+func (wp *wavefrontParser) Parse(line string) (pmetric.Metric, error) {
 	parts := strings.SplitN(line, " ", 3)
 	if len(parts) < 3 {
 		return pmetric.Metric{}, fmt.Errorf("invalid wavefront metric [%s]", line)
@@ -82,9 +85,8 @@ func (wp *WavefrontParser) Parse(line string) (pmetric.Metric, error) {
 
 	attributes := pcommon.NewMap()
 	if tags != "" {
-		// to need for special treatment for source, treat it as a normal tag since
+		// no need for special treatment for source, treat it as a normal tag since
 		// tags are separated by space and are optionally double-quoted.
-
 		if err := buildLabels(attributes, tags); err != nil {
 			return pmetric.Metric{}, fmt.Errorf("invalid wavefront metric [%s]: %w", line, err)
 		}
@@ -111,7 +113,7 @@ func (wp *WavefrontParser) Parse(line string) (pmetric.Metric, error) {
 	return metric, nil
 }
 
-func (wp *WavefrontParser) injectCollectDLabels(
+func (wp *wavefrontParser) injectCollectDLabels(
 	metricName string,
 	attributes pcommon.Map,
 ) string {
@@ -136,61 +138,64 @@ func (wp *WavefrontParser) injectCollectDLabels(
 	return metricName
 }
 
-func buildLabels(attributes pcommon.Map, tags string) (err error) {
-	if tags == "" {
-		return
-	}
+func buildLabels(attributes pcommon.Map, tags string) error {
 	for {
-		parts := strings.SplitN(tags, "=", 2)
-		if len(parts) != 2 {
-			return fmt.Errorf("failed to break key for [%s]", tags)
+		tags = strings.TrimLeft(tags, " ")
+		if len(tags) == 0 {
+			return nil
 		}
 
-		key := parts[0]
-		rest := parts[1]
-		tagLen := len(key) + 1 // Length of key plus separator and yet to be determined length of the value.
-		var value string
-		if len(rest) > 1 && rest[0] == '"' {
-			// Skip until non-escaped double quote.
+		// First we need to find the key, find first '='
+		keyEnd := strings.IndexByte(tags, '=')
+		if keyEnd == -1 {
+			return fmt.Errorf("failed to break key for [%s]", tags)
+		}
+		key := tags[:keyEnd]
+
+		tags = tags[keyEnd+1:]
+		if len(tags) > 1 && tags[0] == '"' {
+			// Quoted value, skip until non-escaped double quote.
+			foundEnd := false
 			foundEscape := false
-			i := 1
-			for ; i < len(rest); i++ {
-				if rest[i] != '"' && rest[i] != 'n' {
+			valueEnd := 1
+			for ; valueEnd < len(tags); valueEnd++ {
+				if tags[valueEnd] != '"' && tags[valueEnd] != 'n' {
 					continue
 				}
-				isPrevCharEscape := rest[i-1] == '\\'
-				if rest[i] == '"' && !isPrevCharEscape {
+				isPrevCharEscape := tags[valueEnd-1] == '\\'
+				if tags[valueEnd] == '"' && !isPrevCharEscape {
 					// Non-escaped double-quote, it is the end of the value.
+					foundEnd = true
 					break
 				}
 				foundEscape = foundEscape || isPrevCharEscape
 			}
 
-			value = rest[1:i]
-			tagLen += len(value) + 2 // plus 2 to account for the double-quotes.
+			// If we didn't find non-escaped double-quote then this is an error.
+			if !foundEnd {
+				return errors.New("partially quoted tag value")
+			}
+
+			value := tags[1:valueEnd]
+			tags = tags[valueEnd+1:]
 			if foundEscape {
 				// Per implementation of Wavefront SDK only double-quotes and
 				// newline characters are escaped. See the link below:
 				// https://github.com/wavefrontHQ/wavefront-sdk-go/blob/2c5891318fcd83c35c93bba2b411640495473333/senders/formatter.go#L20
 				value = escapedCharReplacer.Replace(value)
 			}
+			attributes.PutStr(key, value)
 		} else {
-			// Skip until space.
-			i := 0
-			for ; i < len(rest) && rest[i] != ' '; i++ { // nolint
+			valueEnd := strings.IndexByte(tags, ' ')
+			if valueEnd == -1 {
+				// The value is up to the end.
+				attributes.PutStr(key, tags)
+				return nil
 			}
-			value = rest[:i]
-			tagLen += i
-		}
-		attributes.PutStr(key, value)
-
-		tags = strings.TrimLeft(tags[tagLen:], " ")
-		if tags == "" {
-			break
+			attributes.PutStr(key, tags[:valueEnd])
+			tags = tags[valueEnd+1:]
 		}
 	}
-
-	return
 }
 
 func unDoubleQuote(s string) string {

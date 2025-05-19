@@ -6,6 +6,7 @@ package internal // import "github.com/open-telemetry/opentelemetry-collector-co
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 const (
 	// language=ClickHouse SQL
 	createSummaryTableSQL = `
-CREATE TABLE IF NOT EXISTS %s_summary (
+CREATE TABLE IF NOT EXISTS %s %s (
     ResourceAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     ResourceSchemaUrl String CODEC(ZSTD(1)),
     ScopeName String CODEC(ZSTD(1)),
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS %s_summary (
     ScopeAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     ScopeDroppedAttrCount UInt32 CODEC(ZSTD(1)),
     ScopeSchemaUrl String CODEC(ZSTD(1)),
+    ServiceName LowCardinality(String) CODEC(ZSTD(1)),
     MetricName String CODEC(ZSTD(1)),
     MetricDescription String CODEC(ZSTD(1)),
     MetricUnit String CODEC(ZSTD(1)),
@@ -44,14 +46,14 @@ CREATE TABLE IF NOT EXISTS %s_summary (
 	INDEX idx_scope_attr_value mapValues(ScopeAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_attr_key mapKeys(Attributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_attr_value mapValues(Attributes) TYPE bloom_filter(0.01) GRANULARITY 1
-) ENGINE MergeTree()
+) ENGINE = %s
 %s
 PARTITION BY toDate(TimeUnix)
-ORDER BY (MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
 `
 	// language=ClickHouse SQL
-	insertSummaryTableSQL = `INSERT INTO %s_summary (
+	insertSummaryTableSQL = `INSERT INTO %s (
 	ResourceAttributes,
     ResourceSchemaUrl,
     ScopeName,
@@ -59,6 +61,7 @@ SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
     ScopeAttributes,
     ScopeDroppedAttrCount,
     ScopeSchemaUrl,
+    ServiceName,
     MetricName,
     MetricDescription,
     MetricUnit,
@@ -69,7 +72,7 @@ SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
     Sum,
     ValueAtQuantiles.Quantile,
 	ValueAtQuantiles.Value,
-    Flags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    Flags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 )
 
 type summaryModel struct {
@@ -100,22 +103,27 @@ func (s *summaryMetrics) insert(ctx context.Context, db *sql.DB) error {
 			_ = statement.Close()
 		}()
 		for _, model := range s.summaryModel {
+			resAttr := AttributesToMap(model.metadata.ResAttr)
+			scopeAttr := AttributesToMap(model.metadata.ScopeInstr.Attributes())
+			serviceName := GetServiceName(model.metadata.ResAttr)
+
 			for i := 0; i < model.summary.DataPoints().Len(); i++ {
 				dp := model.summary.DataPoints().At(i)
 				quantiles, values := convertValueAtQuantile(dp.QuantileValues())
 
 				_, err = statement.ExecContext(ctx,
-					model.metadata.ResAttr,
+					resAttr,
 					model.metadata.ResURL,
 					model.metadata.ScopeInstr.Name(),
 					model.metadata.ScopeInstr.Version(),
-					attributesToMap(model.metadata.ScopeInstr.Attributes()),
+					scopeAttr,
 					model.metadata.ScopeInstr.DroppedAttributesCount(),
 					model.metadata.ScopeURL,
+					serviceName,
 					model.metricName,
 					model.metricDescription,
 					model.metricUnit,
-					attributesToMap(dp.Attributes()),
+					AttributesToMap(dp.Attributes()),
 					dp.StartTimestamp().AsTime(),
 					dp.Timestamp().AsTime(),
 					dp.Count(),
@@ -144,10 +152,10 @@ func (s *summaryMetrics) insert(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func (s *summaryMetrics) Add(resAttr map[string]string, resURL string, scopeInstr pcommon.InstrumentationScope, scopeURL string, metrics any, name string, description string, unit string) error {
+func (s *summaryMetrics) Add(resAttr pcommon.Map, resURL string, scopeInstr pcommon.InstrumentationScope, scopeURL string, metrics any, name string, description string, unit string) error {
 	summary, ok := metrics.(pmetric.Summary)
 	if !ok {
-		return fmt.Errorf("metrics param is not type of Summary")
+		return errors.New("metrics param is not type of Summary")
 	}
 	s.count += summary.DataPoints().Len()
 	s.summaryModel = append(s.summaryModel, &summaryModel{

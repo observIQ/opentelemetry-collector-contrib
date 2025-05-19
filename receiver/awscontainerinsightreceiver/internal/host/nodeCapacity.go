@@ -7,9 +7,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/shirou/gopsutil/v3/common"
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v4/common"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 	"go.uber.org/zap"
 )
 
@@ -24,9 +24,7 @@ type nodeCapacity struct {
 	logger      *zap.Logger
 
 	// osLstat returns a FileInfo describing the named file.
-	osLstat func(name string) (os.FileInfo, error)
-	// osSetenv sets the value of the environment variable named by the key
-	osSetenv      func(key string, value string) error
+	osLstat       func(name string) (os.FileInfo, error)
 	virtualMemory func(ctx context.Context) (*mem.VirtualMemoryStat, error)
 	cpuInfo       func(ctx context.Context) ([]cpu.InfoStat, error)
 }
@@ -37,7 +35,6 @@ func newNodeCapacity(logger *zap.Logger, options ...nodeCapacityOption) (nodeCap
 	nc := &nodeCapacity{
 		logger:        logger,
 		osLstat:       os.Lstat,
-		osSetenv:      os.Setenv,
 		virtualMemory: mem.VirtualMemoryWithContext,
 		cpuInfo:       cpu.InfoWithContext,
 	}
@@ -46,10 +43,15 @@ func newNodeCapacity(logger *zap.Logger, options ...nodeCapacityOption) (nodeCap
 		opt(nc)
 	}
 
-	if _, err := nc.osLstat(hostProc); os.IsNotExist(err) {
+	actualHostProc, ok := os.LookupEnv(string(common.HostProcEnvKey))
+	if !ok {
+		actualHostProc = hostProc
+	}
+
+	if _, err := nc.osLstat(actualHostProc); os.IsNotExist(err) {
 		return nil, err
 	}
-	envMap := common.EnvMap{common.HostProcEnvKey: hostProc}
+	envMap := common.EnvMap{common.HostProcEnvKey: actualHostProc}
 	ctx := context.WithValue(context.Background(), common.EnvKey, envMap)
 
 	nc.parseCPU(ctx)

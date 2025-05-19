@@ -12,16 +12,13 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sshcheckreceiver/internal/configssh"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sshcheckreceiver/internal/metadata"
 )
 
 func TestNewFactory(t *testing.T) {
-	if !supportedOS() {
-		t.Skip("Skip tests if not running on one of: [linux, darwin, freebsd, openbsd]")
-	}
 	t.Parallel()
 	testCases := []struct {
 		desc     string
@@ -31,7 +28,7 @@ func TestNewFactory(t *testing.T) {
 			desc: "creates a new factory with correct type",
 			testFunc: func(t *testing.T) {
 				factory := NewFactory()
-				require.EqualValues(t, metadata.Type, factory.Type())
+				require.Equal(t, metadata.Type, factory.Type())
 			},
 		},
 		{
@@ -39,7 +36,7 @@ func TestNewFactory(t *testing.T) {
 			testFunc: func(t *testing.T) {
 				factory := NewFactory()
 				var expectedCfg component.Config = &Config{
-					ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+					ControllerConfig: scraperhelper.ControllerConfig{
 						CollectionInterval: 10 * time.Second,
 						InitialDelay:       time.Second,
 					},
@@ -53,13 +50,13 @@ func TestNewFactory(t *testing.T) {
 			},
 		},
 		{
-			desc: "creates a new factory and CreateMetricsReceiver returns no error",
+			desc: "creates a new factory and CreateMetrics returns no error",
 			testFunc: func(t *testing.T) {
 				factory := NewFactory()
 				cfg := factory.CreateDefaultConfig()
-				_, err := factory.CreateMetricsReceiver(
+				_, err := factory.CreateMetrics(
 					context.Background(),
-					receivertest.NewNopCreateSettings(),
+					receivertest.NewNopSettings(metadata.Type),
 					cfg,
 					consumertest.NewNop(),
 				)
@@ -67,12 +64,12 @@ func TestNewFactory(t *testing.T) {
 			},
 		},
 		{
-			desc: "creates a new factory and CreateMetricsReceiver returns error with incorrect config",
+			desc: "creates a new factory and CreateMetrics returns error with incorrect config",
 			testFunc: func(t *testing.T) {
 				factory := NewFactory()
-				_, err := factory.CreateMetricsReceiver(
+				_, err := factory.CreateMetrics(
 					context.Background(),
-					receivertest.NewNopCreateSettings(),
+					receivertest.NewNopSettings(metadata.Type),
 					nil,
 					consumertest.NewNop(),
 				)
@@ -84,18 +81,4 @@ func TestNewFactory(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, tc.testFunc)
 	}
-}
-
-func TestWindowsReceiverUnsupported(t *testing.T) {
-	if supportedOS() {
-		t.Skip("Skip test if not running windows.")
-	}
-	factory := NewFactory()
-	_, err := factory.CreateMetricsReceiver(
-		context.Background(),
-		receivertest.NewNopCreateSettings(),
-		nil,
-		consumertest.NewNop(),
-	)
-	require.ErrorIs(t, err, errWindowsUnsupported)
 }

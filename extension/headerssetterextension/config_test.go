@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/headerssetterextension/internal/metadata"
 )
@@ -36,6 +37,13 @@ func TestLoadConfig(t *testing.T) {
 						Action:      INSERT,
 						FromContext: stringp("tenant_id"),
 						Value:       nil,
+					},
+					{
+						Key:          stringp("X-Scope-OrgID"),
+						Action:       INSERT,
+						FromContext:  stringp("tenant_id"),
+						DefaultValue: opaquep("some_id"),
+						Value:        nil,
 					},
 					{
 						Key:         stringp("User-ID"),
@@ -66,13 +74,13 @@ func TestLoadConfig(t *testing.T) {
 			sub, err := cm.Sub(tt.id.String())
 
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
 			if tt.expectedError != nil {
-				assert.Error(t, component.ValidateConfig(cfg), tt.expectedError)
+				assert.ErrorIs(t, xconfmap.Validate(cfg), tt.expectedError)
 				return
 			}
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
@@ -147,6 +155,18 @@ func TestValidateConfig(t *testing.T) {
 				},
 			},
 			errMissingSource,
+		},
+		{
+			"header value source is missing snd default value set",
+			[]HeaderConfig{
+				{
+					Key:          stringp("name"),
+					Action:       INSERT,
+					FromContext:  stringp("from context"),
+					DefaultValue: opaquep("default"),
+				},
+			},
+			nil,
 		},
 		{
 			"delete header action",

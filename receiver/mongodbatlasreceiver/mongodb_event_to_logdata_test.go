@@ -19,18 +19,18 @@ import (
 
 func TestMongoeventToLogData4_4(t *testing.T) {
 	mongoevent := getTestEvent4_4()
-	pc := ProjectContext{
+	pc := projectContext{
 		orgName: "Org",
 		Project: mongodbatlas.Project{Name: "Project"},
 	}
-	clusterInfo := ClusterInfo{
+	c := clusterInfo{
 		ClusterName:         "clusterName",
 		RegionName:          "regionName",
 		ProviderName:        "providerName",
 		MongoDBMajorVersion: "4.4",
 	}
 
-	ld := mongodbEventToLogData(zap.NewNop(), []model.LogEntry{mongoevent}, pc, "hostname", "logName", clusterInfo)
+	ld := mongodbEventToLogData(zap.NewNop(), []model.LogEntry{mongoevent}, pc, "hostname", "logName", c)
 	rl := ld.ResourceLogs().At(0)
 	resourceAttrs := rl.Resource().Attributes()
 	sl := rl.ScopeLogs().At(0)
@@ -65,19 +65,19 @@ func TestMongoeventToLogData4_4(t *testing.T) {
 
 func TestMongoeventToLogData4_2(t *testing.T) {
 	mongoevent := getTestEvent4_2()
-	pc := ProjectContext{
+	pc := projectContext{
 		orgName: "Org",
 		Project: mongodbatlas.Project{Name: "Project"},
 	}
 
-	clusterInfo := ClusterInfo{
+	c := clusterInfo{
 		ClusterName:         "clusterName",
 		RegionName:          "regionName",
 		ProviderName:        "providerName",
 		MongoDBMajorVersion: "4.2",
 	}
 
-	ld := mongodbEventToLogData(zaptest.NewLogger(t), []model.LogEntry{mongoevent}, pc, "hostname", "logName", clusterInfo)
+	ld := mongodbEventToLogData(zaptest.NewLogger(t), []model.LogEntry{mongoevent}, pc, "hostname", "logName", c)
 	rl := ld.ResourceLogs().At(0)
 	resourceAttrs := rl.Resource().Attributes()
 	sl := rl.ScopeLogs().At(0)
@@ -111,40 +111,40 @@ func TestMongoeventToLogData4_2(t *testing.T) {
 func TestUnknownSeverity(t *testing.T) {
 	mongoevent := getTestEvent4_4()
 	mongoevent.Severity = "Unknown"
-	pc := ProjectContext{
+	pc := projectContext{
 		orgName: "Org",
 		Project: mongodbatlas.Project{Name: "Project"},
 	}
-	clusterInfo := ClusterInfo{
+	c := clusterInfo{
 		ClusterName:         "clusterName",
 		RegionName:          "regionName",
 		ProviderName:        "providerName",
 		MongoDBMajorVersion: "4.4",
 	}
 
-	ld := mongodbEventToLogData(zap.NewNop(), []model.LogEntry{mongoevent}, pc, "hostname", "clusterName", clusterInfo)
+	ld := mongodbEventToLogData(zap.NewNop(), []model.LogEntry{mongoevent}, pc, "hostname", "clusterName", c)
 	rl := ld.ResourceLogs().At(0)
 	logEntry := rl.ScopeLogs().At(0).LogRecords().At(0)
 
-	assert.Equal(t, logEntry.SeverityNumber(), plog.SeverityNumberUnspecified)
-	assert.Equal(t, logEntry.SeverityText(), "")
+	assert.Equal(t, plog.SeverityNumberUnspecified, logEntry.SeverityNumber())
+	assert.Empty(t, logEntry.SeverityText())
 }
 
 func TestMongoEventToAuditLogData5_0(t *testing.T) {
 	mongoevent := getTestAuditEvent5_0()
-	pc := ProjectContext{
+	pc := projectContext{
 		orgName: "Org",
 		Project: mongodbatlas.Project{Name: "Project"},
 	}
 
-	clusterInfo := ClusterInfo{
+	c := clusterInfo{
 		ClusterName:         "clusterName",
 		RegionName:          "regionName",
 		ProviderName:        "providerName",
 		MongoDBMajorVersion: "5.0",
 	}
 
-	ld, err := mongodbAuditEventToLogData(zaptest.NewLogger(t), []model.AuditLog{mongoevent}, pc, "hostname", "logName", clusterInfo)
+	ld, err := mongodbAuditEventToLogData(zaptest.NewLogger(t), []model.AuditLog{mongoevent}, pc, "hostname", "logName", c)
 	require.NoError(t, err)
 	rl := ld.ResourceLogs().At(0)
 	resourceAttrs := rl.Resource().Attributes()
@@ -152,8 +152,8 @@ func TestMongoEventToAuditLogData5_0(t *testing.T) {
 	lr := sl.LogRecords().At(0)
 	attrs := lr.Attributes()
 
-	assert.Equal(t, ld.ResourceLogs().Len(), 1)
-	assert.Equal(t, resourceAttrs.Len(), 6)
+	assert.Equal(t, 1, ld.ResourceLogs().Len())
+	assert.Equal(t, 6, resourceAttrs.Len())
 	assertString(t, resourceAttrs, "mongodb_atlas.org", "Org")
 	assertString(t, resourceAttrs, "mongodb_atlas.project", "Project")
 	assertString(t, resourceAttrs, "mongodb_atlas.cluster", "clusterName")
@@ -176,13 +176,13 @@ func TestMongoEventToAuditLogData5_0(t *testing.T) {
 
 	roles, ok := attrs.Get("roles")
 	require.True(t, ok, "roles key does not exist")
-	require.Equal(t, roles.Slice().Len(), 1)
+	require.Equal(t, 1, roles.Slice().Len())
 	assertString(t, roles.Slice().At(0).Map(), "role", "test_role")
 	assertString(t, roles.Slice().At(0).Map(), "db", "test_db")
 
 	users, ok := attrs.Get("users")
 	require.True(t, ok, "users key does not exist")
-	require.Equal(t, users.Slice().Len(), 1)
+	require.Equal(t, 1, users.Slice().Len())
 	assertString(t, users.Slice().At(0).Map(), "user", "mongo_user")
 	assertString(t, users.Slice().At(0).Map(), "db", "my_db")
 
@@ -198,19 +198,19 @@ func TestMongoEventToAuditLogData5_0(t *testing.T) {
 
 func TestMongoEventToAuditLogData4_2(t *testing.T) {
 	mongoevent := getTestAuditEvent4_2()
-	pc := ProjectContext{
+	pc := projectContext{
 		orgName: "Org",
 		Project: mongodbatlas.Project{Name: "Project"},
 	}
 
-	clusterInfo := ClusterInfo{
+	c := clusterInfo{
 		ClusterName:         "clusterName",
 		RegionName:          "regionName",
 		ProviderName:        "providerName",
 		MongoDBMajorVersion: "4.2",
 	}
 
-	ld, err := mongodbAuditEventToLogData(zaptest.NewLogger(t), []model.AuditLog{mongoevent}, pc, "hostname", "logName", clusterInfo)
+	ld, err := mongodbAuditEventToLogData(zaptest.NewLogger(t), []model.AuditLog{mongoevent}, pc, "hostname", "logName", c)
 	require.NoError(t, err)
 	rl := ld.ResourceLogs().At(0)
 	resourceAttrs := rl.Resource().Attributes()
@@ -218,8 +218,8 @@ func TestMongoEventToAuditLogData4_2(t *testing.T) {
 	lr := sl.LogRecords().At(0)
 	attrs := lr.Attributes()
 
-	assert.Equal(t, ld.ResourceLogs().Len(), 1)
-	assert.Equal(t, resourceAttrs.Len(), 6)
+	assert.Equal(t, 1, ld.ResourceLogs().Len())
+	assert.Equal(t, 6, resourceAttrs.Len())
 	assertString(t, resourceAttrs, "mongodb_atlas.org", "Org")
 	assertString(t, resourceAttrs, "mongodb_atlas.project", "Project")
 	assertString(t, resourceAttrs, "mongodb_atlas.cluster", "clusterName")
@@ -239,13 +239,13 @@ func TestMongoEventToAuditLogData4_2(t *testing.T) {
 
 	roles, ok := attrs.Get("roles")
 	require.True(t, ok, "roles key does not exist")
-	require.Equal(t, roles.Slice().Len(), 1)
+	require.Equal(t, 1, roles.Slice().Len())
 	assertString(t, roles.Slice().At(0).Map(), "role", "test_role")
 	assertString(t, roles.Slice().At(0).Map(), "db", "test_db")
 
 	users, ok := attrs.Get("users")
 	require.True(t, ok, "users key does not exist")
-	require.Equal(t, users.Slice().Len(), 1)
+	require.Equal(t, 1, users.Slice().Len())
 	assertString(t, users.Slice().At(0).Map(), "user", "mongo_user")
 	assertString(t, users.Slice().At(0).Map(), "db", "my_db")
 

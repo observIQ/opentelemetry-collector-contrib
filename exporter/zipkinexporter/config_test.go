@@ -13,8 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/zipkinexporter/internal/metadata"
@@ -29,6 +31,8 @@ func TestLoadConfig(t *testing.T) {
 	// URL doesn't have a default value so set it directly.
 	defaultCfg := createDefaultConfig().(*Config)
 	defaultCfg.Endpoint = "http://some.location.org:9411/api/v2/spans"
+	maxIdleConns := 50
+	idleConnTimeout := 5 * time.Second
 
 	tests := []struct {
 		id       component.ID
@@ -41,7 +45,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "2"),
 			expected: &Config{
-				RetrySettings: exporterhelper.RetrySettings{
+				BackOffConfig: configretry.BackOffConfig{
 					Enabled:             true,
 					InitialInterval:     10 * time.Second,
 					MaxInterval:         1 * time.Minute,
@@ -49,19 +53,22 @@ func TestLoadConfig(t *testing.T) {
 					RandomizationFactor: backoff.DefaultRandomizationFactor,
 					Multiplier:          backoff.DefaultMultiplier,
 				},
-				QueueSettings: exporterhelper.QueueSettings{
+				QueueSettings: exporterhelper.QueueBatchConfig{
 					Enabled:      true,
 					NumConsumers: 2,
 					QueueSize:    10,
+					Sizer:        exporterhelper.RequestSizerTypeRequests,
 				},
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Endpoint:        "https://somedest:1234/api/v2/spans",
-					WriteBufferSize: 524288,
-					Timeout:         5 * time.Second,
-					TLSSetting: configtls.TLSClientSetting{
+				ClientConfig: withDefaultHTTPClientConfig(func(config *confighttp.ClientConfig) {
+					config.Endpoint = "https://somedest:1234/api/v2/spans"
+					config.WriteBufferSize = 524288
+					config.Timeout = 5 * time.Second
+					config.TLSSetting = configtls.ClientConfig{
 						InsecureSkipVerify: true,
-					},
-				},
+					}
+					config.MaxIdleConns = maxIdleConns
+					config.IdleConnTimeout = idleConnTimeout
+				}),
 				Format:             "proto",
 				DefaultServiceName: "test_name",
 			},
@@ -75,10 +82,18 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
+}
+
+func withDefaultHTTPClientConfig(fns ...func(config *confighttp.ClientConfig)) confighttp.ClientConfig {
+	cfg := confighttp.NewDefaultClientConfig()
+	for _, fn := range fns {
+		fn(&cfg)
+	}
+	return cfg
 }

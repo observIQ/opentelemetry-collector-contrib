@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	"go.opentelemetry.io/collector/component/componenttest"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/testutil"
 )
@@ -33,7 +34,8 @@ func TestBasicConfigBuildWithoutID(t *testing.T) {
 		OperatorType: "test-type",
 	}
 
-	_, err := config.Build(testutil.Logger(t))
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := config.Build(set)
 	require.NoError(t, err)
 }
 
@@ -42,9 +44,9 @@ func TestBasicConfigBuildWithoutType(t *testing.T) {
 		OperatorID: "test-id",
 	}
 
-	_, err := config.Build(testutil.Logger(t))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing required `type` field.")
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := config.Build(set)
+	require.ErrorContains(t, err, "missing required `type` field.")
 }
 
 func TestBasicConfigBuildMissingLogger(t *testing.T) {
@@ -53,9 +55,10 @@ func TestBasicConfigBuildMissingLogger(t *testing.T) {
 		OperatorType: "test-type",
 	}
 
-	_, err := config.Build(nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "operator build context is missing a logger.")
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = nil
+	_, err := config.Build(set)
+	require.ErrorContains(t, err, "operator build context is missing a logger.")
 }
 
 func TestBasicConfigBuildValid(t *testing.T) {
@@ -64,7 +67,8 @@ func TestBasicConfigBuildValid(t *testing.T) {
 		OperatorType: "test-type",
 	}
 
-	operator, err := config.Build(testutil.Logger(t))
+	set := componenttest.NewNopTelemetrySettings()
+	operator, err := config.Build(set)
 	require.NoError(t, err)
 	require.Equal(t, "test-id", operator.OperatorID)
 	require.Equal(t, "test-type", operator.OperatorType)
@@ -87,13 +91,14 @@ func TestBasicOperatorType(t *testing.T) {
 }
 
 func TestBasicOperatorLogger(t *testing.T) {
-	logger := &zap.SugaredLogger{}
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	operator := BasicOperator{
-		OperatorID:    "test-id",
-		OperatorType:  "test-type",
-		SugaredLogger: logger,
+		OperatorID:   "test-id",
+		OperatorType: "test-type",
+		set:          set,
 	}
-	require.Equal(t, logger, operator.Logger())
+	require.Equal(t, set.Logger, operator.Logger())
 }
 
 func TestBasicOperatorStart(t *testing.T) {

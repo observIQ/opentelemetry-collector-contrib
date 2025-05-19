@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/filter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
 )
 
-// AttributeClass specifies the a value class attribute.
+// AttributeClass specifies the value class attribute.
 type AttributeClass int
 
 const (
@@ -37,7 +38,7 @@ var MapAttributeClass = map[string]AttributeClass{
 	"services": AttributeClassServices,
 }
 
-// AttributeDirection specifies the a value direction attribute.
+// AttributeDirection specifies the value direction attribute.
 type AttributeDirection int
 
 const (
@@ -63,7 +64,7 @@ var MapAttributeDirection = map[string]AttributeDirection{
 	"transmitted": AttributeDirectionTransmitted,
 }
 
-// AttributeDiskState specifies the a value disk_state attribute.
+// AttributeDiskState specifies the value disk_state attribute.
 type AttributeDiskState int
 
 const (
@@ -89,7 +90,7 @@ var MapAttributeDiskState = map[string]AttributeDiskState{
 	"available": AttributeDiskStateAvailable,
 }
 
-// AttributePacketType specifies the a value packet.type attribute.
+// AttributePacketType specifies the value packet.type attribute.
 type AttributePacketType int
 
 const (
@@ -117,6 +118,44 @@ var MapAttributePacketType = map[string]AttributePacketType{
 	"dropped": AttributePacketTypeDropped,
 	"errored": AttributePacketTypeErrored,
 	"success": AttributePacketTypeSuccess,
+}
+
+var MetricsInfo = metricsInfo{
+	NsxtNodeCPUUtilization: metricInfo{
+		Name: "nsxt.node.cpu.utilization",
+	},
+	NsxtNodeFilesystemUsage: metricInfo{
+		Name: "nsxt.node.filesystem.usage",
+	},
+	NsxtNodeFilesystemUtilization: metricInfo{
+		Name: "nsxt.node.filesystem.utilization",
+	},
+	NsxtNodeMemoryCacheUsage: metricInfo{
+		Name: "nsxt.node.memory.cache.usage",
+	},
+	NsxtNodeMemoryUsage: metricInfo{
+		Name: "nsxt.node.memory.usage",
+	},
+	NsxtNodeNetworkIo: metricInfo{
+		Name: "nsxt.node.network.io",
+	},
+	NsxtNodeNetworkPacketCount: metricInfo{
+		Name: "nsxt.node.network.packet.count",
+	},
+}
+
+type metricsInfo struct {
+	NsxtNodeCPUUtilization        metricInfo
+	NsxtNodeFilesystemUsage       metricInfo
+	NsxtNodeFilesystemUtilization metricInfo
+	NsxtNodeMemoryCacheUsage      metricInfo
+	NsxtNodeMemoryUsage           metricInfo
+	NsxtNodeNetworkIo             metricInfo
+	NsxtNodeNetworkPacketCount    metricInfo
+}
+
+type metricInfo struct {
+	Name string
 }
 
 type metricNsxtNodeCPUUtilization struct {
@@ -489,6 +528,8 @@ type MetricsBuilder struct {
 	metricsCapacity                     int                  // maximum observed number of metrics per resource.
 	metricsBuffer                       pmetric.Metrics      // accumulates metrics data before emitting.
 	buildInfo                           component.BuildInfo  // contains version information.
+	resourceAttributeIncludeFilter      map[string]filter.Filter
+	resourceAttributeExcludeFilter      map[string]filter.Filter
 	metricNsxtNodeCPUUtilization        metricNsxtNodeCPUUtilization
 	metricNsxtNodeFilesystemUsage       metricNsxtNodeFilesystemUsage
 	metricNsxtNodeFilesystemUtilization metricNsxtNodeFilesystemUtilization
@@ -498,17 +539,24 @@ type MetricsBuilder struct {
 	metricNsxtNodeNetworkPacketCount    metricNsxtNodeNetworkPacketCount
 }
 
-// metricBuilderOption applies changes to default metrics builder.
-type metricBuilderOption func(*MetricsBuilder)
-
-// WithStartTime sets startTime on the metrics builder.
-func WithStartTime(startTime pcommon.Timestamp) metricBuilderOption {
-	return func(mb *MetricsBuilder) {
-		mb.startTime = startTime
-	}
+// MetricBuilderOption applies changes to default metrics builder.
+type MetricBuilderOption interface {
+	apply(*MetricsBuilder)
 }
 
-func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSettings, options ...metricBuilderOption) *MetricsBuilder {
+type metricBuilderOptionFunc func(mb *MetricsBuilder)
+
+func (mbof metricBuilderOptionFunc) apply(mb *MetricsBuilder) {
+	mbof(mb)
+}
+
+// WithStartTime sets startTime on the metrics builder.
+func WithStartTime(startTime pcommon.Timestamp) MetricBuilderOption {
+	return metricBuilderOptionFunc(func(mb *MetricsBuilder) {
+		mb.startTime = startTime
+	})
+}
+func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.Settings, options ...MetricBuilderOption) *MetricsBuilder {
 	mb := &MetricsBuilder{
 		config:                              mbc,
 		startTime:                           pcommon.NewTimestampFromTime(time.Now()),
@@ -521,9 +569,36 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricNsxtNodeMemoryUsage:           newMetricNsxtNodeMemoryUsage(mbc.Metrics.NsxtNodeMemoryUsage),
 		metricNsxtNodeNetworkIo:             newMetricNsxtNodeNetworkIo(mbc.Metrics.NsxtNodeNetworkIo),
 		metricNsxtNodeNetworkPacketCount:    newMetricNsxtNodeNetworkPacketCount(mbc.Metrics.NsxtNodeNetworkPacketCount),
+		resourceAttributeIncludeFilter:      make(map[string]filter.Filter),
+		resourceAttributeExcludeFilter:      make(map[string]filter.Filter),
 	}
+	if mbc.ResourceAttributes.DeviceID.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["device.id"] = filter.CreateFilter(mbc.ResourceAttributes.DeviceID.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.DeviceID.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["device.id"] = filter.CreateFilter(mbc.ResourceAttributes.DeviceID.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.NsxtNodeID.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["nsxt.node.id"] = filter.CreateFilter(mbc.ResourceAttributes.NsxtNodeID.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.NsxtNodeID.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["nsxt.node.id"] = filter.CreateFilter(mbc.ResourceAttributes.NsxtNodeID.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.NsxtNodeName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["nsxt.node.name"] = filter.CreateFilter(mbc.ResourceAttributes.NsxtNodeName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.NsxtNodeName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["nsxt.node.name"] = filter.CreateFilter(mbc.ResourceAttributes.NsxtNodeName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.NsxtNodeType.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["nsxt.node.type"] = filter.CreateFilter(mbc.ResourceAttributes.NsxtNodeType.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.NsxtNodeType.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["nsxt.node.type"] = filter.CreateFilter(mbc.ResourceAttributes.NsxtNodeType.MetricsExclude)
+	}
+
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 	return mb
 }
@@ -541,20 +616,28 @@ func (mb *MetricsBuilder) updateCapacity(rm pmetric.ResourceMetrics) {
 }
 
 // ResourceMetricsOption applies changes to provided resource metrics.
-type ResourceMetricsOption func(pmetric.ResourceMetrics)
+type ResourceMetricsOption interface {
+	apply(pmetric.ResourceMetrics)
+}
+
+type resourceMetricsOptionFunc func(pmetric.ResourceMetrics)
+
+func (rmof resourceMetricsOptionFunc) apply(rm pmetric.ResourceMetrics) {
+	rmof(rm)
+}
 
 // WithResource sets the provided resource on the emitted ResourceMetrics.
 // It's recommended to use ResourceBuilder to create the resource.
 func WithResource(res pcommon.Resource) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		res.CopyTo(rm.Resource())
-	}
+	})
 }
 
 // WithStartTimeOverride overrides start time for all the resource metrics data points.
 // This option should be only used if different start time has to be set on metrics coming from different resources.
 func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		var dps pmetric.NumberDataPointSlice
 		metrics := rm.ScopeMetrics().At(0).Metrics()
 		for i := 0; i < metrics.Len(); i++ {
@@ -568,7 +651,7 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 				dps.At(j).SetStartTimestamp(start)
 			}
 		}
-	}
+	})
 }
 
 // EmitForResource saves all the generated metrics under a new resource and updates the internal state to be ready for
@@ -576,10 +659,10 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 // needs to emit metrics from several resources. Otherwise calling this function is not required,
 // just `Emit` function can be called instead.
 // Resource attributes should be provided as ResourceMetricsOption arguments.
-func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
+func (mb *MetricsBuilder) EmitForResource(options ...ResourceMetricsOption) {
 	rm := pmetric.NewResourceMetrics()
 	ils := rm.ScopeMetrics().AppendEmpty()
-	ils.Scope().SetName("otelcol/nsxtreceiver")
+	ils.Scope().SetName(ScopeName)
 	ils.Scope().SetVersion(mb.buildInfo.Version)
 	ils.Metrics().EnsureCapacity(mb.metricsCapacity)
 	mb.metricNsxtNodeCPUUtilization.emit(ils.Metrics())
@@ -590,9 +673,20 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricNsxtNodeNetworkIo.emit(ils.Metrics())
 	mb.metricNsxtNodeNetworkPacketCount.emit(ils.Metrics())
 
-	for _, op := range rmo {
-		op(rm)
+	for _, op := range options {
+		op.apply(rm)
 	}
+	for attr, filter := range mb.resourceAttributeIncludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && !filter.Matches(val.AsString()) {
+			return
+		}
+	}
+	for attr, filter := range mb.resourceAttributeExcludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && filter.Matches(val.AsString()) {
+			return
+		}
+	}
+
 	if ils.Metrics().Len() > 0 {
 		mb.updateCapacity(rm)
 		rm.MoveTo(mb.metricsBuffer.ResourceMetrics().AppendEmpty())
@@ -602,8 +696,8 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 // Emit returns all the metrics accumulated by the metrics builder and updates the internal state to be ready for
 // recording another set of metrics. This function will be responsible for applying all the transformations required to
 // produce metric representation defined in metadata and user config, e.g. delta or cumulative.
-func (mb *MetricsBuilder) Emit(rmo ...ResourceMetricsOption) pmetric.Metrics {
-	mb.EmitForResource(rmo...)
+func (mb *MetricsBuilder) Emit(options ...ResourceMetricsOption) pmetric.Metrics {
+	mb.EmitForResource(options...)
 	metrics := mb.metricsBuffer
 	mb.metricsBuffer = pmetric.NewMetrics()
 	return metrics
@@ -646,9 +740,9 @@ func (mb *MetricsBuilder) RecordNsxtNodeNetworkPacketCountDataPoint(ts pcommon.T
 
 // Reset resets metrics builder to its initial state. It should be used when external metrics source is restarted,
 // and metrics builder should update its startTime and reset it's internal state accordingly.
-func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
+func (mb *MetricsBuilder) Reset(options ...MetricBuilderOption) {
 	mb.startTime = pcommon.NewTimestampFromTime(time.Now())
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 }

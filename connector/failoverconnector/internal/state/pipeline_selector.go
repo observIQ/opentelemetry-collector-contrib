@@ -9,141 +9,108 @@ import (
 	"time"
 )
 
-// PipelineSelector is meant to serve as the source of truth for the target priority level
 type PipelineSelector struct {
-	currentIndex    int
-	stableIndex     int
-	lock            sync.RWMutex
-	pipelineRetries []int
-	maxRetry        int
+	currentPipeline   int
+	constants         PSConstants
+	lock              sync.RWMutex
+	retryEnabledToken chan struct{}
+	retryChan         chan<- struct{}
+
+	retryCancel CancelManager
+	done        chan struct{}
 }
 
-// UpdatePipelineIndex is the main function that updates the pipeline indexes due to an error
-// if the currentIndex is not the stableIndex, that means the currentIndex is a higher
-// priority index that was set during a retry, in which case we return to the stable index
-func (p *PipelineSelector) UpdatePipelineIndex(idx int) {
-	if p.IndexIsStable(idx) {
-		p.setToNextPriorityPipeline(idx)
+// HandleError is called when an error is returned on a healthy pipeline
+func (p *PipelineSelector) HandleError(idx int) {
+	if idx != p.currentPipeline {
 		return
 	}
-	p.setToStableIndex(idx)
+	p.NextStableLevel()
+	p.TryEnableRetry()
 }
 
-// NextPipeline skips through any lower priority pipelines that have exceeded their maxRetries
-// and sets the first that has not as the new stable
-func (p *PipelineSelector) setToNextPriorityPipeline(idx int) {
+// NextStableLevel increments the level to the next in the priority list
+func (p *PipelineSelector) NextStableLevel() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	for ok := true; ok; ok = p.exceededMaxRetries(idx) {
-		idx++
-	}
-	p.stableIndex = idx
+	p.currentPipeline++
 }
 
-// retryHighPriorityPipelines responsible for single iteration through all higher priority pipelines
-func (p *PipelineSelector) RetryHighPriorityPipelines(ctx context.Context, stableIndex int, retryGap time.Duration) {
-	ticker := time.NewTicker(retryGap)
+// TryEnableRetry checks if a retry is already in effect and if not starts the retry goroutine
+func (p *PipelineSelector) TryEnableRetry() {
+	select {
+	case <-p.retryEnabledToken:
+		p.LaunchRetry()
+	default:
+	}
+}
 
-	defer ticker.Stop()
+// LaunchRetry invokes the goroutine responsible for notifying the failover component to retry
+func (p *PipelineSelector) LaunchRetry() {
+	ctx, cancel := context.WithCancel(context.Background())
+	p.retryCancel.UpdateFn(cancel)
 
-	for i := 0; i < stableIndex; i++ {
-		// if stableIndex was updated to a higher priority level during the execution of the goroutine
-		// will return to avoid overwriting higher priority level with lower one
-		if stableIndex > p.StableIndex() {
-			return
+	go func() {
+		ticker := time.NewTicker(p.constants.RetryInterval)
+		defer func() {
+			ticker.Stop()
+			p.returnRetryToken()
+		}()
+		for {
+			select {
+			case <-ticker.C:
+				select {
+				case p.retryChan <- struct{}{}:
+				default:
+				}
+			case <-ctx.Done():
+				return
+			case <-p.done:
+				return
+			}
 		}
-		// checks that max retries were not used for this index
-		if p.MaxRetriesUsed(i) {
-			continue
-		}
-		select {
-		// return when context is cancelled by parent goroutine
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// when ticker triggers currentIndex is updated
-			p.setToCurrentIndex(i)
-		}
-	}
+	}()
 }
 
-func (p *PipelineSelector) exceededMaxRetries(idx int) bool {
-	return idx < len(p.pipelineRetries) && (p.pipelineRetries[idx] >= p.maxRetry)
+// returnRetryToken returns the token back to the buffered channel allowing the next retry function to consume the token
+func (p *PipelineSelector) returnRetryToken() {
+	p.retryEnabledToken <- struct{}{}
 }
 
-// SetToStableIndex returns the CurrentIndex to the known Stable Index
-func (p *PipelineSelector) setToStableIndex(idx int) {
+// CurrentLevel returns the current healthy pipeline level
+func (p *PipelineSelector) CurrentPipeline() int {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+	return p.currentPipeline
+}
+
+// ResetHealthyPipeline resets a pipeline level that was successfully retries back to healthy/active
+func (p *PipelineSelector) ResetHealthyPipeline(pipelineIndex int) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	p.pipelineRetries[idx]++
-	p.currentIndex = p.stableIndex
+	if pipelineIndex == 0 {
+		p.retryCancel.Cancel()
+	}
+	p.currentPipeline = pipelineIndex
 }
 
-// SetToRetryIndex accepts a param and sets the CurrentIndex to this index value
-func (p *PipelineSelector) setToCurrentIndex(index int) {
+func NewPipelineSelector(retryChan chan<- struct{}, done chan struct{}, consts PSConstants) *PipelineSelector {
+	retryEnabledToken := make(chan struct{}, 1)
+	retryEnabledToken <- struct{}{}
+
+	ps := &PipelineSelector{
+		currentPipeline:   0,
+		constants:         consts,
+		retryEnabledToken: retryEnabledToken,
+		retryChan:         retryChan,
+		done:              done,
+	}
+	return ps
+}
+
+// For Testing
+func (p *PipelineSelector) TestSetCurrentPipeline(idx int) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	p.currentIndex = index
-}
-
-// MaxRetriesUsed exported access to maxRetriesUsed
-func (p *PipelineSelector) MaxRetriesUsed(idx int) bool {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.pipelineRetries[idx] >= p.maxRetry
-}
-
-// SetNewStableIndex Update stableIndex to the passed stable index
-func (p *PipelineSelector) setNewStableIndex(idx int) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-	p.pipelineRetries[idx] = 0
-	p.stableIndex = idx
-}
-
-// IndexIsStable returns if index passed is the stable index
-func (p *PipelineSelector) IndexIsStable(idx int) bool {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.stableIndex == idx
-}
-
-func (p *PipelineSelector) StableIndex() int {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.stableIndex
-}
-
-func (p *PipelineSelector) CurrentIndex() int {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.currentIndex
-}
-
-func (p *PipelineSelector) IndexRetryCount(idx int) int {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.pipelineRetries[idx]
-}
-
-// reportStable reports back to the failoverRouter that the current priority level that was called by Consume.SIGNAL was
-// stable
-func (p *PipelineSelector) ReportStable(idx int) {
-	// is stableIndex is already the known stableIndex return
-	if p.IndexIsStable(idx) {
-		return
-	}
-	// if the stableIndex is a retried index, the update the stable index to the retried index
-	// NOTE retry will not stop due to potential higher priority index still available
-	p.setNewStableIndex(idx)
-}
-
-func NewPipelineSelector(lenPriority int, maxRetries int) *PipelineSelector {
-	return &PipelineSelector{
-		currentIndex:    0,
-		stableIndex:     0,
-		lock:            sync.RWMutex{},
-		pipelineRetries: make([]int, lenPriority),
-		maxRetry:        maxRetries,
-	}
+	p.currentPipeline = idx
 }

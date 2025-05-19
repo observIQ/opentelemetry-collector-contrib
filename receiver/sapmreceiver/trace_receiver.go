@@ -17,11 +17,12 @@ import (
 	splunksapm "github.com/signalfx/sapm-proto/gen"
 	"github.com/signalfx/sapm-proto/sapmprotocol"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/receiverhelper"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/splunk"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/errorutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/jaeger"
 )
 
@@ -64,17 +65,6 @@ func (sr *sapmReceiver) handleRequest(req *http.Request) error {
 		return err
 	}
 
-	if sr.config.AccessTokenPassthrough {
-		if accessToken := req.Header.Get(splunk.SFxAccessTokenHeader); accessToken != "" {
-			rSpans := td.ResourceSpans()
-			for i := 0; i < rSpans.Len(); i++ {
-				rSpan := rSpans.At(i)
-				attrs := rSpan.Resource().Attributes()
-				attrs.PutStr(splunk.SFxAccessTokenLabel, accessToken)
-			}
-		}
-	}
-
 	// pass the trace data to the next consumer
 	err = sr.nextConsumer.ConsumeTraces(ctx, td)
 	if err != nil {
@@ -90,8 +80,7 @@ func (sr *sapmReceiver) HTTPHandlerFunc(rw http.ResponseWriter, req *http.Reques
 	// handle the request payload
 	err := sr.handleRequest(req)
 	if err != nil {
-		// TODO account for this error (throttled logging or metrics)
-		rw.WriteHeader(http.StatusBadRequest)
+		errorutil.HTTPError(rw, err)
 		return
 	}
 
@@ -103,7 +92,7 @@ func (sr *sapmReceiver) HTTPHandlerFunc(rw http.ResponseWriter, req *http.Reques
 	// more than an empty struct, then the sapm.PostSpansResponse{} struct will need to be marshaled
 	// and on error a http.StatusInternalServerError should be written to the http.ResponseWriter and
 	// this function should immediately return.
-	var respBytes = sr.defaultResponse
+	respBytes := sr.defaultResponse
 	rw.Header().Set(sapmprotocol.ContentTypeHeaderName, sapmprotocol.ContentTypeHeaderValue)
 
 	// write the response if client does not accept gzip encoding
@@ -150,13 +139,13 @@ func (sr *sapmReceiver) HTTPHandlerFunc(rw http.ResponseWriter, req *http.Reques
 }
 
 // Start starts the sapmReceiver's server.
-func (sr *sapmReceiver) Start(_ context.Context, host component.Host) error {
+func (sr *sapmReceiver) Start(ctx context.Context, host component.Host) error {
 	// server.Handler will be nil on initial call, otherwise noop.
 	if sr.server != nil && sr.server.Handler != nil {
 		return nil
 	}
 	// set up the listener
-	ln, err := sr.config.HTTPServerSettings.ToListener()
+	ln, err := sr.config.ToListener(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to bind to address %s: %w", sr.config.Endpoint, err)
 	}
@@ -166,7 +155,7 @@ func (sr *sapmReceiver) Start(_ context.Context, host component.Host) error {
 	nr.HandleFunc(sapmprotocol.TraceEndpointV2, sr.HTTPHandlerFunc)
 
 	// create a server with the handler
-	sr.server, err = sr.config.HTTPServerSettings.ToServer(host, sr.settings, nr)
+	sr.server, err = sr.config.ToServer(ctx, host, sr.settings, nr)
 	if err != nil {
 		return err
 	}
@@ -176,13 +165,13 @@ func (sr *sapmReceiver) Start(_ context.Context, host component.Host) error {
 	go func() {
 		defer sr.shutdownWG.Done()
 		if errHTTP := sr.server.Serve(ln); !errors.Is(errHTTP, http.ErrServerClosed) && errHTTP != nil {
-			host.ReportFatalError(errHTTP)
+			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(errHTTP))
 		}
 	}()
 	return nil
 }
 
-// Shutdown stops the the sapmReceiver's server.
+// Shutdown stops the sapmReceiver's server.
 func (sr *sapmReceiver) Shutdown(context.Context) error {
 	if sr.server == nil {
 		return nil
@@ -197,7 +186,7 @@ var _ receiver.Traces = (*sapmReceiver)(nil)
 
 // newReceiver creates a sapmReceiver that receives SAPM over http
 func newReceiver(
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	config *Config,
 	nextConsumer consumer.Traces,
 ) (receiver.Traces, error) {
@@ -207,6 +196,7 @@ func newReceiver(
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal default response body for %v receiver: %w", params.ID, err)
 	}
+
 	transport := "http"
 	if config.TLSSetting != nil {
 		transport = "https"

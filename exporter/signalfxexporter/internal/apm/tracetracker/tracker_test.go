@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/ptrace"
+	conventions "go.opentelemetry.io/otel/semconv/v1.26.0"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter/internal/apm/correlations"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter/internal/apm/log"
@@ -26,52 +29,42 @@ func advanceTime(a *ActiveServiceTracker, minutes int64) {
 	a.timeNow = func() time.Time { return newNow }
 }
 
-// mergeStringMaps merges n maps with a later map's keys overriding earlier maps
-func mergeStringMaps(maps ...map[string]string) map[string]string {
-	ret := map[string]string{}
-
+// newResourceWithAttrs creates a new resource with the given attributes.
+func newResourceWithAttrs(maps ...map[string]string) pcommon.Resource {
+	res := pcommon.NewResource()
 	for _, m := range maps {
 		for k, v := range m {
-			ret[k] = v
+			res.Attributes().PutStr(k, v)
 		}
 	}
-
-	return ret
+	return res
 }
 
 func TestExpiration(t *testing.T) {
 	correlationClient := &correlationTestClient{}
 
 	hostIDDims := map[string]string{"host": "test", "AWSUniqueId": "randomAWSUniqueId"}
-	a := New(log.Nil, 5*time.Minute, correlationClient, hostIDDims, true, DefaultDimsToSyncSource)
+	a := New(log.Nil, 5*time.Minute, correlationClient, hostIDDims, DefaultDimsToSyncSource)
 	setTime(a, time.Unix(100, 0))
 
-	a.AddSpansGeneric(context.Background(), fakeSpanList{
-		{
-			serviceName: "one",
-			tags:        mergeStringMaps(hostIDDims, map[string]string{"environment": "environment1"}),
-		},
-		{
-			serviceName: "two",
-			tags:        mergeStringMaps(hostIDDims, map[string]string{"environment": "environment2"}),
-		},
-		{
-			serviceName: "three",
-			tags:        mergeStringMaps(hostIDDims, map[string]string{"environment": "environment3"}),
-		},
-	})
+	fakeTraces := ptrace.NewTraces()
+	newResourceWithAttrs(hostIDDims, map[string]string{string(conventions.ServiceNameKey): "one", "environment": "environment1"}).
+		CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	newResourceWithAttrs(hostIDDims, map[string]string{string(conventions.ServiceNameKey): "two", "environment": "environment2"}).
+		CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	newResourceWithAttrs(hostIDDims, map[string]string{string(conventions.ServiceNameKey): "three", "environment": "environment3"}).
+		CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	a.ProcessTraces(context.Background(), fakeTraces)
 
 	assert.Equal(t, int64(3), a.hostServiceCache.ActiveCount, "activeServiceCount is not properly tracked")
 	assert.Equal(t, int64(3), a.hostEnvironmentCache.ActiveCount, "activeEnvironmentCount is not properly tracked")
 
 	advanceTime(a, 4)
 
-	a.AddSpansGeneric(context.Background(), fakeSpanList{
-		{
-			serviceName: "two",
-			tags:        mergeStringMaps(hostIDDims, map[string]string{"environment": "environment2"}),
-		},
-	})
+	fakeTraces = ptrace.NewTraces()
+	newResourceWithAttrs(hostIDDims, map[string]string{string(conventions.ServiceNameKey): "two", "environment": "environment2"}).
+		CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	a.ProcessTraces(context.Background(), fakeTraces)
 
 	advanceTime(a, 2)
 	a.Purge()
@@ -92,7 +85,8 @@ type correlationTestClient struct {
 	correlateCounter int64
 }
 
-func (c *correlationTestClient) Start() { /*no-op*/ }
+func (c *correlationTestClient) Start()    { /*no-op*/ }
+func (c *correlationTestClient) Shutdown() { /*no-op*/ }
 func (c *correlationTestClient) Get(_ string, dimValue string, cb correlations.SuccessfulGetCB) {
 	atomic.AddInt64(&c.getCounter, 1)
 	go func() {
@@ -102,6 +96,7 @@ func (c *correlationTestClient) Get(_ string, dimValue string, cb correlations.S
 		}
 	}()
 }
+
 func (c *correlationTestClient) Correlate(cl *correlations.Correlation, cb correlations.CorrelateCB) {
 	c.Lock()
 	defer c.Unlock()
@@ -109,6 +104,7 @@ func (c *correlationTestClient) Correlate(cl *correlations.Correlation, cb corre
 	cb(cl, nil)
 	atomic.AddInt64(&c.correlateCounter, 1)
 }
+
 func (c *correlationTestClient) Delete(cl *correlations.Correlation, cb correlations.SuccessfulDeleteCB) {
 	c.Lock()
 	defer c.Unlock()
@@ -116,6 +112,7 @@ func (c *correlationTestClient) Delete(cl *correlations.Correlation, cb correlat
 	cb(cl)
 	atomic.AddInt64(&c.deleteCounter, 1)
 }
+
 func (c *correlationTestClient) getCorrelations() []*correlations.Correlation {
 	c.Lock()
 	defer c.Unlock()
@@ -145,29 +142,24 @@ func TestCorrelationEmptyEnvironment(t *testing.T) {
 	hostIDDims := map[string]string{"host": "test", "AWSUniqueId": "randomAWSUniqueId"}
 	wg.Add(len(hostIDDims))
 	containerLevelIDDims := map[string]string{"kubernetes_pod_uid": "testk8sPodUID", "container_id": "testContainerID"}
-	a := New(log.Nil, 5*time.Minute, correlationClient, hostIDDims, true, DefaultDimsToSyncSource)
+	a := New(log.Nil, 5*time.Minute, correlationClient, hostIDDims, DefaultDimsToSyncSource)
 	wg.Wait() // wait for the initial fetch of hostIDDims to complete
 
-	// for each container level ID we're going to perform a GET to check for an environment
-	wg.Add(len(containerLevelIDDims))
-	a.AddSpansGeneric(context.Background(), fakeSpanList{
-		{tags: mergeStringMaps(hostIDDims, containerLevelIDDims)},
-		{tags: mergeStringMaps(hostIDDims, containerLevelIDDims)},
-		{tags: mergeStringMaps(hostIDDims, containerLevelIDDims)},
-	})
+	fakeTraces := ptrace.NewTraces()
+	fakeResource := newResourceWithAttrs(hostIDDims, containerLevelIDDims)
+	fakeResource.CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	fakeResource.CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	fakeResource.CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	a.ProcessTraces(context.Background(), fakeTraces)
 
-	wg.Wait() // wait for the gets to complete to check for existing tenant environment values
-
-	// there shouldn't be any active tenant environments.  None of the spans had environments on them,
-	// and we don't actively fetch and store environments from the back end.  That's kind of the whole point of this
-	// the workaround this is testing.
-	assert.Equal(t, int64(0), a.tenantEnvironmentCache.ActiveCount, "tenantEnvironmentCache is not properly tracked")
-	// ensure we only have 1 entry per container / pod id
-	assert.Equal(t, int64(len(containerLevelIDDims)), a.tenantEmptyEnvironmentCache.ActiveCount, "tenantEmptyEnvironmentCount is not properly tracked")
-	// len(hostIDDims) * len(containerLevelIDDims)
-	assert.Equal(t, int64(len(containerLevelIDDims)+len(hostIDDims)), atomic.LoadInt64(&correlationClient.getCounter), "")
-	// 1 DELETE * len(containerLevelIDDims)
-	assert.Equal(t, len(containerLevelIDDims), len(correlationClient.getCorrelations()), "")
+	cors := correlationClient.getCorrelations()
+	assert.Len(t, cors, 4, "expected 4 correlations to be made")
+	for _, c := range cors {
+		assert.Contains(t, []string{"container_id", "kubernetes_pod_uid", "host", "AWSUniqueId"}, c.DimName)
+		assert.Contains(t, []string{"test", "randomAWSUniqueId", "testk8sPodUID", "testContainerID"}, c.DimValue)
+		assert.Equal(t, correlations.Type("environment"), c.Type)
+		assert.Equal(t, fallbackEnvironment, c.Value)
+	}
 }
 
 func TestCorrelationUpdates(t *testing.T) {
@@ -187,7 +179,7 @@ func TestCorrelationUpdates(t *testing.T) {
 	hostIDDims := map[string]string{"host": "test", "AWSUniqueId": "randomAWSUniqueId"}
 	wg.Add(len(hostIDDims))
 	containerLevelIDDims := map[string]string{"kubernetes_pod_uid": "testk8sPodUID", "container_id": "testContainerID"}
-	a := New(log.Nil, 5*time.Minute, correlationClient, hostIDDims, true, DefaultDimsToSyncSource)
+	a := New(log.Nil, 5*time.Minute, correlationClient, hostIDDims, DefaultDimsToSyncSource)
 	wg.Wait()
 	assert.Equal(t, int64(1), a.hostServiceCache.ActiveCount, "activeServiceCount is not properly tracked")
 	assert.Equal(t, int64(1), a.hostEnvironmentCache.ActiveCount, "activeEnvironmentCount is not properly tracked")
@@ -200,20 +192,14 @@ func TestCorrelationUpdates(t *testing.T) {
 
 	setTime(a, time.Unix(100, 0))
 
-	a.AddSpansGeneric(context.Background(), fakeSpanList{
-		{
-			serviceName: "one",
-			tags:        mergeStringMaps(hostIDDims, mergeStringMaps(containerLevelIDDims, map[string]string{"environment": "environment1"})),
-		},
-		{
-			serviceName: "two",
-			tags:        mergeStringMaps(hostIDDims, mergeStringMaps(containerLevelIDDims, map[string]string{"environment": "environment2"})),
-		},
-		{
-			serviceName: "three",
-			tags:        mergeStringMaps(hostIDDims, mergeStringMaps(containerLevelIDDims, map[string]string{"environment": "environment3"})),
-		},
-	})
+	fakeTraces := ptrace.NewTraces()
+	newResourceWithAttrs(containerLevelIDDims, map[string]string{string(conventions.ServiceNameKey): "one", "environment": "environment1"}).
+		CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	newResourceWithAttrs(containerLevelIDDims, map[string]string{string(conventions.ServiceNameKey): "two", "environment": "environment2"}).
+		CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	newResourceWithAttrs(containerLevelIDDims, map[string]string{string(conventions.ServiceNameKey): "three", "environment": "environment3"}).
+		CopyTo(fakeTraces.ResourceSpans().AppendEmpty().Resource())
+	a.ProcessTraces(context.Background(), fakeTraces)
 
 	assert.Equal(t, int64(3), a.hostServiceCache.ActiveCount, "activeServiceCount is not properly tracked")
 	assert.Equal(t, int64(3), a.hostEnvironmentCache.ActiveCount, "activeEnvironmentCount is not properly tracked")
@@ -223,5 +209,5 @@ func TestCorrelationUpdates(t *testing.T) {
 	numHostIDDimCorrelations := len(hostIDDims)*(numEnvironments+numServices) + 4 /* 4 deletes for service & environment fetched at startup */
 	numContainerLevelCorrelations := 2 * len(containerLevelIDDims)
 	totalExpectedCorrelations := numHostIDDimCorrelations + numContainerLevelCorrelations
-	assert.Equal(t, totalExpectedCorrelations, len(correlationClient.getCorrelations()), "# of correlation requests do not match")
+	assert.Len(t, correlationClient.getCorrelations(), totalExpectedCorrelations, "# of correlation requests do not match")
 }

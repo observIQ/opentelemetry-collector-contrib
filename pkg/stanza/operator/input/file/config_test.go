@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/helper"
@@ -442,7 +443,7 @@ func TestBuild(t *testing.T) {
 	}{
 		{
 			"Default",
-			func(cfg *Config) {},
+			func(_ *Config) {},
 			require.NoError,
 			func(t *testing.T, f *Input) {
 				require.Equal(t, f.OutputOperators[0], fakeOutput)
@@ -479,7 +480,7 @@ func TestBuild(t *testing.T) {
 				cfg.SplitConfig.LineStartPattern = "START.*"
 			},
 			require.NoError,
-			func(t *testing.T, f *Input) {},
+			func(_ *testing.T, _ *Input) {},
 		},
 		{
 			"MultilineConfiguredEndPattern",
@@ -487,7 +488,7 @@ func TestBuild(t *testing.T) {
 				cfg.SplitConfig.LineEndPattern = "END.*"
 			},
 			require.NoError,
-			func(t *testing.T, f *Input) {},
+			func(_ *testing.T, _ *Input) {},
 		},
 		{
 			"InvalidEncoding",
@@ -508,9 +509,9 @@ func TestBuild(t *testing.T) {
 		},
 		{
 			"NoLineStartOrEnd",
-			func(cfg *Config) {},
+			func(_ *Config) {},
 			require.NoError,
-			func(t *testing.T, f *Input) {},
+			func(_ *testing.T, _ *Input) {},
 		},
 		{
 			"InvalidLineStartRegex",
@@ -532,12 +533,12 @@ func TestBuild(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 			cfg := basicConfig()
 			tc.modifyBaseConfig(cfg)
 
-			op, err := cfg.Build(testutil.Logger(t))
+			set := componenttest.NewNopTelemetrySettings()
+			op, err := cfg.Build(set)
 			tc.errorRequirement(t, err)
 			if err != nil {
 				return

@@ -76,15 +76,15 @@ func (_m *Operator) ID() string {
 }
 
 // Logger provides a mock function with given fields:
-func (_m *Operator) Logger() *zap.SugaredLogger {
+func (_m *Operator) Logger() *zap.Logger {
 	ret := _m.Called()
 
-	var r0 *zap.SugaredLogger
-	if rf, ok := ret.Get(0).(func() *zap.SugaredLogger); ok {
+	var r0 *zap.Logger
+	if rf, ok := ret.Get(0).(func() *zap.Logger); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*zap.SugaredLogger)
+			r0 = ret.Get(0).(*zap.Logger)
 		}
 	}
 
@@ -102,6 +102,19 @@ func (_m *Operator) Outputs() []operator.Operator {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]operator.Operator)
 		}
+	}
+
+	return r0
+}
+
+func (_m *Operator) ProcessBatch(_a0 context.Context, _a1 []*entry.Entry) error {
+	ret := _m.Called(_a0, _a1)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, []*entry.Entry) error); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		r0 = ret.Error(0)
 	}
 
 	return r0

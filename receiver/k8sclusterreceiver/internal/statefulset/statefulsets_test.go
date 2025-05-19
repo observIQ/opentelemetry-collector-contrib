@@ -23,7 +23,7 @@ func TestStatefulsetMetrics(t *testing.T) {
 	ss := testutils.NewStatefulset("1")
 
 	ts := pcommon.Timestamp(time.Now().UnixNano())
-	mb := metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings())
+	mb := metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type))
 	RecordMetrics(mb, ss, ts)
 	m := mb.Emit()
 
@@ -56,7 +56,7 @@ func TestStatefulsetMetadata(t *testing.T) {
 
 	actualMetadata := GetMetadata(ss)
 
-	require.Equal(t, 1, len(actualMetadata))
+	require.Len(t, actualMetadata, 1)
 
 	require.Equal(t,
 		metadata.KubernetesMetadata{
@@ -66,6 +66,7 @@ func TestStatefulsetMetadata(t *testing.T) {
 			Metadata: map[string]string{
 				"k8s.workload.name":              "test-statefulset-1",
 				"k8s.workload.kind":              "StatefulSet",
+				"k8s.namespace.name":             "test-namespace",
 				"statefulset.creation_timestamp": "0001-01-01T00:00:00Z",
 				"foo":                            "bar",
 				"foo1":                           "",

@@ -6,9 +6,14 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type      = component.MustNewType("otlpjsonfile")
+	ScopeName = "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/otlpjsonfilereceiver"
+)
+
 const (
-	Type             = "otlpjsonfile"
-	TracesStability  = component.StabilityLevelAlpha
-	MetricsStability = component.StabilityLevelAlpha
-	LogsStability    = component.StabilityLevelAlpha
+	ProfilesStability = component.StabilityLevelDevelopment
+	TracesStability   = component.StabilityLevelAlpha
+	MetricsStability  = component.StabilityLevelAlpha
+	LogsStability     = component.StabilityLevelAlpha
 )

@@ -2,7 +2,9 @@
 
 package metadata
 
-import "go.opentelemetry.io/collector/confmap"
+import (
+	"go.opentelemetry.io/collector/confmap"
+)
 
 // MetricConfig provides common config for a particular metric.
 type MetricConfig struct {
@@ -15,7 +17,7 @@ func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
-	err := parser.Unmarshal(ms, confmap.WithErrorUnused())
+	err := parser.Unmarshal(ms)
 	if err != nil {
 		return err
 	}
@@ -23,7 +25,7 @@ func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
 	return nil
 }
 
-// MetricsConfig provides config for hostmetricsreceiver/cpu metrics.
+// MetricsConfig provides config for cpu metrics.
 type MetricsConfig struct {
 	SystemCPUFrequency     MetricConfig `mapstructure:"system.cpu.frequency"`
 	SystemCPULogicalCount  MetricConfig `mapstructure:"system.cpu.logical.count"`
@@ -52,7 +54,7 @@ func DefaultMetricsConfig() MetricsConfig {
 	}
 }
 
-// MetricsBuilderConfig is a configuration for hostmetricsreceiver/cpu metrics builder.
+// MetricsBuilderConfig is a configuration for cpu metrics builder.
 type MetricsBuilderConfig struct {
 	Metrics MetricsConfig `mapstructure:"metrics"`
 }

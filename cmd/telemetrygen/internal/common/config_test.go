@@ -17,11 +17,11 @@ func TestKeyValueSet(t *testing.T) {
 	}{
 		{
 			flag:     "key=\"value\"",
-			expected: KeyValue(map[string]string{"key": "value"}),
+			expected: KeyValue(map[string]any{"key": "value"}),
 		},
 		{
 			flag:     "key=\"\"",
-			expected: KeyValue(map[string]string{"key": ""}),
+			expected: KeyValue(map[string]any{"key": ""}),
 		},
 		{
 			flag: "key=\"",
@@ -35,11 +35,35 @@ func TestKeyValueSet(t *testing.T) {
 			flag: "key",
 			err:  errFormatOTLPAttributes,
 		},
+		{
+			flag:     "key=true",
+			expected: KeyValue(map[string]any{"key": true}),
+		},
+		{
+			flag:     "key=false",
+			expected: KeyValue(map[string]any{"key": false}),
+		},
+		{
+			flag:     "key=123",
+			expected: KeyValue(map[string]any{"key": 123}),
+		},
+		{
+			flag:     "key=-456",
+			expected: KeyValue(map[string]any{"key": -456}),
+		},
+		{
+			flag:     "key=0",
+			expected: KeyValue(map[string]any{"key": 0}),
+		},
+		{
+			flag: "key=12.34",
+			err:  errDoubleQuotesOTLPAttributes,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.flag, func(t *testing.T) {
-			kv := KeyValue(make(map[string]string))
+			kv := KeyValue(make(map[string]any))
 			err := kv.Set(tt.flag)
 			if err != nil || tt.err != nil {
 				assert.Equal(t, err, tt.err)

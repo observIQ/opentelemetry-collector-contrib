@@ -6,9 +6,13 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type      = component.MustNewType("failover")
+	ScopeName = "github.com/open-telemetry/opentelemetry-collector-contrib/connector/failoverconnector"
+)
+
 const (
-	Type                      = "failover"
-	MetricsToMetricsStability = component.StabilityLevelDevelopment
-	TracesToTracesStability   = component.StabilityLevelDevelopment
-	LogsToLogsStability       = component.StabilityLevelDevelopment
+	TracesToTracesStability   = component.StabilityLevelAlpha
+	MetricsToMetricsStability = component.StabilityLevelAlpha
+	LogsToLogsStability       = component.StabilityLevelAlpha
 )

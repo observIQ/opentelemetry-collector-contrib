@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
+	"github.com/goccy/go-json"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 
@@ -23,16 +23,53 @@ const (
 	traceIDFieldKey = "trace_id"
 )
 
+// copyOtelAttrs copies values from HecToOtelAttrs to OtelAttrsToHec struct.
+func copyOtelAttrs(config *Config) {
+	defaultCfg := createDefaultConfig().(*Config)
+	if config.OtelAttrsToHec.Equal(defaultCfg.OtelAttrsToHec) {
+		if !config.HecToOtelAttrs.Equal(defaultCfg.HecToOtelAttrs) {
+			// Copy settings to ease deprecation of HecToOtelAttrs.
+			config.OtelAttrsToHec = config.HecToOtelAttrs
+		}
+	} else {
+		if !config.HecToOtelAttrs.Equal(defaultCfg.HecToOtelAttrs) {
+			// Replace all default fields in OtelAttrsToHec.
+			if config.OtelAttrsToHec.Source == defaultCfg.OtelAttrsToHec.Source {
+				config.OtelAttrsToHec.Source = config.HecToOtelAttrs.Source
+			}
+			if config.OtelAttrsToHec.SourceType == defaultCfg.OtelAttrsToHec.SourceType {
+				config.OtelAttrsToHec.SourceType = config.HecToOtelAttrs.SourceType
+			}
+			if config.OtelAttrsToHec.Index == defaultCfg.OtelAttrsToHec.Index {
+				config.OtelAttrsToHec.Index = config.HecToOtelAttrs.Index
+			}
+			if config.OtelAttrsToHec.Host == defaultCfg.OtelAttrsToHec.Host {
+				config.OtelAttrsToHec.Host = config.HecToOtelAttrs.Host
+			}
+		}
+	}
+}
+
 func mapLogRecordToSplunkEvent(res pcommon.Resource, lr plog.LogRecord, config *Config) *splunk.Event {
+	body := lr.Body().AsRaw()
+	if body == nil || body == "" {
+		// events with no body are rejected by Splunk.
+		return nil
+	}
+
+	// Manage the deprecation of HecToOtelAttrs config parameters.
+	// TODO: remove this once HecToOtelAttrs is removed from Config.
+	copyOtelAttrs(config)
+
 	host := unknownHostName
 	source := config.Source
 	sourcetype := config.SourceType
 	index := config.Index
 	fields := map[string]any{}
-	sourceKey := config.HecToOtelAttrs.Source
-	sourceTypeKey := config.HecToOtelAttrs.SourceType
-	indexKey := config.HecToOtelAttrs.Index
-	hostKey := config.HecToOtelAttrs.Host
+	sourceKey := config.OtelAttrsToHec.Source
+	sourceTypeKey := config.OtelAttrsToHec.SourceType
+	indexKey := config.OtelAttrsToHec.Index
+	hostKey := config.OtelAttrsToHec.Host
 	severityTextKey := config.HecFields.SeverityText
 	severityNumberKey := config.HecFields.SeverityNumber
 	if spanID := lr.SpanID(); !spanID.IsEmpty() {
@@ -48,7 +85,7 @@ func mapLogRecordToSplunkEvent(res pcommon.Resource, lr plog.LogRecord, config *
 		fields[severityNumberKey] = lr.SeverityNumber()
 	}
 
-	res.Attributes().Range(func(k string, v pcommon.Value) bool {
+	for k, v := range res.Attributes().All() {
 		switch k {
 		case hostKey:
 			host = v.Str()
@@ -63,9 +100,8 @@ func mapLogRecordToSplunkEvent(res pcommon.Resource, lr plog.LogRecord, config *
 		default:
 			mergeValue(fields, k, v.AsRaw())
 		}
-		return true
-	})
-	lr.Attributes().Range(func(k string, v pcommon.Value) bool {
+	}
+	for k, v := range lr.Attributes().All() {
 		switch k {
 		case hostKey:
 			host = v.Str()
@@ -80,16 +116,15 @@ func mapLogRecordToSplunkEvent(res pcommon.Resource, lr plog.LogRecord, config *
 		default:
 			mergeValue(fields, k, v.AsRaw())
 		}
-		return true
-	})
+	}
 
-	body := lr.Body().AsRaw()
-	if body == nil {
-		body = ""
+	ts := lr.Timestamp()
+	if ts == 0 {
+		ts = lr.ObservedTimestamp()
 	}
 
 	return &splunk.Event{
-		Time:       nanoTimestampToEpochMilliseconds(lr.Timestamp()),
+		Time:       nanoTimestampToEpochMilliseconds(ts),
 		Host:       host,
 		Source:     source,
 		SourceType: sourcetype,
@@ -110,15 +145,14 @@ func mergeValue(dst map[string]any, k string, v any) {
 		if isArrayFlat(element) {
 			dst[k] = v
 		} else {
-			jsonStr, _ := jsoniter.MarshalToString(element)
-			dst[k] = jsonStr
+			b, _ := json.Marshal(element)
+			dst[k] = string(b)
 		}
 	case map[string]any:
 		flattenAndMergeMap(element, dst, k)
 	default:
 		dst[k] = v
 	}
-
 }
 
 func isArrayFlat(array []any) bool {
@@ -141,8 +175,8 @@ func flattenAndMergeMap(src, dst map[string]any, key string) {
 			if isArrayFlat(element) {
 				dst[current] = element
 			} else {
-				jsonStr, _ := jsoniter.MarshalToString(element)
-				dst[current] = jsonStr
+				b, _ := json.Marshal(element)
+				dst[current] = string(b)
 			}
 
 		default:

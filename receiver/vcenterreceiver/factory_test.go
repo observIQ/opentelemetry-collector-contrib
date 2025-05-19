@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/vcenterreceiver/internal/metadata"
 )
 
-func TestCreateMetricsReceiver(t *testing.T) {
+func TestCreateMetrics(t *testing.T) {
 	testCases := []struct {
 		desc   string
 		testFn func(t *testing.T)
@@ -24,7 +25,7 @@ func TestCreateMetricsReceiver(t *testing.T) {
 				t.Parallel()
 				_, err := createMetricsReceiver(
 					context.Background(),
-					receivertest.NewNopCreateSettings(),
+					receivertest.NewNopSettings(metadata.Type),
 					createDefaultConfig(),
 					consumertest.NewNop(),
 				)
@@ -37,24 +38,11 @@ func TestCreateMetricsReceiver(t *testing.T) {
 				t.Parallel()
 				_, err := createMetricsReceiver(
 					context.Background(),
-					receivertest.NewNopCreateSettings(),
+					receivertest.NewNopSettings(metadata.Type),
 					nil,
 					consumertest.NewNop(),
 				)
 				require.ErrorIs(t, err, errConfigNotVcenter)
-			},
-		},
-		{
-			desc: "Nil consumer",
-			testFn: func(t *testing.T) {
-				t.Parallel()
-				_, err := createMetricsReceiver(
-					context.Background(),
-					receivertest.NewNopCreateSettings(),
-					createDefaultConfig(),
-					nil,
-				)
-				require.ErrorIs(t, err, component.ErrNilNextConsumer)
 			},
 		},
 	}

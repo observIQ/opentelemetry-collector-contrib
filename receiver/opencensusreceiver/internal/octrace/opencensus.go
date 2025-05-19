@@ -11,7 +11,6 @@ import (
 	commonpb "github.com/census-instrumentation/opencensus-proto/gen-go/agent/common/v1"
 	agenttracepb "github.com/census-instrumentation/opencensus-proto/gen-go/agent/trace/v1"
 	resourcepb "github.com/census-instrumentation/opencensus-proto/gen-go/resource/v1"
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/receiver"
@@ -33,11 +32,7 @@ type Receiver struct {
 }
 
 // New creates a new opencensus.Receiver reference.
-func New(nextConsumer consumer.Traces, set receiver.CreateSettings) (*Receiver, error) {
-	if nextConsumer == nil {
-		return nil, component.ErrNilNextConsumer
-	}
-
+func New(nextConsumer consumer.Traces, set receiver.Settings) (*Receiver, error) {
 	obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
 		ReceiverID:             set.ID,
 		Transport:              receiverTransport,
@@ -131,8 +126,9 @@ func (ocr *Receiver) processReceivedMsg(
 func (ocr *Receiver) sendToNextConsumer(longLivedRPCCtx context.Context, td ptrace.Traces) error {
 	ctx := ocr.obsrecv.StartTracesOp(longLivedRPCCtx)
 
+	numReceivedSpans := td.SpanCount()
 	err := ocr.nextConsumer.ConsumeTraces(ctx, td)
-	ocr.obsrecv.EndTracesOp(ctx, receiverDataFormat, td.SpanCount(), err)
+	ocr.obsrecv.EndTracesOp(ctx, receiverDataFormat, numReceivedSpans, err)
 
 	return err
 }

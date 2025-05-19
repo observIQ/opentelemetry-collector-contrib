@@ -6,7 +6,6 @@ package awsecscontainermetricsreceiver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"testing"
 
@@ -53,19 +52,6 @@ func TestReceiver(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestReceiverForNilConsumer(t *testing.T) {
-	cfg := createDefaultConfig().(*Config)
-	metricsReceiver, err := newAWSECSContainermetrics(
-		zap.NewNop(),
-		cfg,
-		nil,
-		&fakeRestClient{},
-	)
-
-	require.NotNil(t, err)
-	require.Nil(t, metricsReceiver)
-}
-
 func TestCollectDataFromEndpoint(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	metricsReceiver, err := newAWSECSContainermetrics(
@@ -105,11 +91,10 @@ func TestCollectDataFromEndpointWithConsumerError(t *testing.T) {
 	require.EqualError(t, err, "Test Error for Metrics Consumer")
 }
 
-type invalidFakeClient struct {
-}
+type invalidFakeClient struct{}
 
 func (f invalidFakeClient) GetResponse(_ string) ([]byte, error) {
-	return nil, fmt.Errorf("intentional error")
+	return nil, errors.New("intentional error")
 }
 
 func TestCollectDataFromEndpointWithEndpointError(t *testing.T) {

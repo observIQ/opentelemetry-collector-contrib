@@ -11,11 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/alibabacloudlogserviceexporter/internal/metadata"
 )
 
 func TestNewTracesExporter(t *testing.T) {
-
-	got, err := newTracesExporter(exportertest.NewNopCreateSettings(), &Config{
+	got, err := newTracesExporter(exportertest.NewNopSettings(metadata.Type), &Config{
 		Endpoint: "cn-hangzhou.log.aliyuncs.com",
 		Project:  "demo-project",
 		Logstore: "demo-logstore",
@@ -31,12 +32,11 @@ func TestNewTracesExporter(t *testing.T) {
 	// This will put trace data to send buffer and return success.
 	err = got.ConsumeTraces(context.Background(), traces)
 	assert.NoError(t, err)
-	assert.Nil(t, got.Shutdown(context.Background()))
+	assert.NoError(t, got.Shutdown(context.Background()))
 }
 
 func TestNewFailsWithEmptyTracesExporterName(t *testing.T) {
-
-	got, err := newTracesExporter(exportertest.NewNopCreateSettings(), &Config{})
+	got, err := newTracesExporter(exportertest.NewNopSettings(metadata.Type), &Config{})
 	assert.Error(t, err)
 	require.Nil(t, got)
 }

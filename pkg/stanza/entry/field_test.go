@@ -4,11 +4,12 @@
 package entry
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 func TestFieldUnmarshalJSON(t *testing.T) {
@@ -143,13 +144,11 @@ func TestFieldUnmarshalJSON(t *testing.T) {
 
 			switch {
 			case tc.expectedErrRootable != "":
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedErr)
+				require.ErrorContains(t, err, tc.expectedErr)
 				require.Error(t, errRootable)
 				require.Contains(t, errRootable.Error(), tc.expectedErrRootable)
 			case tc.expectedErr != "":
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.expectedErr)
+				require.ErrorContains(t, err, tc.expectedErr)
 				require.NoError(t, errRootable)
 				require.Equal(t, tc.expected, rootableField.Field)
 			default:
@@ -193,7 +192,7 @@ func TestFieldUnmarshalYAML(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var f Field
-			err := yaml.UnmarshalStrict(tc.input, &f)
+			err := yaml.Unmarshal(tc.input, &f)
 			require.NoError(t, err)
 
 			require.Equal(t, tc.expected, f)
@@ -232,9 +231,10 @@ func TestFieldUnmarshalYAMLFailure(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var f Field
-			err := yaml.UnmarshalStrict(tc.input, &f)
-			require.Error(t, err)
-			require.Contains(t, err.Error(), tc.expected)
+			decoder := yaml.NewDecoder(bytes.NewReader(tc.input))
+			decoder.KnownFields(true)
+			err := decoder.Decode(&f)
+			require.ErrorContains(t, err, tc.expected)
 		})
 	}
 }
@@ -284,8 +284,7 @@ func TestFromJSONDot(t *testing.T) {
 
 func TestFieldFromStringInvalidSplit(t *testing.T) {
 	_, err := NewField("resource[test]")
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "splitting field")
+	require.ErrorContains(t, err, "splitting field")
 }
 
 func TestFieldFromStringWithResource(t *testing.T) {

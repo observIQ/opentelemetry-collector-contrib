@@ -8,13 +8,61 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/extension"
+	"go.opentelemetry.io/collector/extension/extensiontest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 )
 
-func testOTLPMarshal(ex *otlpExtension, t *testing.T) {
+func TestExtension_Start(t *testing.T) {
+	tests := []struct {
+		name         string
+		getExtension func() (extension.Extension, error)
+		expectedErr  string
+	}{
+		{
+			name: "otlpJson",
+			getExtension: func() (extension.Extension, error) {
+				factory := NewFactory()
+				cfg := factory.CreateDefaultConfig()
+				cfg.(*Config).Protocol = "otlp_json"
+				return factory.Create(context.Background(), extensiontest.NewNopSettings(factory.Type()), cfg)
+			},
+		},
+
+		{
+			name: "otlpProtobuf",
+			getExtension: func() (extension.Extension, error) {
+				factory := NewFactory()
+				cfg := factory.CreateDefaultConfig()
+				cfg.(*Config).Protocol = "otlp_proto"
+				return factory.Create(context.Background(), extensiontest.NewNopSettings(factory.Type()), cfg)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ext, err := test.getExtension()
+			if test.expectedErr != "" && err != nil {
+				require.ErrorContains(t, err, test.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+			err = ext.Start(context.Background(), componenttest.NewNopHost())
+			if test.expectedErr != "" && err != nil {
+				require.ErrorContains(t, err, test.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func testOTLPMarshal(t *testing.T, ex *otlpExtension) {
 	traces := generateTraces()
 	_, err := ex.MarshalTraces(traces)
 	require.NoError(t, err)
@@ -26,18 +74,25 @@ func testOTLPMarshal(ex *otlpExtension, t *testing.T) {
 	metrics := generateMetrics()
 	_, err = ex.MarshalMetrics(metrics)
 	require.NoError(t, err)
+
+	profiles := generateProfiles()
+	_, err = ex.MarshalProfiles(profiles)
+	require.NoError(t, err)
 }
 
-func testOTLPUnmarshal(ex *otlpExtension, t *testing.T) {
+func testOTLPUnmarshal(t *testing.T, ex *otlpExtension) {
 	traces := generateTraces()
 	logs := generateLogs()
 	metrics := generateMetrics()
+	profiles := generateProfiles()
 
 	traceBuf, err := ex.MarshalTraces(traces)
 	require.NoError(t, err)
 	logBuf, err := ex.MarshalLogs(logs)
 	require.NoError(t, err)
 	metricBuf, err := ex.MarshalMetrics(metrics)
+	require.NoError(t, err)
+	profileBuf, err := ex.MarshalProfiles(profiles)
 	require.NoError(t, err)
 
 	traces0, err := ex.UnmarshalTraces(traceBuf)
@@ -46,41 +101,44 @@ func testOTLPUnmarshal(ex *otlpExtension, t *testing.T) {
 	require.NoError(t, err)
 	metrics0, err := ex.UnmarshalMetrics(metricBuf)
 	require.NoError(t, err)
+	profiles0, err := ex.UnmarshalProfiles(profileBuf)
+	require.NoError(t, err)
 
 	require.Equal(t, traces0.ResourceSpans().Len(), traces.ResourceSpans().Len())
 	require.Equal(t, logs0.ResourceLogs().Len(), logs.ResourceLogs().Len())
 	require.Equal(t, metrics0.ResourceMetrics().Len(), metrics.ResourceMetrics().Len())
+	require.Equal(t, profiles0.ResourceProfiles().Len(), profiles.ResourceProfiles().Len())
 }
 
 func TestOTLPJSONMarshal(t *testing.T) {
 	conf := &Config{Protocol: otlpJSON}
-	ex := createAndExtension0(conf, t)
+	ex := createAndExtension0(t, conf)
 
-	testOTLPMarshal(ex, t)
+	testOTLPMarshal(t, ex)
 }
 
 func TestOTLPProtoMarshal(t *testing.T) {
 	conf := &Config{Protocol: otlpProto}
-	ex := createAndExtension0(conf, t)
+	ex := createAndExtension0(t, conf)
 
-	testOTLPMarshal(ex, t)
+	testOTLPMarshal(t, ex)
 }
 
 func TestOTLPJSONUnmarshal(t *testing.T) {
 	conf := &Config{Protocol: otlpJSON}
-	ex := createAndExtension0(conf, t)
-	testOTLPUnmarshal(ex, t)
+	ex := createAndExtension0(t, conf)
+	testOTLPUnmarshal(t, ex)
 }
 
 func TestOTLPProtoUnmarshal(t *testing.T) {
 	conf := &Config{Protocol: otlpProto}
-	ex := createAndExtension0(conf, t)
+	ex := createAndExtension0(t, conf)
 
-	testOTLPUnmarshal(ex, t)
+	testOTLPUnmarshal(t, ex)
 }
 
 // createAndExtension0 Create extension
-func createAndExtension0(c *Config, t *testing.T) *otlpExtension {
+func createAndExtension0(t *testing.T, c *Config) *otlpExtension {
 	ex, err := newExtension(c)
 	require.NoError(t, err)
 	err = ex.Start(context.TODO(), nil)
@@ -89,7 +147,7 @@ func createAndExtension0(c *Config, t *testing.T) *otlpExtension {
 }
 
 func generateTraces() ptrace.Traces {
-	var num = 10
+	num := 10
 	now := time.Now()
 	md := ptrace.NewTraces()
 	ilm := md.ResourceSpans().AppendEmpty().ScopeSpans().AppendEmpty()
@@ -104,7 +162,7 @@ func generateTraces() ptrace.Traces {
 }
 
 func generateLogs() plog.Logs {
-	var num = 10
+	num := 10
 	md := plog.NewLogs()
 	ilm := md.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty()
 	ilm.LogRecords().EnsureCapacity(num)
@@ -116,7 +174,7 @@ func generateLogs() plog.Logs {
 }
 
 func generateMetrics() pmetric.Metrics {
-	var num = 10
+	num := 10
 	now := time.Now()
 	startTime := pcommon.NewTimestampFromTime(now.Add(-10 * time.Second))
 	endTime := pcommon.NewTimestampFromTime(now)
@@ -133,4 +191,19 @@ func generateMetrics() pmetric.Metrics {
 		idp.SetIntValue(123)
 	}
 	return md
+}
+
+func generateProfiles() pprofile.Profiles {
+	num := 10
+	now := time.Now()
+	pd := pprofile.NewProfiles()
+	ilm := pd.ResourceProfiles().AppendEmpty().ScopeProfiles().AppendEmpty()
+	ilm.Profiles().EnsureCapacity(num)
+	for i := 0; i < num; i++ {
+		im := ilm.Profiles().AppendEmpty()
+		im.SetProfileID([16]byte{0x01, 0x02, 0x03, 0x04})
+		im.SetStartTime(pcommon.NewTimestampFromTime(now))
+		im.SetDuration(pcommon.NewTimestampFromTime(time.Now()))
+	}
+	return pd
 }

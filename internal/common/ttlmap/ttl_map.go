@@ -11,6 +11,7 @@ import (
 // TTLMap is a map that evicts entries after the configured ttl has elapsed.
 type TTLMap struct {
 	md            *ttlMapData
+	done          chan struct{}
 	sweepInterval int64
 }
 
@@ -19,19 +20,28 @@ type TTLMap struct {
 // entries can persist before getting evicted. Call Start() on the returned
 // TTLMap to begin periodic sweeps which check for expiration and evict entries
 // as needed.
-func New(sweepIntervalSeconds int64, maxAgeSeconds int64) *TTLMap {
+// done is the channel that will be used to signal to the timer to stop its work.
+func New(sweepIntervalSeconds int64, maxAgeSeconds int64, done chan struct{}) *TTLMap {
 	return &TTLMap{
 		sweepInterval: sweepIntervalSeconds,
 		md:            newTTLMapData(maxAgeSeconds),
+		done:          done,
 	}
 }
 
 // Start starts periodic sweeps for expired entries in the underlying map.
 func (m *TTLMap) Start() {
 	go func() {
-		d := time.Duration(m.sweepInterval) * time.Second
-		for now := range time.Tick(d) {
-			m.md.sweep(now.Unix())
+		ticker := time.NewTicker(time.Duration(m.sweepInterval) * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case now := <-ticker.C:
+				m.md.sweep(now.Unix())
+			case <-m.done:
+				return
+			}
 		}
 	}()
 }
@@ -49,9 +59,15 @@ func (m *TTLMap) Get(k string) any {
 	return m.md.get(k)
 }
 
+func (m *TTLMap) Shutdown() {
+	if m.done != nil {
+		close(m.done)
+	}
+}
+
 type entry struct {
-	createTime int64
 	v          any
+	createTime int64
 }
 
 type ttlMapData struct {

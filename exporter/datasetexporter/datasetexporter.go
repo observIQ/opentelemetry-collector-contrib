@@ -28,7 +28,7 @@ type DatasetExporter struct {
 	serverHost  string
 }
 
-func newDatasetExporter(entity string, config *Config, set exporter.CreateSettings) (*DatasetExporter, error) {
+func newDatasetExporter(entity string, config *Config, set exporter.Settings) (*DatasetExporter, error) {
 	logger := set.Logger
 	logger.Info("Creating new DataSetExporter",
 		zap.String("config", config.String()),
@@ -36,13 +36,7 @@ func newDatasetExporter(entity string, config *Config, set exporter.CreateSettin
 		zap.String("id.string", set.ID.String()),
 		zap.String("id.name", set.ID.Name()),
 	)
-	exporterCfg, err := config.convert()
-	if err != nil {
-		return nil, fmt.Errorf(
-			"cannot convert config: %s; %w",
-			config.String(), err,
-		)
-	}
+	exporterCfg := config.convert()
 	userAgent := fmt.Sprintf(
 		"%s;%s;%s",
 		"OtelCollector",
@@ -115,12 +109,11 @@ func updateWithPrefixedValues(target map[string]any, prefix string, separator st
 			// now the last value wins
 			// Should the first value win?
 			_, found := target[prefix]
-			if found && len(suffix) > 0 {
-				prefix += suffix
-			} else {
+			if !found || len(suffix) == 0 {
 				target[prefix] = source
 				break
 			}
+			prefix += suffix
 		}
 	}
 

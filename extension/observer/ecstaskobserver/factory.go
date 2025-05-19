@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/ecstaskobserver/internal/metadata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/endpointswatcher"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/ecsutil"
 )
 
@@ -38,7 +38,7 @@ type baseExtension struct {
 
 func createExtension(
 	_ context.Context,
-	params extension.CreateSettings,
+	params extension.Settings,
 	cfg component.Config,
 ) (extension.Extension, error) {
 	obsCfg := cfg.(*Config)
@@ -63,7 +63,7 @@ func createExtension(
 	e.Extension = baseExtension{
 		ShutdownFunc: e.Shutdown,
 	}
-	e.EndpointsWatcher = observer.NewEndpointsWatcher(e, obsCfg.RefreshInterval, params.TelemetrySettings.Logger)
+	e.EndpointsWatcher = endpointswatcher.New(e, obsCfg.RefreshInterval, params.Logger)
 
 	return e, nil
 }
@@ -74,7 +74,7 @@ func metadataProviderFromEndpoint(config *Config, settings component.TelemetrySe
 		return nil, fmt.Errorf("failed to parse task metadata endpoint: %w", err)
 	}
 
-	restClient, err := ecsutil.NewRestClient(*parsed, config.HTTPClientSettings, settings)
+	restClient, err := ecsutil.NewRestClient(*parsed, config.ClientConfig, settings)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ECS Task Observer rest client: %w", err)
 	}

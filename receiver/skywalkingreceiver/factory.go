@@ -7,6 +7,7 @@ package skywalkingreceiver // import "github.com/open-telemetry/opentelemetry-co
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -28,8 +29,8 @@ const (
 	protoHTTP = "http"
 
 	// Default endpoints to bind to.
-	defaultGRPCBindEndpoint = "0.0.0.0:11800"
-	defaultHTTPBindEndpoint = "0.0.0.0:12800"
+	defaultGRPCEndpoint = "localhost:11800"
+	defaultHTTPEndpoint = "localhost:12800"
 )
 
 // NewFactory creates a new Skywalking receiver factory.
@@ -45,14 +46,14 @@ func NewFactory() receiver.Factory {
 func createDefaultConfig() component.Config {
 	return &Config{
 		Protocols: Protocols{
-			GRPC: &configgrpc.GRPCServerSettings{
-				NetAddr: confignet.NetAddr{
-					Endpoint:  defaultGRPCBindEndpoint,
-					Transport: "tcp",
+			GRPC: &configgrpc.ServerConfig{
+				NetAddr: confignet.AddrConfig{
+					Endpoint:  defaultGRPCEndpoint,
+					Transport: confignet.TransportTypeTCP,
 				},
 			},
-			HTTP: &confighttp.HTTPServerSettings{
-				Endpoint: defaultHTTPBindEndpoint,
+			HTTP: &confighttp.ServerConfig{
+				Endpoint: defaultHTTPEndpoint,
 			},
 		},
 	}
@@ -61,11 +62,10 @@ func createDefaultConfig() component.Config {
 // createTracesReceiver creates a trace receiver based on provided config.
 func createTracesReceiver(
 	_ context.Context,
-	set receiver.CreateSettings,
+	set receiver.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Traces,
 ) (receiver.Traces, error) {
-
 	// Convert settings in the source c to configuration struct
 	// that Skywalking receiver understands.
 	rCfg := cfg.(*Config)
@@ -89,11 +89,10 @@ func createTracesReceiver(
 // createMetricsReceiver creates a metrics receiver based on provided config.
 func createMetricsReceiver(
 	_ context.Context,
-	set receiver.CreateSettings,
+	set receiver.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Metrics,
 ) (receiver.Metrics, error) {
-
 	// Convert settings in the source c to configuration struct
 	// that Skywalking receiver understands.
 	rCfg := cfg.(*Config)
@@ -119,16 +118,16 @@ func createConfiguration(rCfg *Config) (*configuration, error) {
 	var err error
 	var c configuration
 	// Set ports
-	if rCfg.Protocols.GRPC != nil {
-		c.CollectorGRPCServerSettings = *rCfg.Protocols.GRPC
-		if c.CollectorGRPCPort, err = extractPortFromEndpoint(rCfg.Protocols.GRPC.NetAddr.Endpoint); err != nil {
+	if rCfg.GRPC != nil {
+		c.CollectorGRPCServerSettings = *rCfg.GRPC
+		if c.CollectorGRPCPort, err = extractPortFromEndpoint(rCfg.GRPC.NetAddr.Endpoint); err != nil {
 			return nil, fmt.Errorf("unable to extract port for the gRPC endpoint: %w", err)
 		}
 	}
 
-	if rCfg.Protocols.HTTP != nil {
-		c.CollectorHTTPSettings = *rCfg.Protocols.HTTP
-		if c.CollectorHTTPPort, err = extractPortFromEndpoint(rCfg.Protocols.HTTP.Endpoint); err != nil {
+	if rCfg.HTTP != nil {
+		c.CollectorHTTPSettings = *rCfg.HTTP
+		if c.CollectorHTTPPort, err = extractPortFromEndpoint(rCfg.HTTP.Endpoint); err != nil {
 			return nil, fmt.Errorf("unable to extract port for the HTTP endpoint: %w", err)
 		}
 	}
@@ -147,7 +146,7 @@ func extractPortFromEndpoint(endpoint string) (int, error) {
 		return 0, fmt.Errorf("endpoint port is not a number: %w", err)
 	}
 	if port < 1 || port > 65535 {
-		return 0, fmt.Errorf("port number must be between 1 and 65535")
+		return 0, errors.New("port number must be between 1 and 65535")
 	}
 	return int(port), nil
 }

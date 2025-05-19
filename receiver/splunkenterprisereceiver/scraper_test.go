@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,9 +16,10 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configauth"
 	"go.opentelemetry.io/collector/config/confighttp"
-	"go.opentelemetry.io/collector/extension/auth"
+	"go.opentelemetry.io/collector/extension/extensionauth/extensionauthtest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/pmetrictest"
@@ -48,16 +48,35 @@ func mockIntrospectionQueues(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(`{"links":{},"origin":"https://somehost:8089/services/server/introspection/queues","updated":"2023-09-18T13:37:45+00:00","generator":{"build":"82c987350fde","version":"9.0.1"},"entry":[{"name":"AEQ","id":"https://somehost:8089/services/server/introspection/queues/AEQ","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/server/introspection/queues/AEQ","list":"/services/server/introspection/queues/AEQ","edit":"/services/server/introspection/queues/AEQ"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","splunk-system-role"],"write":["admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"cntr_1_lookback_time":60,"cntr_2_lookback_time":600,"cntr_3_lookback_time":900,"current_size":1,"current_size_bytes":100,"eai:acl":null,"largest_size":3,"max_size_bytes":512000,"sampling_interval":1,"smallest_size":0,"value_cntr1_size_bytes_lookback":0,"value_cntr1_size_lookback":0,"value_cntr2_size_bytes_lookback":0,"value_cntr2_size_lookback":0,"value_cntr3_size_bytes_lookback":0,"value_cntr3_size_lookback":0}}],"paging":{"total":13,"perPage":1,"offset":0},"messages":[]}`))
 }
 
+func mockDispatchArtifacts(w http.ResponseWriter, _ *http.Request) {
+	status := http.StatusOK
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write([]byte(`{"links":{},"origin":"https://somehost:8089/services/server/status/dispatch-artifacts","updated":"2024-10-24T04:46:47+00:00","generator":{"build":"05775df3af30","version":"9.2.2406.108"},"entry":[{"name":"result","id":"https://somehost:8089/services/server/status/dispatch-artifacts/result","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/server/status/dispatch-artifacts/result","list":"/services/server/status/dispatch-artifacts/result"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["*"],"write":[]},"removable":false,"sharing":"system"},"content":{"adhoc_count":"7","adhoc_size_mb":"1","adhoc_subsearch_count":"0","adhoc_subsearch_size_mb":"0","cached_job_status_info_csv_size_mb":"0","cached_job_status_status_csv_size_mb":"0","cached_job_status_total_entries":"20","completed_count":"20","completed_size_mb":"2","count_summary":"1","disk_usage_MB":"2","eai:acl":null,"incomple_count":"0","incomple_size_mb":"0","invalid_count":"1","remote_count":"0","remote_mb":"0","rsa_count":"0","rsa_scheduled_count":"0","rsa_scheduled_size_mb":"0","rsa_size_mb":"0","scheduled_count":"13","scheduled_size_mb":"1","scheduled_subsearch_count":"0","scheduled_subsearch_size_mb":"0","ss_count":"7","status_cache_info_csv_size_mb":"0","status_cache_status_csv_size_mb":"0","status_cache_total_entries":"20","temp_dispatch_count":"0","temp_dispatch_size_mb":"0","top_apps":{"0":{"splunk_instrumentation":"6"},"1":{"search":"1"}},"top_named_searches":null,"top_users":{"0":{"splunk-system-user":"6"},"1":{"internal_observability":"1"}},"total_count":"7"}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}`))
+}
+
+func mockIndexerClusterMangerStatus(w http.ResponseWriter, _ *http.Request) {
+	status := http.StatusOK
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write([]byte(`{"links":{},"origin":"https://somehost:8089/services/cluster/manager/status","updated":"2025-03-27T22:21:40+00:00","generator":{"build":"b10ab43f821f","version":"9.3.2408.109"},"entry":[{"name":"master","id":"https://somehost:8089/services/cluster/manager/status/master","updated":"1970-01-01T00:00:00+00:00","links":{"alternate":"/services/cluster/manager/status/master","list":"/services/cluster/manager/status/master"},"author":"system","acl":{"app":"","can_list":true,"can_write":true,"modifiable":false,"owner":"system","perms":{"read":["admin","index-manager","internal_ops_admin","splunk-system-role"],"write":["admin","index-manager","internal_ops_admin","splunk-system-role"]},"removable":false,"sharing":"system"},"content":{"available_sites":"[site11, site12, site13]","decommission_force_timeout":"0","eai:acl":null,"ha_mode":"Disabled","maintenance_mode":false,"messages":"","multisite":true,"peers":{},"restart_inactivity_timeout":"0","restart_progress":{"done":[],"failed":[],"in_progress":[],"skipped":[],"to_be_restarted":[]},"rolling_restart_flag":false,"rolling_restart_or_upgrade":false,"rolling_restart_type":"None","searchable_rolling":false,"service_ready_flag":true}}],"paging":{"total":1,"perPage":30,"offset":0},"messages":[]}
+`))
+}
+
 // mock server create
 func createMockServer() *httptest.Server {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch strings.TrimSpace(r.URL.Path) {
-		case "/services/server/introspection/indexer":
+		switch r.URL.String() {
+		case "/services/server/introspection/indexer?output_mode=json":
 			mockIndexerThroughput(w, r)
-		case "/services/data/indexes-extended":
+		case "/services/data/indexes-extended?output_mode=json&count=-1":
 			mockIndexesExtended(w, r)
-		case "/services/server/introspection/queues":
+		case "/services/server/introspection/queues?output_mode=json&count=-1":
 			mockIntrospectionQueues(w, r)
+		case "/services/server/status/dispatch-artifacts?output_mode=json&count=-1":
+			mockDispatchArtifacts(w, r)
+		case "/services/cluster/manager/status?output_mode=json":
+			mockIndexerClusterMangerStatus(w, r)
 		default:
 			http.NotFoundHandler().ServeHTTP(w, r)
 		}
@@ -66,12 +85,15 @@ func createMockServer() *httptest.Server {
 	return ts
 }
 
-func TestScraper(t *testing.T) {
-	ts := createMockServer()
-	defer ts.Close()
-
-	// in the future add more metrics
+func createConfig(ts *httptest.Server, badConfig bool) *Config {
+	var endpoint string
+	if badConfig {
+		endpoint = "12345"
+	} else {
+		endpoint = ts.URL
+	}
 	metricsettings := metadata.MetricsBuilderConfig{}
+	// in the future add more metrics
 	metricsettings.Metrics.SplunkIndexerThroughput.Enabled = true
 	metricsettings.Metrics.SplunkDataIndexesExtendedTotalSize.Enabled = true
 	metricsettings.Metrics.SplunkDataIndexesExtendedEventCount.Enabled = true
@@ -82,30 +104,43 @@ func TestScraper(t *testing.T) {
 	metricsettings.Metrics.SplunkDataIndexesExtendedBucketWarmCount.Enabled = true
 	metricsettings.Metrics.SplunkServerIntrospectionQueuesCurrent.Enabled = true
 	metricsettings.Metrics.SplunkServerIntrospectionQueuesCurrentBytes.Enabled = true
-
-	cfg := &Config{
-		HTTPClientSettings: confighttp.HTTPClientSettings{
-			Endpoint: ts.URL,
-			Auth: &configauth.Authentication{
-				AuthenticatorID: component.NewID("basicauth/client"),
-			},
+	metricsettings.Metrics.SplunkIndexerRollingrestartStatus.Enabled = true
+	return &Config{
+		IdxEndpoint: confighttp.ClientConfig{
+			Endpoint: endpoint,
+			Auth:     &configauth.Config{AuthenticatorID: component.MustNewIDWithName("basicauth", "client")},
 		},
-		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+		SHEndpoint: confighttp.ClientConfig{
+			Endpoint: endpoint,
+			Auth:     &configauth.Config{AuthenticatorID: component.MustNewIDWithName("basicauth", "client")},
+		},
+		CMEndpoint: confighttp.ClientConfig{
+			Endpoint: endpoint,
+			Auth:     &configauth.Config{AuthenticatorID: component.MustNewIDWithName("basicauth", "client")},
+		},
+		ControllerConfig: scraperhelper.ControllerConfig{
 			CollectionInterval: 10 * time.Second,
 			InitialDelay:       1 * time.Second,
 			Timeout:            11 * time.Second,
 		},
 		MetricsBuilderConfig: metricsettings,
+		VersionInfo:          false,
 	}
+}
 
+func TestScraper(t *testing.T) {
+	ts := createMockServer()
+	defer ts.Close()
+
+	cfg := createConfig(ts, false)
 	host := &mockHost{
 		extensions: map[component.ID]component.Component{
-			component.NewID("basicauth/client"): auth.NewClient(),
+			component.MustNewIDWithName("basicauth", "client"): extensionauthtest.NewNopClient(),
 		},
 	}
 
-	scraper := newSplunkMetricsScraper(receivertest.NewNopCreateSettings(), cfg)
-	client, err := newSplunkEntClient(cfg, host, componenttest.NewNopTelemetrySettings())
+	scraper := newSplunkMetricsScraper(receivertest.NewNopSettings(metadata.Type), cfg)
+	client, err := newSplunkEntClient(context.Background(), cfg, host, componenttest.NewNopTelemetrySettings())
 	require.NoError(t, err)
 
 	scraper.splunkClient = client
@@ -120,4 +155,27 @@ func TestScraper(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, actualMetrics, pmetrictest.IgnoreStartTimestamp(), pmetrictest.IgnoreTimestamp()))
+}
+
+func TestScrapeError(t *testing.T) {
+	ts := createMockServer()
+	defer ts.Close()
+
+	cfg := createConfig(ts, true)
+
+	host := &mockHost{
+		extensions: map[component.ID]component.Component{
+			component.MustNewIDWithName("basicauth", "client"): extensionauthtest.NewNopClient(),
+		},
+	}
+
+	scraper := newSplunkMetricsScraper(receivertest.NewNopSettings(metadata.Type), cfg)
+	client, err := newSplunkEntClient(context.Background(), cfg, host, componenttest.NewNopTelemetrySettings())
+	require.NoError(t, err)
+
+	scraper.splunkClient = client
+
+	_, err = scraper.scrape(context.Background())
+	require.Error(t, err, "scrape failed")
+	require.True(t, scrapererror.IsPartialScrapeError(err), "scrape error is PartialScrapeError")
 }

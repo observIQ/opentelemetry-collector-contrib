@@ -9,16 +9,16 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/shirou/gopsutil/v3/host"
-	"github.com/shirou/gopsutil/v3/load"
-	"github.com/shirou/gopsutil/v3/process"
+	"github.com/shirou/gopsutil/v4/host"
+	"github.com/shirou/gopsutil/v4/load"
+	"github.com/shirou/gopsutil/v4/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/collector/receiver/scrapererror"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
+	"go.opentelemetry.io/collector/scraper/scrapertest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/processesscraper/internal/metadata"
@@ -33,7 +33,7 @@ func TestScrape(t *testing.T) {
 	type testCase struct {
 		name         string
 		getMiscStats func(context.Context) (*load.MiscStat, error)
-		getProcesses func() ([]proc, error)
+		getProcesses func(context.Context) ([]proc, error)
 		expectedErr  string
 		validate     func(*testing.T, pmetric.MetricSlice)
 	}
@@ -43,8 +43,8 @@ func TestScrape(t *testing.T) {
 		validate: validateRealData,
 	}, {
 		name:         "FakeData",
-		getMiscStats: func(ctx context.Context) (*load.MiscStat, error) { return &fakeData, nil },
-		getProcesses: func() ([]proc, error) { return fakeProcessesData, nil },
+		getMiscStats: func(context.Context) (*load.MiscStat, error) { return &fakeData, nil },
+		getProcesses: func(context.Context) ([]proc, error) { return fakeProcessesData, nil },
 		validate:     validateFakeData,
 	}, {
 		name:         "ErrorFromMiscStat",
@@ -52,11 +52,11 @@ func TestScrape(t *testing.T) {
 		expectedErr:  "err1",
 	}, {
 		name:         "ErrorFromProcesses",
-		getProcesses: func() ([]proc, error) { return nil, errors.New("err2") },
+		getProcesses: func(context.Context) ([]proc, error) { return nil, errors.New("err2") },
 		expectedErr:  "err2",
 	}, {
 		name:         "ErrorFromProcessShouldBeIgnored",
-		getProcesses: func() ([]proc, error) { return []proc{errProcess{}}, nil },
+		getProcesses: func(context.Context) ([]proc, error) { return []proc{errProcess{}}, nil },
 	}, {
 		name:     "Validate Start Time",
 		validate: validateStartTime,
@@ -64,7 +64,7 @@ func TestScrape(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			scraper := newProcessesScraper(context.Background(), receivertest.NewNopCreateSettings(), &Config{
+			scraper := newProcessesScraper(context.Background(), scrapertest.NewNopSettings(metadata.Type), &Config{
 				MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
 			})
 			err := scraper.start(context.Background(), componenttest.NewNopHost())
@@ -203,7 +203,7 @@ func validateFakeData(t *testing.T, metrics pmetric.MetricSlice) {
 			attrs[val.Str()] = point.IntValue()
 		}
 
-		assert.Equal(t, attrs, map[string]int64{
+		assert.Equal(t, map[string]int64{
 			metadata.AttributeStatusBlocked.String():  3,
 			metadata.AttributeStatusPaging.String():   1,
 			metadata.AttributeStatusRunning.String():  2,
@@ -211,7 +211,7 @@ func validateFakeData(t *testing.T, metrics pmetric.MetricSlice) {
 			metadata.AttributeStatusStopped.String():  5,
 			metadata.AttributeStatusUnknown.String():  9,
 			metadata.AttributeStatusZombies.String():  6,
-		})
+		}, attrs)
 	}
 
 	if expectProcessesCreatedMetric {

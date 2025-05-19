@@ -4,7 +4,6 @@
 package jaeger // import "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/jaeger"
 
 import (
-	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
@@ -12,14 +11,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jaegertracing/jaeger/model"
+	"github.com/jaegertracing/jaeger-idl/model/v1"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
-	conventions "go.opentelemetry.io/collector/semconv/v1.9.0"
+	conventions "go.opentelemetry.io/otel/semconv/v1.16.0"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/idutils"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/occonventions"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/tracetranslator"
+	idutils "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/core/xidutils"
 )
 
 var blankJaegerProtoSpan = new(model.Span)
@@ -141,7 +140,7 @@ func jProcessToInternalResource(process *model.Process, dest pcommon.Resource) {
 	attrs := dest.Attributes()
 	if serviceName != "" {
 		attrs.EnsureCapacity(len(tags) + 1)
-		attrs.PutStr(conventions.AttributeServiceName, serviceName)
+		attrs.PutStr(string(conventions.ServiceNameKey), serviceName)
 	} else {
 		attrs.EnsureCapacity(len(tags))
 	}
@@ -155,9 +154,9 @@ func jProcessToInternalResource(process *model.Process, dest pcommon.Resource) {
 // translateHostnameAttr translates "hostname" atttribute
 func translateHostnameAttr(attrs pcommon.Map) {
 	hostname, hostnameFound := attrs.Get("hostname")
-	_, convHostNameFound := attrs.Get(conventions.AttributeHostName)
+	_, convHostNameFound := attrs.Get(string(conventions.HostNameKey))
 	if hostnameFound && !convHostNameFound {
-		hostname.CopyTo(attrs.PutEmpty(conventions.AttributeHostName))
+		hostname.CopyTo(attrs.PutEmpty(string(conventions.HostNameKey)))
 		attrs.Remove("hostname")
 	}
 }
@@ -240,7 +239,7 @@ func jTagsToInternalAttributes(tags []model.KeyValue, dest pcommon.Map) {
 		case model.ValueType_FLOAT64:
 			dest.PutDouble(tag.Key, tag.GetVFloat64())
 		case model.ValueType_BINARY:
-			dest.PutStr(tag.Key, base64.StdEncoding.EncodeToString(tag.GetVBinary()))
+			dest.PutEmptyBytes(tag.Key).FromRaw(tag.GetVBinary())
 		default:
 			dest.PutStr(tag.Key, fmt.Sprintf("<Unknown Jaeger TagType %q>", tag.GetVType()))
 		}
@@ -267,7 +266,7 @@ func setInternalSpanStatus(attrs pcommon.Map, span ptrace.Span) {
 		}
 	}
 
-	if codeAttr, ok := attrs.Get(conventions.OtelStatusCode); ok {
+	if codeAttr, ok := attrs.Get(string(conventions.OtelStatusCodeKey)); ok {
 		if !statusExists {
 			// The error tag is the ultimate truth for a Jaeger spans' error
 			// status. Only parse the otel.status_code tag if the error tag is
@@ -287,8 +286,8 @@ func setInternalSpanStatus(attrs pcommon.Map, span ptrace.Span) {
 		// Regardless of error tag value, remove the otel.status_code tag. The
 		// otel.status_message tag will have already been removed if
 		// statusExists is true.
-		attrs.Remove(conventions.OtelStatusCode)
-	} else if httpCodeAttr, ok := attrs.Get(conventions.AttributeHTTPStatusCode); !statusExists && ok {
+		attrs.Remove(string(conventions.OtelStatusCodeKey))
+	} else if httpCodeAttr, ok := attrs.Get(string(conventions.HTTPStatusCodeKey)); !statusExists && ok {
 		// Fallback to introspecting if this span represents a failed HTTP
 		// request or response, but again, only do so if the `error` tag was
 		// not set to true and no explicit status was sent.
@@ -315,9 +314,9 @@ func setInternalSpanStatus(attrs pcommon.Map, span ptrace.Span) {
 // returned. The OTel status description attribute is deleted from attrs in
 // the process.
 func extractStatusDescFromAttr(attrs pcommon.Map) (string, bool) {
-	if msgAttr, ok := attrs.Get(conventions.OtelStatusDescription); ok {
+	if msgAttr, ok := attrs.Get(string(conventions.OtelStatusDescriptionKey)); ok {
 		msg := msgAttr.Str()
-		attrs.Remove(conventions.OtelStatusDescription)
+		attrs.Remove(string(conventions.OtelStatusDescriptionKey))
 		return msg, true
 	}
 	return "", false
@@ -426,7 +425,7 @@ func jReferencesToSpanLinks(refs []model.SpanRef, excludeParentID model.SpanID, 
 		link := dest.AppendEmpty()
 		link.SetTraceID(idutils.UInt64ToTraceID(ref.TraceID.High, ref.TraceID.Low))
 		link.SetSpanID(idutils.UInt64ToSpanID(uint64(ref.SpanID)))
-		link.Attributes().PutStr(conventions.AttributeOpentracingRefType, jRefTypeToAttribute(ref.RefType))
+		link.Attributes().PutStr(string(conventions.OpentracingRefTypeKey), jRefTypeToAttribute(ref.RefType))
 	}
 }
 
@@ -442,9 +441,9 @@ func getTraceStateFromAttrs(attrs pcommon.Map) string {
 
 func getScope(span *model.Span) scope {
 	il := scope{}
-	if libraryName, ok := getAndDeleteTag(span, conventions.OtelLibraryName); ok {
+	if libraryName, ok := getAndDeleteTag(span, string(conventions.OtelScopeNameKey)); ok {
 		il.name = libraryName
-		if libraryVersion, ok := getAndDeleteTag(span, conventions.OtelLibraryVersion); ok {
+		if libraryVersion, ok := getAndDeleteTag(span, string(conventions.OtelScopeVersionKey)); ok {
 			il.version = libraryVersion
 		}
 	}
@@ -464,7 +463,7 @@ func getAndDeleteTag(span *model.Span, key string) (string, bool) {
 
 func jRefTypeToAttribute(ref model.SpanRefType) string {
 	if ref == model.ChildOf {
-		return conventions.AttributeOpentracingRefTypeChildOf
+		return conventions.OpentracingRefTypeChildOf.Value.AsString()
 	}
-	return conventions.AttributeOpentracingRefTypeFollowsFrom
+	return conventions.OpentracingRefTypeFollowsFrom.Value.AsString()
 }

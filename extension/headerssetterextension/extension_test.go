@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/client"
+	"go.opentelemetry.io/collector/config/configopaque"
 )
 
 type mockRoundTripper struct{}
@@ -39,7 +40,7 @@ func TestRoundTripper(t *testing.T) {
 					Metadata: tt.metadata,
 				},
 			)
-			req, err := http.NewRequestWithContext(ctx, "GET", "", nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "", nil)
 			assert.NoError(t, err)
 			assert.NotNil(t, req)
 
@@ -218,9 +219,49 @@ var (
 				"header_name": "",
 			},
 		},
+		{
+			cfg: &Config{
+				HeadersConfig: []HeaderConfig{
+					{
+						Key:          &header,
+						Action:       INSERT,
+						FromContext:  stringp("tenant"),
+						DefaultValue: opaquep("default_tenant"),
+					},
+				},
+			},
+			metadata: client.NewMetadata(
+				map[string][]string{},
+			),
+			expectedHeaders: map[string]string{
+				"header_name": "default_tenant",
+			},
+		},
+		{
+			cfg: &Config{
+				HeadersConfig: []HeaderConfig{
+					{
+						Key:          &header,
+						Action:       INSERT,
+						FromContext:  stringp("tenant"),
+						DefaultValue: opaquep("default_tenant"),
+					},
+				},
+			},
+			metadata: client.NewMetadata(
+				map[string][]string{"tenant": {"acme"}},
+			),
+			expectedHeaders: map[string]string{
+				"header_name": "acme",
+			},
+		},
 	}
 )
 
 func stringp(str string) *string {
 	return &str
+}
+
+func opaquep(stro configopaque.String) *configopaque.String {
+	return &stro
 }

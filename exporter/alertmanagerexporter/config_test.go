@@ -14,8 +14,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/alertmanagerexporter/internal/metadata"
@@ -34,7 +36,6 @@ func TestLoadConfig(t *testing.T) {
 		id       component.ID
 		expected component.Config
 	}{
-
 		{
 			id:       component.NewIDWithName(metadata.Type, ""),
 			expected: defaultCfg,
@@ -45,10 +46,12 @@ func TestLoadConfig(t *testing.T) {
 				GeneratorURL:      "opentelemetry-collector",
 				DefaultSeverity:   "info",
 				SeverityAttribute: "foo",
-				TimeoutSettings: exporterhelper.TimeoutSettings{
+				APIVersion:        "v2",
+				EventLabels:       []string{"attr1", "attr2"},
+				TimeoutSettings: exporterhelper.TimeoutConfig{
 					Timeout: 10 * time.Second,
 				},
-				RetrySettings: exporterhelper.RetrySettings{
+				BackoffConfig: configretry.BackOffConfig{
 					Enabled:             true,
 					InitialInterval:     10 * time.Second,
 					MaxInterval:         1 * time.Minute,
@@ -56,27 +59,30 @@ func TestLoadConfig(t *testing.T) {
 					RandomizationFactor: backoff.DefaultRandomizationFactor,
 					Multiplier:          backoff.DefaultMultiplier,
 				},
-				QueueSettings: exporterhelper.QueueSettings{
+				QueueSettings: exporterhelper.QueueBatchConfig{
 					Enabled:      true,
+					Sizer:        exporterhelper.RequestSizerTypeRequests,
 					NumConsumers: 2,
 					QueueSize:    10,
 				},
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Headers: map[string]configopaque.String{
+				ClientConfig: func() confighttp.ClientConfig {
+					client := confighttp.NewDefaultClientConfig()
+					client.Headers = map[string]configopaque.String{
 						"can you have a . here?": "F0000000-0000-0000-0000-000000000000",
 						"header1":                "234",
 						"another":                "somevalue",
-					},
-					Endpoint: "a.new.alertmanager.target:9093",
-					TLSSetting: configtls.TLSClientSetting{
-						TLSSetting: configtls.TLSSetting{
+					}
+					client.Endpoint = "a.new.alertmanager.target:9093"
+					client.TLSSetting = configtls.ClientConfig{
+						Config: configtls.Config{
 							CAFile: "/var/lib/mycert.pem",
 						},
-					},
-					ReadBufferSize:  0,
-					WriteBufferSize: 524288,
-					Timeout:         time.Second * 10,
-				},
+					}
+					client.ReadBufferSize = 0
+					client.WriteBufferSize = 524288
+					client.Timeout = time.Second * 10
+					return client
+				}(),
 			},
 		},
 	}
@@ -88,9 +94,9 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
@@ -106,7 +112,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "NoEndpoint",
 			cfg: func() *Config {
 				cfg := createDefaultConfig().(*Config)
-				cfg.HTTPClientSettings.Endpoint = ""
+				cfg.Endpoint = ""
 				return cfg
 			}(),
 			wantErr: "endpoint must be non-empty",

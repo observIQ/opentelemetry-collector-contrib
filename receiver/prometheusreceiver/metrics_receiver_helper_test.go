@@ -13,13 +13,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	gokitlog "github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
+	"github.com/prometheus/common/promslog"
 	promcfg "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
@@ -32,9 +33,11 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"gopkg.in/yaml.v2"
+	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
+	"gopkg.in/yaml.v3"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver/internal"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver/internal/metadata"
 )
 
 type mockPrometheusResponse struct {
@@ -76,7 +79,7 @@ func (mp *mockPrometheus) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	defer mp.mu.Unlock()
 	iptr, ok := mp.accessIndex[req.URL.Path]
 	if !ok {
-		rw.WriteHeader(404)
+		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 	index := int(iptr.Load())
@@ -86,7 +89,7 @@ func (mp *mockPrometheus) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		if index == len(pages) {
 			mp.wg.Done()
 		}
-		rw.WriteHeader(404)
+		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 	switch {
@@ -128,7 +131,7 @@ type testData struct {
 
 // setupMockPrometheus to create a mocked prometheus based on targets, returning the server and a prometheus exporting
 // config
-func setupMockPrometheus(tds ...*testData) (*mockPrometheus, *promcfg.Config, error) {
+func setupMockPrometheus(tds ...*testData) (*mockPrometheus, *PromConfig, error) {
 	jobs := make([]map[string]any, 0, len(tds))
 	endpoints := make(map[string][]mockPrometheusResponse)
 	metricPaths := make([]string, len(tds))
@@ -160,10 +163,10 @@ func setupMockPrometheus(tds ...*testData) (*mockPrometheus, *promcfg.Config, er
 	// update attributes value (will use for validation)
 	l := []labels.Label{{Name: "__scheme__", Value: "http"}}
 	for _, t := range tds {
-		t.attributes = internal.CreateResource(t.name, u.Host, l).Attributes()
+		t.attributes = internal.CreateResource(t.name, u.Host, labels.New(l...)).Attributes()
 	}
-	pCfg, err := promcfg.Load(string(cfg), false, gokitlog.NewNopLogger())
-	return mp, pCfg, err
+	pCfg, err := promcfg.Load(string(cfg), promslog.NewNopLogger())
+	return mp, (*PromConfig)(pCfg), err
 }
 
 func waitForScrapeResults(t *testing.T, targets []*testData, cms *consumertest.MetricsSink) {
@@ -184,7 +187,6 @@ func waitForScrapeResults(t *testing.T, targets []*testData, cms *consumertest.M
 					// only count target pages that are not 404, matching mock ServerHTTP func response logic
 					want++
 				}
-
 			}
 			if len(scrapes) < want {
 				// If we don't have enough scrapes yet lets return false and wait for another tick
@@ -237,23 +239,52 @@ func metricsCount(resourceMetric pmetric.ResourceMetrics) int {
 	return metricsCount
 }
 
-func getValidScrapes(t *testing.T, rms []pmetric.ResourceMetrics, normalizedNames bool) []pmetric.ResourceMetrics {
+func getValidScrapes(t *testing.T, rms []pmetric.ResourceMetrics, target *testData) []pmetric.ResourceMetrics {
 	var out []pmetric.ResourceMetrics
 	// rms will include failed scrapes and scrapes that received no metrics but have internal scrape metrics, filter those out
+	// for metrics retrieved with 'honor_labels: true', there will be a resource metric containing the scrape metrics, based on the scrape job config,
+	// and resources containing only the retrieved metrics, without additional scrape metrics, based on the job/instance label pairs that are detected
+	// during a scrape
 	for i := 0; i < len(rms); i++ {
 		allMetrics := getMetrics(rms[i])
-		if expectedScrapeMetricCount < len(allMetrics) && countScrapeMetrics(allMetrics, normalizedNames) == expectedScrapeMetricCount ||
-			expectedExtraScrapeMetricCount < len(allMetrics) && countScrapeMetrics(allMetrics, normalizedNames) == expectedExtraScrapeMetricCount {
-			if isFirstFailedScrape(allMetrics, normalizedNames) {
+		if expectedScrapeMetricCount <= len(allMetrics) && countScrapeMetrics(allMetrics, target.normalizedName) == expectedScrapeMetricCount ||
+			expectedExtraScrapeMetricCount <= len(allMetrics) && countScrapeMetrics(allMetrics, target.normalizedName) == expectedExtraScrapeMetricCount {
+			if isFirstFailedScrape(allMetrics, target.normalizedName) {
 				continue
 			}
 			assertUp(t, 1, allMetrics)
 			out = append(out, rms[i])
 		} else {
-			assertUp(t, 0, allMetrics)
+			if isScrapeConfigResource(rms[i], target) {
+				assertUp(t, 0, allMetrics)
+			} else {
+				out = append(out, rms[i])
+			}
 		}
 	}
 	return out
+}
+
+func isScrapeConfigResource(rms pmetric.ResourceMetrics, target *testData) bool {
+	targetJobName, ok := target.attributes.Get(string(semconv.ServiceNameKey))
+	if !ok {
+		return false
+	}
+	targetInstanceID, ok := target.attributes.Get(string(semconv.ServiceInstanceIDKey))
+	if !ok {
+		return false
+	}
+
+	resourceJobName, ok := rms.Resource().Attributes().Get(string(semconv.ServiceNameKey))
+	if !ok {
+		return false
+	}
+	resourceInstanceID, ok := rms.Resource().Attributes().Get(string(semconv.ServiceInstanceIDKey))
+	if !ok {
+		return false
+	}
+
+	return resourceJobName.AsString() == targetJobName.AsString() && resourceInstanceID.AsString() == targetInstanceID.AsString()
 }
 
 func isFirstFailedScrape(metrics []pmetric.Metric, normalizedNames bool) bool {
@@ -283,6 +314,12 @@ func isFirstFailedScrape(metrics []pmetric.Metric, normalizedNames bool) bool {
 					return false
 				}
 			}
+		case pmetric.MetricTypeExponentialHistogram:
+			for i := 0; i < m.ExponentialHistogram().DataPoints().Len(); i++ {
+				if !m.ExponentialHistogram().DataPoints().At(i).Flags().NoRecordedValue() {
+					return false
+				}
+			}
 		case pmetric.MetricTypeHistogram:
 			for i := 0; i < m.Histogram().DataPoints().Len(); i++ {
 				if !m.Histogram().DataPoints().At(i).Flags().NoRecordedValue() {
@@ -295,7 +332,7 @@ func isFirstFailedScrape(metrics []pmetric.Metric, normalizedNames bool) bool {
 					return false
 				}
 			}
-		case pmetric.MetricTypeEmpty, pmetric.MetricTypeExponentialHistogram:
+		case pmetric.MetricTypeEmpty:
 		}
 	}
 	return true
@@ -349,6 +386,7 @@ func isDefaultMetrics(m pmetric.Metric, normalizedNames bool) bool {
 	}
 	return false
 }
+
 func isExtraScrapeMetrics(m pmetric.Metric) bool {
 	switch m.Name() {
 	case "scrape_body_size_bytes", "scrape_sample_limit", "scrape_timeout_seconds":
@@ -358,104 +396,206 @@ func isExtraScrapeMetrics(m pmetric.Metric) bool {
 	}
 }
 
-type metricTypeComparator func(*testing.T, pmetric.Metric)
-type numberPointComparator func(*testing.T, pmetric.NumberDataPoint)
-type histogramPointComparator func(*testing.T, pmetric.HistogramDataPoint)
-type summaryPointComparator func(*testing.T, pmetric.SummaryDataPoint)
+type (
+	numberPointComparator          func(*testing.T, pmetric.NumberDataPoint)
+	histogramPointComparator       func(*testing.T, pmetric.HistogramDataPoint)
+	summaryPointComparator         func(*testing.T, pmetric.SummaryDataPoint)
+	exponentialHistogramComparator func(*testing.T, pmetric.ExponentialHistogramDataPoint)
+)
 
 type dataPointExpectation struct {
-	numberPointComparator    []numberPointComparator
-	histogramPointComparator []histogramPointComparator
-	summaryPointComparator   []summaryPointComparator
+	numberPointComparator          []numberPointComparator
+	histogramPointComparator       []histogramPointComparator
+	summaryPointComparator         []summaryPointComparator
+	exponentialHistogramComparator []exponentialHistogramComparator
 }
 
-type testExpectation func(*testing.T, pmetric.ResourceMetrics)
+type metricChecker func(*testing.T, pmetric.Metric)
 
-func doCompare(t *testing.T, name string, want pcommon.Map, got pmetric.ResourceMetrics, expectations []testExpectation) {
-	doCompareNormalized(t, name, want, got, expectations, false)
+type metricExpectation struct {
+	name                  string
+	mtype                 pmetric.MetricType
+	munit                 string
+	dataPointExpectations []dataPointExpectation
+	extraExpectation      metricChecker
 }
 
-func doCompareNormalized(t *testing.T, name string, want pcommon.Map, got pmetric.ResourceMetrics, expectations []testExpectation, normalizedNames bool) {
+// doCompare is a helper function to compare the expected metrics with the actual metrics
+// name is the test name
+// want is the map of expected attributes
+// got is the actual metrics
+// metricExpections is the list of expected metrics, exluding the internal scrape metrics
+func doCompare(t *testing.T, name string, want pcommon.Map, got pmetric.ResourceMetrics, metricExpectations []metricExpectation) {
+	doCompareNormalized(t, name, want, got, metricExpectations, false)
+}
+
+func doCompareNormalized(t *testing.T, name string, want pcommon.Map, got pmetric.ResourceMetrics, metricExpectations []metricExpectation, normalizedNames bool) {
 	t.Run(name, func(t *testing.T) {
 		assert.Equal(t, expectedScrapeMetricCount, countScrapeMetricsRM(got, normalizedNames))
-		assert.Equal(t, want.Len(), got.Resource().Attributes().Len())
-		for k, v := range want.AsRaw() {
-			val, ok := got.Resource().Attributes().Get(k)
-			assert.True(t, ok, "%q attribute is missing", k)
-			if ok {
-				assert.EqualValues(t, v, val.AsString())
-			}
-		}
-		for _, e := range expectations {
-			e(t, got)
-		}
+		assertExpectedAttributes(t, want, got)
+		assertExpectedMetrics(t, metricExpectations, got, normalizedNames, false)
 	})
 }
 
-func assertMetricPresent(name string, metricTypeExpectations metricTypeComparator, metricUnitExpectations metricTypeComparator, dataPointExpectations []dataPointExpectation) testExpectation {
-	return func(t *testing.T, rm pmetric.ResourceMetrics) {
-		allMetrics := getMetrics(rm)
-		var present bool
-		for _, m := range allMetrics {
-			if name != m.Name() {
+func assertExpectedAttributes(t *testing.T, want pcommon.Map, got pmetric.ResourceMetrics) {
+	assert.Equal(t, want.Len(), got.Resource().Attributes().Len())
+	for k, v := range want.AsRaw() {
+		val, ok := got.Resource().Attributes().Get(k)
+		assert.True(t, ok, "%q attribute is missing", k)
+		if ok {
+			assert.EqualValues(t, v, val.AsString())
+		}
+	}
+}
+
+func assertExpectedMetrics(t *testing.T, metricExpectations []metricExpectation, got pmetric.ResourceMetrics, normalizedNames bool, existsOnly bool) {
+	var defaultExpectations []metricExpectation
+	switch {
+	case existsOnly:
+	case normalizedNames:
+		defaultExpectations = []metricExpectation{
+			{
+				"scrape_duration",
+				pmetric.MetricTypeGauge,
+				"s",
+				nil,
+				nil,
+			},
+			{
+				"scrape_samples_post_metric_relabeling",
+				pmetric.MetricTypeGauge,
+				"",
+				nil,
+				nil,
+			},
+			{
+				"scrape_samples_scraped",
+				pmetric.MetricTypeGauge,
+				"",
+				nil,
+				nil,
+			},
+			{
+				"scrape_series_added",
+				pmetric.MetricTypeGauge,
+				"",
+				nil,
+				nil,
+			},
+			{
+				"up",
+				pmetric.MetricTypeGauge,
+				"",
+				nil,
+				nil,
+			},
+		}
+	case !normalizedNames:
+		defaultExpectations = []metricExpectation{
+			{
+				"scrape_duration_seconds",
+				pmetric.MetricTypeGauge,
+				"s",
+				nil,
+				nil,
+			},
+			{
+				"scrape_samples_post_metric_relabeling",
+				pmetric.MetricTypeGauge,
+				"",
+				nil,
+				nil,
+			},
+			{
+				"scrape_samples_scraped",
+				pmetric.MetricTypeGauge,
+				"",
+				nil,
+				nil,
+			},
+			{
+				"scrape_series_added",
+				pmetric.MetricTypeGauge,
+				"",
+				nil,
+				nil,
+			},
+			{
+				"up",
+				pmetric.MetricTypeGauge,
+				"",
+				nil,
+				nil,
+			},
+		}
+	}
+
+	metricExpectations = append(defaultExpectations, metricExpectations...)
+
+	allMetrics := getMetrics(got)
+	for _, me := range metricExpectations {
+		id := fmt.Sprintf("name '%s' type '%s' unit '%s'", me.name, me.mtype.String(), me.munit)
+		pos := -1
+		for k, m := range allMetrics {
+			if me.name != m.Name() || me.mtype != m.Type() || me.munit != m.Unit() {
 				continue
 			}
 
-			present = true
-			metricTypeExpectations(t, m)
-			metricUnitExpectations(t, m)
-			for i, de := range dataPointExpectations {
+			require.Equal(t, -1, pos, "metric %s is not unique", id)
+			pos = k
+
+			for i, de := range me.dataPointExpectations {
 				switch m.Type() {
 				case pmetric.MetricTypeGauge:
 					for _, npc := range de.numberPointComparator {
-						require.Equal(t, m.Gauge().DataPoints().Len(), len(dataPointExpectations), "Expected number of data-points in Gauge metric '%s' does not match to testdata", name)
+						require.Len(t, me.dataPointExpectations, m.Gauge().DataPoints().Len(), "Expected number of data-points in Gauge metric '%s' does not match to testdata", id)
 						npc(t, m.Gauge().DataPoints().At(i))
 					}
 				case pmetric.MetricTypeSum:
 					for _, npc := range de.numberPointComparator {
-						require.Equal(t, m.Sum().DataPoints().Len(), len(dataPointExpectations), "Expected number of data-points in Sum metric '%s' does not match to testdata", name)
+						require.Len(t, me.dataPointExpectations, m.Sum().DataPoints().Len(), "Expected number of data-points in Sum metric '%s' does not match to testdata", id)
 						npc(t, m.Sum().DataPoints().At(i))
 					}
 				case pmetric.MetricTypeHistogram:
 					for _, hpc := range de.histogramPointComparator {
-						require.Equal(t, m.Histogram().DataPoints().Len(), len(dataPointExpectations), "Expected number of data-points in Histogram metric '%s' does not match to testdata", name)
+						require.Len(t, me.dataPointExpectations, m.Histogram().DataPoints().Len(), "Expected number of data-points in Histogram metric '%s' does not match to testdata", id)
 						hpc(t, m.Histogram().DataPoints().At(i))
 					}
 				case pmetric.MetricTypeSummary:
 					for _, spc := range de.summaryPointComparator {
-						require.Equal(t, m.Summary().DataPoints().Len(), len(dataPointExpectations), "Expected number of data-points in Summary metric '%s' does not match to testdata", name)
+						require.Len(t, me.dataPointExpectations, m.Summary().DataPoints().Len(), "Expected number of data-points in Summary metric '%s' does not match to testdata", id)
 						spc(t, m.Summary().DataPoints().At(i))
 					}
-				case pmetric.MetricTypeEmpty, pmetric.MetricTypeExponentialHistogram:
+				case pmetric.MetricTypeExponentialHistogram:
+					for _, ehc := range de.exponentialHistogramComparator {
+						require.Len(t, me.dataPointExpectations, m.ExponentialHistogram().DataPoints().Len(), "Expected number of data-points in Exponential Histogram metric '%s' does not match to testdata", id)
+						ehc(t, m.ExponentialHistogram().DataPoints().At(i))
+					}
+				case pmetric.MetricTypeEmpty:
 				}
 			}
+
+			if me.extraExpectation != nil {
+				me.extraExpectation(t, m)
+			}
 		}
-		require.True(t, present, "expected metric '%s' is not present", name)
+		require.GreaterOrEqual(t, pos, 0, "expected metric %s is not present", id)
+		allMetrics = append(allMetrics[:pos], allMetrics[pos+1:]...)
 	}
+
+	if existsOnly {
+		return
+	}
+
+	remainingMetrics := []string{}
+	for _, m := range allMetrics {
+		remainingMetrics = append(remainingMetrics, fmt.Sprintf("%s(%s,%s)", m.Name(), m.Type().String(), m.Unit()))
+	}
+
+	require.Empty(t, allMetrics, "not all metrics were validated: %v", strings.Join(remainingMetrics, ", "))
 }
 
-func assertMetricAbsent(name string) testExpectation {
-	return func(t *testing.T, rm pmetric.ResourceMetrics) {
-		allMetrics := getMetrics(rm)
-		for _, m := range allMetrics {
-			assert.NotEqual(t, name, m.Name(), "Metric is present, but was expected absent")
-		}
-	}
-}
-
-func compareMetricType(typ pmetric.MetricType) metricTypeComparator {
-	return func(t *testing.T, metric pmetric.Metric) {
-		assert.Equal(t, typ.String(), metric.Type().String(), "Metric type does not match")
-	}
-}
-
-func compareMetricUnit(unit string) metricTypeComparator {
-	return func(t *testing.T, metric pmetric.Metric) {
-		assert.Equal(t, unit, metric.Unit(), "Metric unit does not match")
-	}
-}
-
-func compareMetricIsMonotonic(isMonotonic bool) metricTypeComparator {
+func compareMetricIsMonotonic(isMonotonic bool) metricChecker {
 	return func(t *testing.T, metric pmetric.Metric) {
 		assert.Equal(t, pmetric.MetricTypeSum.String(), metric.Type().String(), "IsMonotonic only exists for sums")
 		assert.Equal(t, isMonotonic, metric.Sum().IsMonotonic(), "IsMonotonic does not match")
@@ -521,6 +661,13 @@ func assertHistogramPointFlagNoRecordedValue() histogramPointComparator {
 	}
 }
 
+func assertExponentialHistogramPointFlagNoRecordedValue() exponentialHistogramComparator {
+	return func(t *testing.T, histogramDataPoint pmetric.ExponentialHistogramDataPoint) {
+		assert.True(t, histogramDataPoint.Flags().NoRecordedValue(),
+			"Datapoint flag for staleness marker not found as expected")
+	}
+}
+
 func assertSummaryPointFlagNoRecordedValue() summaryPointComparator {
 	return func(t *testing.T, summaryDataPoint pmetric.SummaryDataPoint) {
 		assert.True(t, summaryDataPoint.Flags().NoRecordedValue(),
@@ -572,7 +719,7 @@ func compareDoubleValue(doubleVal float64) numberPointComparator {
 
 func assertNormalNan() numberPointComparator {
 	return func(t *testing.T, numberDataPoint pmetric.NumberDataPoint) {
-		assert.True(t, math.Float64bits(numberDataPoint.DoubleValue()) == value.NormalNaN,
+		assert.Equal(t, value.NormalNaN, math.Float64bits(numberDataPoint.DoubleValue()),
 			"Metric double value is not normalNaN as expected")
 	}
 }
@@ -586,6 +733,19 @@ func compareHistogram(count uint64, sum float64, upperBounds []float64, buckets 
 	}
 }
 
+func compareExponentialHistogram(scale int32, count uint64, sum float64, zeroCount uint64, negativeOffset int32, negativeBuckets []uint64, positiveOffset int32, positiveBuckets []uint64) exponentialHistogramComparator {
+	return func(t *testing.T, exponentialHistogramDataPoint pmetric.ExponentialHistogramDataPoint) {
+		assert.Equal(t, scale, exponentialHistogramDataPoint.Scale(), "Exponential Histogram scale value does not match")
+		assert.Equal(t, count, exponentialHistogramDataPoint.Count(), "Exponential Histogram count value does not match")
+		assert.Equal(t, sum, exponentialHistogramDataPoint.Sum(), "Exponential Histogram sum value does not match")
+		assert.Equal(t, zeroCount, exponentialHistogramDataPoint.ZeroCount(), "Exponential Histogram zero count value does not match")
+		assert.Equal(t, negativeOffset, exponentialHistogramDataPoint.Negative().Offset(), "Exponential Histogram negative offset value does not match")
+		assert.Equal(t, negativeBuckets, exponentialHistogramDataPoint.Negative().BucketCounts().AsRaw(), "Exponential Histogram negative bucket count values do not match")
+		assert.Equal(t, positiveOffset, exponentialHistogramDataPoint.Positive().Offset(), "Exponential Histogram positive offset value does not match")
+		assert.Equal(t, positiveBuckets, exponentialHistogramDataPoint.Positive().BucketCounts().AsRaw(), "Exponential Histogram positive bucket count values do not match")
+	}
+}
+
 func compareSummary(count uint64, sum float64, quantiles [][]float64) summaryPointComparator {
 	return func(t *testing.T, summaryDataPoint pmetric.SummaryDataPoint) {
 		assert.Equal(t, count, summaryDataPoint.Count(), "Summary count value does not match")
@@ -596,7 +756,7 @@ func compareSummary(count uint64, sum float64, quantiles [][]float64) summaryPoi
 				assert.Equal(t, quantiles[i][0], summaryDataPoint.QuantileValues().At(i).Quantile(),
 					"Summary quantile do not match")
 				if math.IsNaN(quantiles[i][1]) {
-					assert.True(t, math.Float64bits(summaryDataPoint.QuantileValues().At(i).Value()) == value.NormalNaN,
+					assert.Equal(t, value.NormalNaN, math.Float64bits(summaryDataPoint.QuantileValues().At(i).Value()),
 						"Summary quantile value is not normalNaN as expected")
 				} else {
 					assert.Equal(t, quantiles[i][1], summaryDataPoint.QuantileValues().At(i).Value(),
@@ -608,13 +768,13 @@ func compareSummary(count uint64, sum float64, quantiles [][]float64) summaryPoi
 }
 
 // starts prometheus receiver with custom config, retrieves metrics from MetricsSink
-func testComponent(t *testing.T, targets []*testData, alterConfig func(*Config), cfgMuts ...func(*promcfg.Config)) {
+func testComponent(t *testing.T, targets []*testData, alterConfig func(*Config), cfgMuts ...func(*PromConfig)) {
 	ctx := context.Background()
 	mp, cfg, err := setupMockPrometheus(targets...)
 	for _, cfgMut := range cfgMuts {
 		cfgMut(cfg)
 	}
-	require.Nilf(t, err, "Failed to create Prometheus config: %v", err)
+	require.NoErrorf(t, err, "Failed to create Prometheus config: %v", err)
 	defer mp.Close()
 
 	config := &Config{
@@ -626,7 +786,8 @@ func testComponent(t *testing.T, targets []*testData, alterConfig func(*Config),
 	}
 
 	cms := new(consumertest.MetricsSink)
-	receiver := newPrometheusReceiver(receivertest.NewNopCreateSettings(), config, cms)
+	receiver := newPrometheusReceiver(receivertest.NewNopSettings(metadata.Type), config, cms)
+	receiver.skipOffsetting = true
 
 	require.NoError(t, receiver.Start(ctx, componenttest.NewNopHost()))
 	// verify state after shutdown is called
@@ -634,7 +795,7 @@ func testComponent(t *testing.T, targets []*testData, alterConfig func(*Config),
 		// verify state after shutdown is called
 		assert.Lenf(t, flattenTargets(receiver.scrapeManager.TargetsAll()), len(targets), "expected %v targets to be running", len(targets))
 		require.NoError(t, receiver.Shutdown(context.Background()))
-		assert.Len(t, flattenTargets(receiver.scrapeManager.TargetsAll()), 0, "expected scrape manager to have no targets")
+		assert.Empty(t, flattenTargets(receiver.scrapeManager.TargetsAll()), "expected scrape manager to have no targets")
 	})
 
 	// waitgroup Wait() is strictly from a server POV indicating the sufficient number and type of requests have been seen
@@ -653,7 +814,7 @@ func testComponent(t *testing.T, targets []*testData, alterConfig func(*Config),
 	lres, lep := len(pResults), len(mp.endpoints)
 	// There may be an additional scrape entry between when the mock server provided
 	// all responses and when we capture the metrics.  It will be ignored later.
-	assert.GreaterOrEqualf(t, lep, lres, "want at least %d targets, but got %v\n", lep, lres)
+	assert.GreaterOrEqualf(t, lres, lep, "want at least %d targets, but got %v\n", lep, lres)
 
 	// loop to validate outputs for each targets
 	// Stop once we have evaluated all expected results, any others are superfluous.
@@ -665,7 +826,7 @@ func testComponent(t *testing.T, targets []*testData, alterConfig func(*Config),
 			}
 			scrapes := pResults[name]
 			if !target.validateScrapes {
-				scrapes = getValidScrapes(t, pResults[name], target.normalizedName)
+				scrapes = getValidScrapes(t, pResults[name], target)
 			}
 			target.validateFunc(t, target, scrapes)
 		})

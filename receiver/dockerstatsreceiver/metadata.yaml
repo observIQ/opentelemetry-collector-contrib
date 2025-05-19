@@ -4,11 +4,21 @@ status:
   class: receiver
   stability:
     alpha: [metrics]
-  distributions: [contrib, observiq, sumo]
+  distributions: [contrib]
   codeowners:
-    active: [rmfitzpatrick, jamesmoessis]
+    active: [jamesmoessis]
+    emeritus: [rmfitzpatrick]
+  unsupported_platforms: [darwin, windows]
 
-sem_conv_version: 1.6.1
+sem_conv_version: 1.27.0
+
+tests:
+  goleak:
+    ignore:
+      top:
+        - "github.com/testcontainers/testcontainers-go.(*Reaper).Connect.func1"
+        - "net/http.(*persistConn).writeLoop"
+        - "internal/poll.runtime_pollWait"
 
 # Note: there are other, additional resource attributes that the user can configure through the yaml
 resource_attributes:
@@ -150,6 +160,12 @@ metrics:
     unit: "1"
     gauge:
       value_type: int
+  container.cpu.logical.count:
+    enabled: false
+    description: "Number of cores available to the container."
+    unit: "{cpus}"
+    gauge:
+      value_type: int
 
 
   # Memory
@@ -180,7 +196,7 @@ metrics:
   container.memory.percent:
     enabled: true
     description: "Percentage of memory used."
-    unit: 1
+    unit: "1"
     gauge:
       value_type: double
   container.memory.cache:
@@ -463,6 +479,14 @@ metrics:
       value_type: int
       aggregation_temporality: cumulative
       monotonic: false
+  container.memory.fails:
+    enabled: false
+    description: "Number of times the memory limit was hit."
+    unit: "{fails}"
+    sum:
+      value_type: int
+      aggregation_temporality: cumulative
+      monotonic: true
 
 
   # BlockIO (cgroup v1) and IO (cgroup v2) controllers

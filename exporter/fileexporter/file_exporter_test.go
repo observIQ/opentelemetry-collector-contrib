@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -21,7 +22,9 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.uber.org/zap"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/testdata"
@@ -126,33 +129,25 @@ func TestFileTracesExporter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			conf := tt.args.conf
-			writer, err := buildFileWriter(conf)
-			assert.NoError(t, err)
-			fe := &fileExporter{
-				path:            conf.Path,
-				formatType:      conf.FormatType,
-				file:            writer,
-				tracesMarshaler: tracesMarshalers[conf.FormatType],
-				exporter:        buildExportFunc(conf),
-				compression:     conf.Compression,
-				compressor:      buildCompressor(conf.Compression),
-				flushInterval:   conf.FlushInterval,
-			}
-			require.NotNil(t, fe)
+			feI := newFileExporter(conf, zap.NewNop())
+			require.IsType(t, &fileExporter{}, feI)
+			fe := feI.(*fileExporter)
 
 			td := testdata.GenerateTracesTwoSpansSameResource()
 			assert.NoError(t, fe.Start(context.Background(), componenttest.NewNopHost()))
 			assert.NoError(t, fe.consumeTraces(context.Background(), td))
 			assert.NoError(t, fe.consumeTraces(context.Background(), td))
-			assert.NoError(t, fe.Shutdown(context.Background()))
+			defer func() {
+				assert.NoError(t, fe.Shutdown(context.Background()))
+			}()
 
-			fi, err := os.Open(fe.path)
+			fi, err := os.Open(fe.writer.path)
 			assert.NoError(t, err)
 			defer fi.Close()
 			br := bufio.NewReader(fi)
 			for {
 				buf, isEnd, err := func() ([]byte, bool, error) {
-					if fe.formatType == formatTypeJSON && fe.compression == "" {
+					if fe.marshaller.formatType == formatTypeJSON && fe.marshaller.compression == "" {
 						return readJSONMessage(br)
 					}
 					return readMessageFromStream(br)
@@ -161,12 +156,12 @@ func TestFileTracesExporter(t *testing.T) {
 				if isEnd {
 					break
 				}
-				decoder := buildUnCompressor(fe.compression)
+				decoder := buildUnCompressor(fe.marshaller.compression)
 				buf, err = decoder(buf)
 				assert.NoError(t, err)
 				got, err := tt.args.unmarshaler.UnmarshalTraces(buf)
 				assert.NoError(t, err)
-				assert.EqualValues(t, td, got)
+				assert.Equal(t, td, got)
 			}
 		})
 	}
@@ -175,11 +170,15 @@ func TestFileTracesExporter(t *testing.T) {
 func TestFileTracesExporterError(t *testing.T) {
 	mf := &errorWriter{}
 	fe := &fileExporter{
-		file:            mf,
-		formatType:      formatTypeJSON,
-		exporter:        exportMessageAsLine,
-		tracesMarshaler: tracesMarshalers[formatTypeJSON],
-		compressor:      noneCompress,
+		marshaller: &marshaller{
+			formatType:      formatTypeJSON,
+			tracesMarshaler: tracesMarshalers[formatTypeJSON],
+			compressor:      noneCompress,
+		},
+		writer: &fileWriter{
+			file:     mf,
+			exporter: exportMessageAsLine,
+		},
 	}
 	require.NotNil(t, fe)
 
@@ -261,17 +260,8 @@ func TestFileMetricsExporter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			conf := tt.args.conf
-			writer, err := buildFileWriter(conf)
-			assert.NoError(t, err)
 			fe := &fileExporter{
-				path:             conf.Path,
-				formatType:       conf.FormatType,
-				file:             writer,
-				metricsMarshaler: metricsMarshalers[conf.FormatType],
-				exporter:         buildExportFunc(conf),
-				compression:      conf.Compression,
-				compressor:       buildCompressor(conf.Compression),
-				flushInterval:    conf.FlushInterval,
+				conf: conf,
 			}
 			require.NotNil(t, fe)
 
@@ -279,16 +269,18 @@ func TestFileMetricsExporter(t *testing.T) {
 			assert.NoError(t, fe.Start(context.Background(), componenttest.NewNopHost()))
 			assert.NoError(t, fe.consumeMetrics(context.Background(), md))
 			assert.NoError(t, fe.consumeMetrics(context.Background(), md))
-			assert.NoError(t, fe.Shutdown(context.Background()))
+			defer func() {
+				assert.NoError(t, fe.Shutdown(context.Background()))
+			}()
 
-			fi, err := os.Open(fe.path)
+			fi, err := os.Open(fe.writer.path)
 			assert.NoError(t, err)
 			defer fi.Close()
 			br := bufio.NewReader(fi)
 			for {
 				buf, isEnd, err := func() ([]byte, bool, error) {
-					if fe.formatType == formatTypeJSON &&
-						fe.compression == "" {
+					if fe.marshaller.formatType == formatTypeJSON &&
+						fe.marshaller.compression == "" {
 						return readJSONMessage(br)
 					}
 					return readMessageFromStream(br)
@@ -297,26 +289,29 @@ func TestFileMetricsExporter(t *testing.T) {
 				if isEnd {
 					break
 				}
-				decoder := buildUnCompressor(fe.compression)
+				decoder := buildUnCompressor(fe.marshaller.compression)
 				buf, err = decoder(buf)
 				assert.NoError(t, err)
 				got, err := tt.args.unmarshaler.UnmarshalMetrics(buf)
 				assert.NoError(t, err)
-				assert.EqualValues(t, md, got)
+				assert.Equal(t, md, got)
 			}
 		})
 	}
-
 }
 
 func TestFileMetricsExporterError(t *testing.T) {
 	mf := &errorWriter{}
 	fe := &fileExporter{
-		file:             mf,
-		formatType:       formatTypeJSON,
-		exporter:         exportMessageAsLine,
-		metricsMarshaler: metricsMarshalers[formatTypeJSON],
-		compressor:       noneCompress,
+		marshaller: &marshaller{
+			formatType:       formatTypeJSON,
+			metricsMarshaler: metricsMarshalers[formatTypeJSON],
+			compressor:       noneCompress,
+		},
+		writer: &fileWriter{
+			file:     mf,
+			exporter: exportMessageAsLine,
+		},
 	}
 	require.NotNil(t, fe)
 
@@ -398,17 +393,8 @@ func TestFileLogsExporter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			conf := tt.args.conf
-			writer, err := buildFileWriter(conf)
-			assert.NoError(t, err)
 			fe := &fileExporter{
-				path:          conf.Path,
-				formatType:    conf.FormatType,
-				file:          writer,
-				logsMarshaler: logsMarshalers[conf.FormatType],
-				exporter:      buildExportFunc(conf),
-				compression:   conf.Compression,
-				compressor:    buildCompressor(conf.Compression),
-				flushInterval: conf.FlushInterval,
+				conf: conf,
 			}
 			require.NotNil(t, fe)
 
@@ -416,15 +402,17 @@ func TestFileLogsExporter(t *testing.T) {
 			assert.NoError(t, fe.Start(context.Background(), componenttest.NewNopHost()))
 			assert.NoError(t, fe.consumeLogs(context.Background(), ld))
 			assert.NoError(t, fe.consumeLogs(context.Background(), ld))
-			assert.NoError(t, fe.Shutdown(context.Background()))
+			defer func() {
+				assert.NoError(t, fe.Shutdown(context.Background()))
+			}()
 
-			fi, err := os.Open(fe.path)
+			fi, err := os.Open(fe.writer.path)
 			assert.NoError(t, err)
 			defer fi.Close()
 			br := bufio.NewReader(fi)
 			for {
 				buf, isEnd, err := func() ([]byte, bool, error) {
-					if fe.formatType == formatTypeJSON && fe.compression == "" {
+					if fe.marshaller.formatType == formatTypeJSON && fe.marshaller.compression == "" {
 						return readJSONMessage(br)
 					}
 					return readMessageFromStream(br)
@@ -433,12 +421,12 @@ func TestFileLogsExporter(t *testing.T) {
 				if isEnd {
 					break
 				}
-				decoder := buildUnCompressor(fe.compression)
+				decoder := buildUnCompressor(fe.marshaller.compression)
 				buf, err = decoder(buf)
 				assert.NoError(t, err)
 				got, err := tt.args.unmarshaler.UnmarshalLogs(buf)
 				assert.NoError(t, err)
-				assert.EqualValues(t, ld, got)
+				assert.Equal(t, ld, got)
 			}
 		})
 	}
@@ -447,11 +435,15 @@ func TestFileLogsExporter(t *testing.T) {
 func TestFileLogsExporterErrors(t *testing.T) {
 	mf := &errorWriter{}
 	fe := &fileExporter{
-		file:          mf,
-		formatType:    formatTypeJSON,
-		exporter:      exportMessageAsLine,
-		logsMarshaler: logsMarshalers[formatTypeJSON],
-		compressor:    noneCompress,
+		marshaller: &marshaller{
+			formatType:    formatTypeJSON,
+			logsMarshaler: logsMarshalers[formatTypeJSON],
+			compressor:    noneCompress,
+		},
+		writer: &fileWriter{
+			file:     mf,
+			exporter: exportMessageAsLine,
+		},
 	}
 	require.NotNil(t, fe)
 
@@ -461,17 +453,153 @@ func TestFileLogsExporterErrors(t *testing.T) {
 	assert.NoError(t, fe.Shutdown(context.Background()))
 }
 
+func TestFileProfilesExporter(t *testing.T) {
+	type args struct {
+		conf        *Config
+		unmarshaler pprofile.Unmarshaler
+	}
+	tests := []struct {
+		name string
+		args args
+	}{
+		{
+			name: "json: default configuration",
+			args: args{
+				conf: &Config{
+					Path:       tempFileName(t),
+					FormatType: "json",
+				},
+				unmarshaler: &pprofile.JSONUnmarshaler{},
+			},
+		},
+		{
+			name: "json: compression configuration",
+			args: args{
+				conf: &Config{
+					Path:        tempFileName(t),
+					FormatType:  "json",
+					Compression: compressionZSTD,
+				},
+				unmarshaler: &pprofile.JSONUnmarshaler{},
+			},
+		},
+		{
+			name: "Proto: default configuration",
+			args: args{
+				conf: &Config{
+					Path:       tempFileName(t),
+					FormatType: "proto",
+				},
+				unmarshaler: &pprofile.ProtoUnmarshaler{},
+			},
+		},
+		{
+			name: "Proto: compression configuration",
+			args: args{
+				conf: &Config{
+					Path:        tempFileName(t),
+					FormatType:  "proto",
+					Compression: compressionZSTD,
+				},
+				unmarshaler: &pprofile.ProtoUnmarshaler{},
+			},
+		},
+		{
+			name: "Proto: compression configuration--rotation",
+			args: args{
+				conf: &Config{
+					Path:        tempFileName(t),
+					FormatType:  "proto",
+					Compression: compressionZSTD,
+					Rotation: &Rotation{
+						MaxMegabytes: 3,
+						MaxDays:      0,
+						MaxBackups:   defaultMaxBackups,
+						LocalTime:    false,
+					},
+				},
+				unmarshaler: &pprofile.ProtoUnmarshaler{},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conf := tt.args.conf
+			fe := &fileExporter{
+				conf: conf,
+			}
+			require.NotNil(t, fe)
+
+			pd := testdata.GenerateProfilesTwoProfilesSameResource()
+			assert.NoError(t, fe.Start(context.Background(), componenttest.NewNopHost()))
+			assert.NoError(t, fe.consumeProfiles(context.Background(), pd))
+			assert.NoError(t, fe.consumeProfiles(context.Background(), pd))
+			defer func() {
+				assert.NoError(t, fe.Shutdown(context.Background()))
+			}()
+
+			fi, err := os.Open(fe.writer.path)
+			assert.NoError(t, err)
+			defer fi.Close()
+			br := bufio.NewReader(fi)
+			for {
+				buf, isEnd, err := func() ([]byte, bool, error) {
+					if fe.marshaller.formatType == formatTypeJSON && fe.marshaller.compression == "" {
+						return readJSONMessage(br)
+					}
+					return readMessageFromStream(br)
+				}()
+				assert.NoError(t, err)
+				if isEnd {
+					break
+				}
+				decoder := buildUnCompressor(fe.marshaller.compression)
+				buf, err = decoder(buf)
+				assert.NoError(t, err)
+				got, err := tt.args.unmarshaler.UnmarshalProfiles(buf)
+				assert.NoError(t, err)
+				assert.Equal(t, pd, got)
+			}
+		})
+	}
+}
+
+func TestFileProfilesExporterErrors(t *testing.T) {
+	pf := &errorWriter{}
+	fe := &fileExporter{
+		marshaller: &marshaller{
+			formatType:        formatTypeJSON,
+			profilesMarshaler: profilesMarshalers[formatTypeJSON],
+			compressor:        noneCompress,
+		},
+		writer: &fileWriter{
+			file:     pf,
+			exporter: exportMessageAsLine,
+		},
+	}
+	require.NotNil(t, fe)
+
+	pd := testdata.GenerateProfilesTwoProfilesSameResource()
+	// Cannot call Start since we inject directly the WriterCloser.
+	assert.Error(t, fe.consumeProfiles(context.Background(), pd))
+	assert.NoError(t, fe.Shutdown(context.Background()))
+}
+
 func TestExportMessageAsBuffer(t *testing.T) {
 	path := tempFileName(t)
 	fe := &fileExporter{
-		path:       path,
-		formatType: formatTypeProto,
-		file: &lumberjack.Logger{
-			Filename: path,
-			MaxSize:  1,
+		marshaller: &marshaller{
+			formatType:    formatTypeProto,
+			logsMarshaler: logsMarshalers[formatTypeProto],
 		},
-		logsMarshaler: logsMarshalers[formatTypeProto],
-		exporter:      exportMessageAsBuffer,
+		writer: &fileWriter{
+			path: path,
+			file: &lumberjack.Logger{
+				Filename: path,
+				MaxSize:  1,
+			},
+			exporter: exportMessageAsBuffer,
+		},
 	}
 	require.NotNil(t, fe)
 	//
@@ -479,18 +607,17 @@ func TestExportMessageAsBuffer(t *testing.T) {
 	marshaler := &plog.ProtoMarshaler{}
 	buf, err := marshaler.MarshalLogs(ld)
 	assert.NoError(t, err)
-	assert.Error(t, exportMessageAsBuffer(fe, buf))
+	assert.Error(t, exportMessageAsBuffer(fe.writer, buf))
 	assert.NoError(t, fe.Shutdown(context.Background()))
 }
 
 // tempFileName provides a temporary file name for testing.
-func tempFileName(t *testing.T) string {
-	return filepath.Join(t.TempDir(), "fileexporter_test.tmp")
+func tempFileName(tb testing.TB) string {
+	return filepath.Join(tb.TempDir(), "fileexporter_test.tmp")
 }
 
 // errorWriter is an io.Writer that will return an error all ways
-type errorWriter struct {
-}
+type errorWriter struct{}
 
 func (e errorWriter) Write([]byte) (n int, err error) {
 	return 0, errors.New("all ways return error")
@@ -540,15 +667,17 @@ func decompress(src []byte) ([]byte, error) {
 
 func TestConcurrentlyCompress(t *testing.T) {
 	wg := sync.WaitGroup{}
-	wg.Add(3)
+	wg.Add(4)
 	var (
 		ctd []byte
 		cmd []byte
 		cld []byte
+		cpd []byte
 	)
 	td := testdata.GenerateTracesTwoSpansSameResource()
 	md := testdata.GenerateMetricsTwoMetrics()
 	ld := testdata.GenerateLogsTwoLogRecordsSameResource()
+	pd := testdata.GenerateProfilesTwoProfilesSameResource()
 	go func() {
 		defer wg.Done()
 		buf, err := tracesMarshalers[formatTypeJSON].MarshalTraces(td)
@@ -573,27 +702,42 @@ func TestConcurrentlyCompress(t *testing.T) {
 		}
 		cld = zstdCompress(buf)
 	}()
+	go func() {
+		defer wg.Done()
+		buf, err := profilesMarshalers[formatTypeJSON].MarshalProfiles(pd)
+		if err != nil {
+			return
+		}
+		cpd = zstdCompress(buf)
+	}()
 	wg.Wait()
 	buf, err := decompress(ctd)
 	assert.NoError(t, err)
 	traceUnmarshaler := &ptrace.JSONUnmarshaler{}
 	got, err := traceUnmarshaler.UnmarshalTraces(buf)
 	assert.NoError(t, err)
-	assert.EqualValues(t, td, got)
+	assert.Equal(t, td, got)
 
 	buf, err = decompress(cmd)
 	assert.NoError(t, err)
 	metricsUnmarshaler := &pmetric.JSONUnmarshaler{}
 	gotMd, err := metricsUnmarshaler.UnmarshalMetrics(buf)
 	assert.NoError(t, err)
-	assert.EqualValues(t, md, gotMd)
+	assert.Equal(t, md, gotMd)
 
 	buf, err = decompress(cld)
 	assert.NoError(t, err)
 	logsUnmarshaler := &plog.JSONUnmarshaler{}
 	gotLd, err := logsUnmarshaler.UnmarshalLogs(buf)
 	assert.NoError(t, err)
-	assert.EqualValues(t, ld, gotLd)
+	assert.Equal(t, ld, gotLd)
+
+	buf, err = decompress(cpd)
+	assert.NoError(t, err)
+	profilesUnmarshaler := &pprofile.JSONUnmarshaler{}
+	gotPd, err := profilesUnmarshaler.UnmarshalProfiles(buf)
+	assert.NoError(t, err)
+	assert.Equal(t, pd, gotPd)
 }
 
 // tsBuffer is a thread safe buffer to prevent race conditions in the CI/CD.
@@ -621,14 +765,14 @@ func (b *tsBuffer) Bytes() []byte {
 }
 
 func safeFileExporterWrite(e *fileExporter, d []byte) (int, error) {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-	return e.file.Write(d)
+	e.writer.mutex.Lock()
+	defer e.writer.mutex.Unlock()
+	return e.writer.file.Write(d)
 }
 
 func TestFlushing(t *testing.T) {
 	cfg := &Config{
-		Path:          "",
+		Path:          tempFileName(t),
 		FlushInterval: time.Second,
 	}
 
@@ -638,27 +782,127 @@ func TestFlushing(t *testing.T) {
 	// Wrap the buffer with the buffered writer closer that implements flush() method.
 	bwc := newBufferedWriteCloser(buf)
 	// Create a file exporter with flushing enabled.
-	fe := newFileExporter(cfg, bwc)
+	feI := newFileExporter(cfg, zap.NewNop())
+	assert.IsType(t, &fileExporter{}, feI)
+	fe := feI.(*fileExporter)
 
 	// Start the flusher.
 	ctx := context.Background()
-	assert.NoError(t, fe.Start(ctx, nil))
+	fe.marshaller = &marshaller{
+		formatType:       fe.conf.FormatType,
+		tracesMarshaler:  tracesMarshalers[fe.conf.FormatType],
+		metricsMarshaler: metricsMarshalers[fe.conf.FormatType],
+		logsMarshaler:    logsMarshalers[fe.conf.FormatType],
+		compression:      fe.conf.Compression,
+		compressor:       buildCompressor(fe.conf.Compression),
+	}
+	export := buildExportFunc(fe.conf)
+	var err error
+	fe.writer, err = newFileWriter(fe.conf.Path, fe.conf.Append, fe.conf.Rotation, fe.conf.FlushInterval, export)
+	assert.NoError(t, err)
+	err = fe.writer.file.Close()
+	assert.NoError(t, err)
+	fe.writer.file = bwc
+	fe.writer.start()
 
 	// Write 10 bytes.
 	b := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	i, err := safeFileExporterWrite(fe, b)
 	assert.NoError(t, err)
-	assert.EqualValues(t, len(b), i, "bytes written")
+	assert.Equal(t, len(b), i, "bytes written")
 
 	// Assert buf contains 0 bytes before flush is called.
-	assert.EqualValues(t, 0, bbuf.Len(), "before flush")
+	assert.Equal(t, 0, bbuf.Len(), "before flush")
 
 	// Wait 1.5 sec
 	time.Sleep(1500 * time.Millisecond)
 
 	// Assert buf contains 10 bytes after flush is called.
-	assert.EqualValues(t, 10, bbuf.Len(), "after flush")
+	assert.Equal(t, 10, bbuf.Len(), "after flush")
 	// Compare the content.
-	assert.EqualValues(t, b, bbuf.Bytes())
+	assert.Equal(t, b, bbuf.Bytes())
+	assert.NoError(t, fe.Shutdown(ctx))
+}
+
+func TestAppend(t *testing.T) {
+	cfg := &Config{
+		Path:          tempFileName(t),
+		FlushInterval: time.Second,
+		Append:        true,
+	}
+
+	// Create a buffer to capture the output.
+	bbuf := &tsBuffer{b: &bytes.Buffer{}}
+	buf := &NopWriteCloser{bbuf}
+	// Wrap the buffer with the buffered writer closer that implements flush() method.
+	bwc := newBufferedWriteCloser(buf)
+	// Create a file exporter with flushing enabled.
+	feI := newFileExporter(cfg, zap.NewNop())
+	assert.IsType(t, &fileExporter{}, feI)
+	fe := feI.(*fileExporter)
+
+	// Start the flusher.
+	ctx := context.Background()
+	fe.marshaller = &marshaller{
+		formatType:       fe.conf.FormatType,
+		tracesMarshaler:  tracesMarshalers[fe.conf.FormatType],
+		metricsMarshaler: metricsMarshalers[fe.conf.FormatType],
+		logsMarshaler:    logsMarshalers[fe.conf.FormatType],
+		compression:      fe.conf.Compression,
+		compressor:       buildCompressor(fe.conf.Compression),
+	}
+	export := buildExportFunc(fe.conf)
+	var err error
+	fe.writer, err = newFileWriter(fe.conf.Path, fe.conf.Append, fe.conf.Rotation, fe.conf.FlushInterval, export)
+	assert.NoError(t, err)
+	err = fe.writer.file.Close()
+	assert.NoError(t, err)
+	fe.writer.file = bwc
+	fe.writer.start()
+
+	// Write 10 bytes.
+	b1 := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	i, err := safeFileExporterWrite(fe, b1)
+	assert.NoError(t, err)
+	assert.Equal(t, len(b1), i, "bytes written")
+
+	// Assert buf contains 0 bytes before flush is called.
+	assert.Equal(t, 0, bbuf.Len(), "before flush")
+
+	// Wait 1.5 sec
+	time.Sleep(1500 * time.Millisecond)
+
+	// Assert buf contains 10 bytes after flush is called.
+	assert.Equal(t, 10, bbuf.Len(), "after flush")
+	// Compare the content.
+	assert.Equal(t, b1, bbuf.Bytes())
+	assert.NoError(t, fe.Shutdown(ctx))
+
+	// Restart the exporter
+	fe.writer, err = newFileWriter(fe.conf.Path, fe.conf.Append, fe.conf.Rotation, fe.conf.FlushInterval, export)
+	assert.NoError(t, err)
+	err = fe.writer.file.Close()
+	assert.NoError(t, err)
+	fe.writer.file = bwc
+	fe.writer.start()
+
+	// Write 10 bytes - again
+	b2 := []byte{11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
+	i, err = safeFileExporterWrite(fe, b2)
+	assert.NoError(t, err)
+	assert.Equal(t, len(b2), i, "bytes written")
+
+	// Assert buf contains 10 bytes before flush is called.
+	assert.Equal(t, 10, bbuf.Len(), "after restart - before flush")
+
+	// Wait 1.5 sec
+	time.Sleep(1500 * time.Millisecond)
+
+	// Assert buf contains 20 bytes after flush is called.
+	assert.Equal(t, 20, bbuf.Len(), "after restart - after flush")
+	// Compare the content.
+	bComplete := slices.Clone(b1)
+	bComplete = append(bComplete, b2...)
+	assert.Equal(t, bComplete, bbuf.Bytes())
 	assert.NoError(t, fe.Shutdown(ctx))
 }

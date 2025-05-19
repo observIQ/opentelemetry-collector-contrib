@@ -5,6 +5,7 @@ package ottl // import "github.com/open-telemetry/opentelemetry-collector-contri
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -113,7 +114,7 @@ func attemptMathOperation[K any](lhs Getter[K], op mathOp, rhs Getter[K]) Getter
 
 func performOpTime(x time.Time, y any, op mathOp) (any, error) {
 	switch op {
-	case ADD:
+	case add:
 		switch newY := y.(type) {
 		case time.Duration:
 			result := x.Add(newY)
@@ -121,7 +122,7 @@ func performOpTime(x time.Time, y any, op mathOp) (any, error) {
 		default:
 			return nil, fmt.Errorf("time.Time must be added to time.Duration; found %v instead", y)
 		}
-	case SUB:
+	case sub:
 		switch newY := y.(type) {
 		case time.Time:
 			result := x.Sub(newY)
@@ -133,12 +134,12 @@ func performOpTime(x time.Time, y any, op mathOp) (any, error) {
 			return nil, fmt.Errorf("time.Time or time.Duration must be subtracted from time.Time; found %v instead", y)
 		}
 	}
-	return nil, fmt.Errorf("only addition and subtraction supported for time.Time and time.Duration")
+	return nil, errors.New("only addition and subtraction supported for time.Time and time.Duration")
 }
 
 func performOpDuration(x time.Duration, y any, op mathOp) (any, error) {
 	switch op {
-	case ADD:
+	case add:
 		switch newY := y.(type) {
 		case time.Duration:
 			result := x + newY
@@ -149,7 +150,7 @@ func performOpDuration(x time.Duration, y any, op mathOp) (any, error) {
 		default:
 			return nil, fmt.Errorf("time.Duration must be added to time.Duration or time.Time; found %v instead", y)
 		}
-	case SUB:
+	case sub:
 		switch newY := y.(type) {
 		case time.Duration:
 			result := x - newY
@@ -158,20 +159,20 @@ func performOpDuration(x time.Duration, y any, op mathOp) (any, error) {
 			return nil, fmt.Errorf("time.Duration must be subtracted from time.Duration; found %v instead", y)
 		}
 	}
-	return nil, fmt.Errorf("only addition and subtraction supported for time.Time and time.Duration")
+	return nil, errors.New("only addition and subtraction supported for time.Time and time.Duration")
 }
 
 func performOp[N int64 | float64](x N, y N, op mathOp) (N, error) {
 	switch op {
-	case ADD:
+	case add:
 		return x + y, nil
-	case SUB:
+	case sub:
 		return x - y, nil
-	case MULT:
+	case mult:
 		return x * y, nil
-	case DIV:
+	case div:
 		if y == 0 {
-			return 0, fmt.Errorf("attempted to divide by 0")
+			return 0, errors.New("attempted to divide by 0")
 		}
 		return x / y, nil
 	}

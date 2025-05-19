@@ -4,6 +4,7 @@
 package filter // import "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/matcher/internal/filter"
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -27,7 +28,7 @@ type regexSortOption struct {
 
 func newRegexSortOption(regexKey string, parseFunc parseFunc, compareFunc compareFunc) (Option, error) {
 	if regexKey == "" {
-		return nil, fmt.Errorf("regex key must be specified")
+		return nil, errors.New("regex key must be specified")
 	}
 	return regexSortOption{
 		regexKey:    regexKey,
@@ -110,7 +111,7 @@ func SortAlphabetical(regexKey string, ascending bool) (Option, error) {
 
 func SortTemporal(regexKey string, ascending bool, layout string, location string) (Option, error) {
 	if layout == "" {
-		return nil, fmt.Errorf("layout must be specified")
+		return nil, errors.New("layout must be specified")
 	}
 	if location == "" {
 		location = "UTC"
@@ -132,7 +133,19 @@ func SortTemporal(regexKey string, ascending bool, layout string, location strin
 	)
 }
 
-type mtimeSortOption struct{}
+type TopNOption int
+
+//nolint:unparam
+func (t TopNOption) apply(items []*item) ([]*item, error) {
+	if len(items) <= int(t) {
+		return items, nil
+	}
+	return items[:t], nil
+}
+
+type mtimeSortOption struct {
+	ascending bool
+}
 
 type mtimeItem struct {
 	mtime time.Time
@@ -158,10 +171,20 @@ func (m mtimeSortOption) apply(items []*item) ([]*item, error) {
 		})
 	}
 
-	sort.SliceStable(mtimeItems, func(i, j int) bool {
-		// This checks if item i > j, in order to reverse the sort (most recently modified file is first in the list)
-		return mtimeItems[i].mtime.After(mtimeItems[j].mtime)
-	})
+	var lessFunc func(i, j int) bool
+	if m.ascending {
+		lessFunc = func(i, j int) bool {
+			// This checks if item i < j
+			return mtimeItems[i].mtime.Before(mtimeItems[j].mtime)
+		}
+	} else {
+		lessFunc = func(i, j int) bool {
+			// This checks if item i > j, in order to reverse the sort (most recently modified file is first in the list)
+			return mtimeItems[i].mtime.After(mtimeItems[j].mtime)
+		}
+	}
+
+	sort.SliceStable(mtimeItems, lessFunc)
 
 	filteredValues := make([]*item, 0, len(items))
 	for _, mtimeItem := range mtimeItems {
@@ -171,6 +194,8 @@ func (m mtimeSortOption) apply(items []*item) ([]*item, error) {
 	return filteredValues, errs
 }
 
-func SortMtime() Option {
-	return mtimeSortOption{}
+func SortMtime(ascending bool) Option {
+	return mtimeSortOption{
+		ascending: ascending,
+	}
 }

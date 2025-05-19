@@ -36,8 +36,8 @@ func newIntervalStatsReader(
 	logger *zap.Logger,
 	database *datasource.Database,
 	metricsMetadata *metadata.MetricsMetadata,
-	config ReaderConfig) *intervalStatsReader {
-
+	config ReaderConfig,
+) *intervalStatsReader {
 	reader := currentStatsReader{
 		logger:                 logger,
 		database:               database,
@@ -78,7 +78,7 @@ func (reader *intervalStatsReader) Read(ctx context.Context) ([]*metadata.Metric
 		if err != nil {
 			return nil, err
 		}
-		metricMetadata := reader.currentStatsReader.metricsMetadata
+		metricMetadata := reader.metricsMetadata
 		if reader.hideTopnLockstatsRowrangestartkey && metricMetadata != nil && metricMetadata.Name == topLockStatsMetricName {
 			for _, dataPoint := range dataPoints {
 				dataPoint.HideLockStatsRowrangestartkeyPII()

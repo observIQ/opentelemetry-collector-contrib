@@ -14,21 +14,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/confignet"
-	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
 )
 
 func TestPerformanceProfilerExtensionUsage(t *testing.T) {
 	config := Config{
-		TCPAddr: confignet.TCPAddr{
+		TCPAddr: confignet.TCPAddrConfig{
 			Endpoint: testutil.GetAvailableLocalAddress(t),
 		},
 		BlockProfileFraction: 3,
 		MutexProfileFraction: 5,
 	}
+	tt := componenttest.NewTelemetry()
 
-	pprofExt := newServer(config, zap.NewNop())
+	pprofExt := newServer(config, tt.NewTelemetrySettings())
 	require.NotNil(t, pprofExt)
 
 	require.NoError(t, pprofExt.Start(context.Background(), componenttest.NewNopHost()))
@@ -55,11 +55,12 @@ func TestPerformanceProfilerExtensionPortAlreadyInUse(t *testing.T) {
 	defer ln.Close()
 
 	config := Config{
-		TCPAddr: confignet.TCPAddr{
+		TCPAddr: confignet.TCPAddrConfig{
 			Endpoint: endpoint,
 		},
 	}
-	pprofExt := newServer(config, zap.NewNop())
+	tt := componenttest.NewTelemetry()
+	pprofExt := newServer(config, tt.NewTelemetrySettings())
 	require.NotNil(t, pprofExt)
 
 	require.Error(t, pprofExt.Start(context.Background(), componenttest.NewNopHost()))
@@ -67,12 +68,13 @@ func TestPerformanceProfilerExtensionPortAlreadyInUse(t *testing.T) {
 
 func TestPerformanceProfilerMultipleStarts(t *testing.T) {
 	config := Config{
-		TCPAddr: confignet.TCPAddr{
+		TCPAddr: confignet.TCPAddrConfig{
 			Endpoint: testutil.GetAvailableLocalAddress(t),
 		},
 	}
 
-	pprofExt := newServer(config, zap.NewNop())
+	tt := componenttest.NewTelemetry()
+	pprofExt := newServer(config, tt.NewTelemetrySettings())
 	require.NotNil(t, pprofExt)
 
 	require.NoError(t, pprofExt.Start(context.Background(), componenttest.NewNopHost()))
@@ -84,12 +86,13 @@ func TestPerformanceProfilerMultipleStarts(t *testing.T) {
 
 func TestPerformanceProfilerMultipleShutdowns(t *testing.T) {
 	config := Config{
-		TCPAddr: confignet.TCPAddr{
+		TCPAddr: confignet.TCPAddrConfig{
 			Endpoint: testutil.GetAvailableLocalAddress(t),
 		},
 	}
 
-	pprofExt := newServer(config, zap.NewNop())
+	tt := componenttest.NewTelemetry()
+	pprofExt := newServer(config, tt.NewTelemetrySettings())
 	require.NotNil(t, pprofExt)
 
 	require.NoError(t, pprofExt.Start(context.Background(), componenttest.NewNopHost()))
@@ -99,19 +102,19 @@ func TestPerformanceProfilerMultipleShutdowns(t *testing.T) {
 
 func TestPerformanceProfilerShutdownWithoutStart(t *testing.T) {
 	config := Config{
-		TCPAddr: confignet.TCPAddr{
+		TCPAddr: confignet.TCPAddrConfig{
 			Endpoint: testutil.GetAvailableLocalAddress(t),
 		},
 	}
-
-	pprofExt := newServer(config, zap.NewNop())
+	tt := componenttest.NewTelemetry()
+	pprofExt := newServer(config, tt.NewTelemetrySettings())
 	require.NotNil(t, pprofExt)
 
 	require.NoError(t, pprofExt.Shutdown(context.Background()))
 }
 
 func TestPerformanceProfilerLifecycleWithFile(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "pprof*.yaml")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "pprof*.yaml")
 	require.NoError(t, err)
 	defer func() {
 		os.Remove(tmpFile.Name())
@@ -119,13 +122,13 @@ func TestPerformanceProfilerLifecycleWithFile(t *testing.T) {
 	require.NoError(t, tmpFile.Close())
 
 	config := Config{
-		TCPAddr: confignet.TCPAddr{
+		TCPAddr: confignet.TCPAddrConfig{
 			Endpoint: testutil.GetAvailableLocalAddress(t),
 		},
 		SaveToFile: tmpFile.Name(),
 	}
-
-	pprofExt := newServer(config, zap.NewNop())
+	tt := componenttest.NewTelemetry()
+	pprofExt := newServer(config, tt.NewTelemetrySettings())
 	require.NotNil(t, pprofExt)
 
 	require.NoError(t, pprofExt.Start(context.Background(), componenttest.NewNopHost()))

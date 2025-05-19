@@ -48,6 +48,8 @@ Number of lock requests resulting in a wait.
 
 Average wait time for all lock requests that had to wait.
 
+This metric is only available when running on Windows.
+
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
 | ms | Gauge | Double |
@@ -64,6 +66,8 @@ Pages found in the buffer pool without having to read from disk.
 
 Number of pages flushed by operations requiring dirty pages to be flushed.
 
+This metric is only available when running on Windows.
+
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
 | {pages}/s | Gauge | Double |
@@ -71,6 +75,8 @@ Number of pages flushed by operations requiring dirty pages to be flushed.
 ### sqlserver.page.lazy_write.rate
 
 Number of lazy writes moving dirty pages to disk.
+
+This metric is only available when running on Windows.
 
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
@@ -80,6 +86,8 @@ Number of lazy writes moving dirty pages to disk.
 
 Time a page will stay in the buffer pool.
 
+This metric is only available when running on Windows.
+
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
 | s | Gauge | Int |
@@ -87,6 +95,8 @@ Time a page will stay in the buffer pool.
 ### sqlserver.page.operation.rate
 
 Number of physical database page operations issued.
+
+This metric is only available when running on Windows.
 
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
@@ -102,6 +112,8 @@ Number of physical database page operations issued.
 
 Number of pages split as a result of overflowing index pages.
 
+This metric is only available when running on Windows.
+
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
 | {pages}/s | Gauge | Double |
@@ -109,6 +121,8 @@ Number of pages split as a result of overflowing index pages.
 ### sqlserver.transaction.rate
 
 Number of transactions started for the database (not including XTP-only transactions).
+
+This metric is only available when running on Windows.
 
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
@@ -118,6 +132,8 @@ Number of transactions started for the database (not including XTP-only transact
 
 Number of transactions that wrote to the database and committed.
 
+This metric is only available when running on Windows.
+
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
 | {transactions}/s | Gauge | Double |
@@ -125,6 +141,8 @@ Number of transactions that wrote to the database and committed.
 ### sqlserver.transaction_log.flush.data.rate
 
 Total number of log bytes flushed.
+
+This metric is only available when running on Windows.
 
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
@@ -134,6 +152,8 @@ Total number of log bytes flushed.
 
 Number of log flushes.
 
+This metric is only available when running on Windows.
+
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
 | {flushes}/s | Gauge | Double |
@@ -141,6 +161,8 @@ Number of log flushes.
 ### sqlserver.transaction_log.flush.wait.rate
 
 Number of commits waiting for a transaction log flush.
+
+This metric is only available when running on Windows.
 
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
@@ -150,6 +172,8 @@ Number of commits waiting for a transaction log flush.
 
 Total number of transaction log expansions for a database.
 
+This metric is only available when running on Windows.
+
 | Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
 | ---- | ----------- | ---------- | ----------------------- | --------- |
 | {growths} | Sum | Int | Cumulative | true |
@@ -158,6 +182,8 @@ Total number of transaction log expansions for a database.
 
 Total number of transaction log shrinks for a database.
 
+This metric is only available when running on Windows.
+
 | Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
 | ---- | ----------- | ---------- | ----------------------- | --------- |
 | {shrinks} | Sum | Int | Cumulative | true |
@@ -165,6 +191,8 @@ Total number of transaction log shrinks for a database.
 ### sqlserver.transaction_log.usage
 
 Percent of transaction log space used.
+
+This metric is only available when running on Windows.
 
 | Unit | Metric Type | Value Type |
 | ---- | ----------- | ---------- |
@@ -178,10 +206,315 @@ Number of users connected to the SQL Server.
 | ---- | ----------- | ---------- |
 | {connections} | Gauge | Int |
 
+## Optional Metrics
+
+The following metrics are not emitted by default. Each of them can be enabled by applying the following configuration:
+
+```yaml
+metrics:
+  <metric_name>:
+    enabled: true
+```
+
+### sqlserver.database.backup_or_restore.rate
+
+Total number of backups/restores.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{backups_or_restores}/s” | Gauge | Double |
+
+### sqlserver.database.count
+
+The number of databases
+
+This metric is only available when the receiver is configured to directly connect to SQL Server.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| {databases} | Gauge | Int |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| database.status | The current status of a database | Str: ``online``, ``restoring``, ``recovering``, ``pending_recovery``, ``suspect``, ``offline`` |
+
+### sqlserver.database.execution.errors
+
+Number of execution errors.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{errors}” | Gauge | Int |
+
+### sqlserver.database.full_scan.rate
+
+The number of unrestricted full table or index scans.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| {scans}/s | Gauge | Double |
+
+### sqlserver.database.io
+
+The number of bytes of I/O on this file.
+
+This metric is only available when the receiver is configured to directly connect to SQL Server.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| By | Sum | Int | Cumulative | true |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| physical_filename | The physical filename of the file being monitored. | Any Str |
+| logical_filename | The logical filename of the file being monitored. | Any Str |
+| file_type | The type of file being monitored. | Any Str |
+| direction | The direction of flow of bytes or operations. | Str: ``read``, ``write`` |
+
+### sqlserver.database.latency
+
+Total time that the users waited for I/O issued on this file.
+
+This metric is only available when the receiver is configured to directly connect to SQL Server.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| s | Sum | Double | Cumulative | true |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| physical_filename | The physical filename of the file being monitored. | Any Str |
+| logical_filename | The logical filename of the file being monitored. | Any Str |
+| file_type | The type of file being monitored. | Any Str |
+| direction | The direction of flow of bytes or operations. | Str: ``read``, ``write`` |
+
+### sqlserver.database.operations
+
+The number of operations issued on the file.
+
+This metric is only available when the receiver is configured to directly connect to SQL Server.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| {operations} | Sum | Int | Cumulative | true |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| physical_filename | The physical filename of the file being monitored. | Any Str |
+| logical_filename | The logical filename of the file being monitored. | Any Str |
+| file_type | The type of file being monitored. | Any Str |
+| direction | The direction of flow of bytes or operations. | Str: ``read``, ``write`` |
+
+### sqlserver.database.tempdb.space
+
+Total free space in temporary DB.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| “KB” | Sum | Int | Cumulative | false |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| tempdb.state | The status of the tempdb space usage. | Str: ``free``, ``used`` |
+
+### sqlserver.database.tempdb.version_store.size
+
+TempDB version store size.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “KB” | Gauge | Double |
+
+### sqlserver.deadlock.rate
+
+Total number of deadlocks.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{deadlocks}/s” | Gauge | Double |
+
+### sqlserver.index.search.rate
+
+Total number of index searches.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{searches}/s” | Gauge | Double |
+
+### sqlserver.lock.timeout.rate
+
+Total number of lock timeouts.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{timeouts}/s” | Gauge | Double |
+
+### sqlserver.lock.wait.count
+
+Cumulative count of lock waits that occurred.
+
+This metric is only available when the receiver is configured to directly connect to SQL Server.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| {wait} | Sum | Int | Cumulative | true |
+
+### sqlserver.login.rate
+
+Total number of logins.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{logins}/s” | Gauge | Double |
+
+### sqlserver.logout.rate
+
+Total number of logouts.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{logouts}/s” | Gauge | Double |
+
+### sqlserver.memory.grants.pending.count
+
+Total number of memory grants pending.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| “{grants}” | Sum | Int | Cumulative | false |
+
+### sqlserver.memory.usage
+
+Total memory in use.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| “KB” | Sum | Double | Cumulative | false |
+
+### sqlserver.page.buffer_cache.free_list.stalls.rate
+
+Number of free list stalls.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{stalls}/s” | Gauge | Int |
+
+### sqlserver.page.lookup.rate
+
+Total number of page lookups.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{lookups}/s” | Gauge | Double |
+
+### sqlserver.processes.blocked
+
+The number of processes that are currently blocked
+
+This metric is only available when the receiver is configured to directly connect to SQL Server.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| {processes} | Gauge | Int |
+
+### sqlserver.replica.data.rate
+
+Throughput rate of replica data.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| By/s | Gauge | Double |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| replica.direction | The direction of flow of bytes for replica. | Str: ``transmit``, ``receive`` |
+
+### sqlserver.resource_pool.disk.operations
+
+The rate of operations issued.
+
+This metric is only available when the receiver is configured to directly connect to SQL Server.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| {operations}/s | Gauge | Double |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| direction | The direction of flow of bytes or operations. | Str: ``read``, ``write`` |
+
+### sqlserver.resource_pool.disk.throttled.read.rate
+
+The number of read operations that were throttled in the last second
+
+This metric is only available when the receiver is configured to directly connect to SQL Server.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| {reads}/s | Gauge | Int |
+
+### sqlserver.resource_pool.disk.throttled.write.rate
+
+The number of write operations that were throttled in the last second
+
+This metric is only available when the receiver is configured to directly connect to SQL Server.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| {writes}/s | Gauge | Double |
+
+### sqlserver.table.count
+
+The number of tables.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| “{tables}” | Sum | Int | Cumulative | false |
+
+#### Attributes
+
+| Name | Description | Values |
+| ---- | ----------- | ------ |
+| table.state | The state of the table. | Str: ``active``, ``inactive`` |
+| table.status | The status of the table. | Str: ``temporary``, ``permanent`` |
+
+### sqlserver.transaction.delay
+
+Time consumed in transaction delays.
+
+| Unit | Metric Type | Value Type | Aggregation Temporality | Monotonic |
+| ---- | ----------- | ---------- | ----------------------- | --------- |
+| ms | Sum | Double | Cumulative | false |
+
+### sqlserver.transaction.mirror_write.rate
+
+Total number of mirror write transactions.
+
+| Unit | Metric Type | Value Type |
+| ---- | ----------- | ---------- |
+| “{transactions}/s” | Gauge | Double |
+
 ## Resource Attributes
 
 | Name | Description | Values | Enabled |
 | ---- | ----------- | ------ | ------- |
+| host.name | The host name of SQL Server | Any Str | true |
+| server.address | Name of the database host. | Any Str | false |
+| server.port | Server port number. | Any Int | false |
 | sqlserver.computer.name | The name of the SQL Server instance being monitored. | Any Str | false |
 | sqlserver.database.name | The name of the SQL Server database. | Any Str | true |
 | sqlserver.instance.name | The name of the SQL Server instance being monitored. | Any Str | false |

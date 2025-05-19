@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build integration
-// +build integration
 
 package bigipreceiver
 
@@ -16,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 
@@ -30,7 +30,7 @@ func TestIntegration(t *testing.T) {
 	scraperinttest.NewIntegrationTest(
 		NewFactory(),
 		scraperinttest.WithCustomConfig(
-			func(t *testing.T, cfg component.Config, ci *scraperinttest.ContainerInfo) {
+			func(_ *testing.T, cfg component.Config, _ *scraperinttest.ContainerInfo) {
 				rCfg := cfg.(*Config)
 				rCfg.CollectionInterval = 100 * time.Millisecond
 				rCfg.Endpoint = mockServer.URL
@@ -86,12 +86,12 @@ func setupMockIControlServer(t *testing.T) *httptest.Server {
 		if strings.HasSuffix(r.RequestURI, loginURISuffix) {
 			var body loginBody
 			err = json.NewDecoder(r.Body).Decode(&body)
-			require.NoError(t, err)
-			if body.Username == "" || body.Password == "" || r.Method != "POST" {
+			assert.NoError(t, err)
+			if body.Username == "" || body.Password == "" || r.Method != http.MethodPost {
 				w.WriteHeader(http.StatusUnauthorized)
 			} else {
 				_, err = w.Write(mockLoginResponse)
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
 
 			return
@@ -123,7 +123,7 @@ func setupMockIControlServer(t *testing.T) *httptest.Server {
 			w.WriteHeader(http.StatusBadRequest)
 			err = nil
 		}
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 
 	return server

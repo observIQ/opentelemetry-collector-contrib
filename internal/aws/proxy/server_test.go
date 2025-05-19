@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build !windows
-// +build !windows
 
 // TODO review if tests should succeed on Windows
 package proxy
@@ -37,7 +36,7 @@ func TestHappyCase(t *testing.T) {
 
 	cfg := DefaultConfig()
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
-	cfg.TCPAddr.Endpoint = tcpAddr
+	cfg.Endpoint = tcpAddr
 	cfg.ProxyAddress = "https://example.com"
 	srv, err := NewServer(cfg, logger)
 	assert.NoError(t, err, "NewServer should succeed")
@@ -69,12 +68,12 @@ func TestHandlerHappyCase(t *testing.T) {
 
 	cfg := DefaultConfig()
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
-	cfg.TCPAddr.Endpoint = tcpAddr
+	cfg.Endpoint = tcpAddr
 	srv, err := NewServer(cfg, logger)
 	assert.NoError(t, err, "NewServer should succeed")
 
 	handler := srv.(*http.Server).Handler.ServeHTTP
-	req := httptest.NewRequest("POST",
+	req := httptest.NewRequest(http.MethodPost,
 		"https://xray.us-west-2.amazonaws.com/GetSamplingRules", strings.NewReader(`{"NextToken": null}`))
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -94,13 +93,13 @@ func TestHandlerIoReadSeekerCreationFailed(t *testing.T) {
 
 	cfg := DefaultConfig()
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
-	cfg.TCPAddr.Endpoint = tcpAddr
+	cfg.Endpoint = tcpAddr
 	srv, err := NewServer(cfg, logger)
 	assert.NoError(t, err, "NewServer should succeed")
 
 	expectedErr := errors.New("expected mockReadCloser error")
 	handler := srv.(*http.Server).Handler.ServeHTTP
-	req := httptest.NewRequest("POST",
+	req := httptest.NewRequest(http.MethodPost,
 		"https://xray.us-west-2.amazonaws.com/GetSamplingRules", &mockReadCloser{
 			readErr: expectedErr,
 		})
@@ -123,12 +122,12 @@ func TestHandlerNilBodyIsOk(t *testing.T) {
 
 	cfg := DefaultConfig()
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
-	cfg.TCPAddr.Endpoint = tcpAddr
+	cfg.Endpoint = tcpAddr
 	srv, err := NewServer(cfg, logger)
 	assert.NoError(t, err, "NewServer should succeed")
 
 	handler := srv.(*http.Server).Handler.ServeHTTP
-	req := httptest.NewRequest("POST",
+	req := httptest.NewRequest(http.MethodPost,
 		"https://xray.us-west-2.amazonaws.com/GetSamplingRules", nil)
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -147,12 +146,12 @@ func TestHandlerSignerErrorsOut(t *testing.T) {
 
 	cfg := DefaultConfig()
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
-	cfg.TCPAddr.Endpoint = tcpAddr
+	cfg.Endpoint = tcpAddr
 	srv, err := NewServer(cfg, logger)
 	assert.NoError(t, err, "NewServer should succeed")
 
 	handler := srv.(*http.Server).Handler.ServeHTTP
-	req := httptest.NewRequest("POST",
+	req := httptest.NewRequest(http.MethodPost,
 		"https://xray.us-west-2.amazonaws.com/GetSamplingRules", strings.NewReader(`{}`))
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -170,7 +169,7 @@ func TestTCPEndpointInvalid(t *testing.T) {
 	t.Setenv(regionEnvVarName, regionEnvVar)
 
 	cfg := DefaultConfig()
-	cfg.TCPAddr.Endpoint = "invalid\n"
+	cfg.Endpoint = "invalid\n"
 	_, err := NewServer(cfg, logger)
 	assert.Error(t, err, "NewServer should fail")
 }
@@ -182,7 +181,7 @@ func TestCantGetAWSConfigSession(t *testing.T) {
 
 	cfg := DefaultConfig()
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
-	cfg.TCPAddr.Endpoint = tcpAddr
+	cfg.Endpoint = tcpAddr
 
 	origSession := newAWSSession
 	defer func() {
@@ -190,7 +189,7 @@ func TestCantGetAWSConfigSession(t *testing.T) {
 	}()
 
 	expectedErr := errors.New("expected newAWSSessionError")
-	newAWSSession = func(roleArn string, region string, log *zap.Logger) (*session.Session, error) {
+	newAWSSession = func(_ string, _ string, _ *zap.Logger) (*session.Session, error) {
 		return nil, expectedErr
 	}
 	_, err := NewServer(cfg, logger)
@@ -204,11 +203,11 @@ func TestCantGetServiceEndpoint(t *testing.T) {
 
 	cfg := DefaultConfig()
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
-	cfg.TCPAddr.Endpoint = tcpAddr
+	cfg.Endpoint = tcpAddr
 
 	_, err := NewServer(cfg, logger)
 	assert.Error(t, err, "NewServer should fail")
-	assert.Contains(t, err.Error(), "invalid region")
+	assert.ErrorContains(t, err, "invalid region")
 }
 
 func TestAWSEndpointInvalid(t *testing.T) {
@@ -218,12 +217,12 @@ func TestAWSEndpointInvalid(t *testing.T) {
 
 	cfg := DefaultConfig()
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
-	cfg.TCPAddr.Endpoint = tcpAddr
+	cfg.Endpoint = tcpAddr
 	cfg.AWSEndpoint = "invalid endpoint \n"
 
 	_, err := NewServer(cfg, logger)
 	assert.Error(t, err, "NewServer should fail")
-	assert.Contains(t, err.Error(), "unable to parse AWS service endpoint")
+	assert.ErrorContains(t, err, "unable to parse AWS service endpoint")
 }
 
 func TestCanCreateTransport(t *testing.T) {
@@ -233,16 +232,16 @@ func TestCanCreateTransport(t *testing.T) {
 
 	cfg := DefaultConfig()
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
-	cfg.TCPAddr.Endpoint = tcpAddr
+	cfg.Endpoint = tcpAddr
 	cfg.ProxyAddress = "invalid address \n"
 
 	_, err := NewServer(cfg, logger)
 	assert.Error(t, err, "NewServer should fail")
-	assert.Contains(t, err.Error(), "failed to parse proxy URL")
+	assert.ErrorContains(t, err, "failed to parse proxy URL")
 }
 
 func TestGetServiceEndpointInvalidAWSConfig(t *testing.T) {
-	_, err := getServiceEndpoint(&aws.Config{})
+	_, err := getServiceEndpoint(&aws.Config{}, "")
 	assert.EqualError(t, err, "unable to generate endpoint from region with nil value")
 }
 

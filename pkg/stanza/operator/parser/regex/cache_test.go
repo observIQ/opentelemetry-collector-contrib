@@ -32,9 +32,10 @@ func TestNewMemoryCache(t *testing.T) {
 
 	for _, tc := range cases {
 		output := newMemoryCache(tc.maxSize, 0)
+		defer output.stop()
 		require.Equal(t, tc.expect.cache, output.cache)
-		require.Len(t, output.cache, 0, "new memory should always be empty")
-		require.Len(t, output.keys, 0, "new memory should always be empty")
+		require.Empty(t, output.cache, "new memory should always be empty")
+		require.Empty(t, output.keys, "new memory should always be empty")
 		require.Equal(t, tc.expectSize, cap(output.keys), "keys channel should have cap of expected size")
 	}
 }
@@ -72,6 +73,7 @@ func TestMemory(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			defer tc.cache.stop()
 			for key, value := range tc.input {
 				tc.cache.add(key, value)
 				out := tc.cache.get(key)
@@ -79,7 +81,7 @@ func TestMemory(t *testing.T) {
 				require.Equal(t, value, out, "expected value to equal the value that was added to the cache")
 			}
 
-			require.Equal(t, len(tc.expect.cache), len(tc.cache.cache))
+			require.Len(t, tc.cache.cache, len(tc.expect.cache))
 
 			for expectKey, expectItem := range tc.expect.cache {
 				actual := tc.cache.get(expectKey)
@@ -95,6 +97,7 @@ func TestCleanupLast(t *testing.T) {
 	maxSize := 10
 
 	m := newMemoryCache(uint16(maxSize), 0)
+	defer m.stop()
 
 	// Add to cache until it is full
 	for i := 0; i <= cap(m.keys); i++ {
@@ -175,6 +178,7 @@ func TestNewStartedAtomicLimiter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			l := newStartedAtomicLimiter(tc.max, tc.interval)
 			require.Equal(t, tc.max, l.max)
+			defer l.stop()
 			if tc.interval == 0 {
 				// default
 				tc.interval = 5
@@ -187,17 +191,18 @@ func TestNewStartedAtomicLimiter(t *testing.T) {
 
 // Start a limiter with a max of 3 and ensure throttling begins
 func TestLimiter(t *testing.T) {
-	max := uint64(3)
+	const maxVal = uint64(3)
 
-	l := newStartedAtomicLimiter(max, 120)
+	l := newStartedAtomicLimiter(maxVal, 120)
 	require.NotNil(t, l)
-	require.Equal(t, max, l.max)
+	require.Equal(t, maxVal, l.max)
+	defer l.stop()
 
 	require.False(t, l.throttled(), "new limiter should not be throttling")
 	require.Equal(t, uint64(0), l.currentCount())
 
 	var i uint64
-	for i = 1; i < max; i++ {
+	for i = 1; i < maxVal; i++ {
 		l.increment()
 		require.Equal(t, i, l.currentCount())
 		require.False(t, l.throttled())
@@ -208,17 +213,18 @@ func TestLimiter(t *testing.T) {
 }
 
 func TestThrottledLimiter(t *testing.T) {
-	max := uint64(3)
+	const maxVal = uint64(3)
 
 	// Limiter with a count higher than the max, which will force
 	// it to be throttled by default. Also note that the init method
 	// has not been called yet, so the reset go routine is not running
 	count := &atomic.Uint64{}
-	count.Add(max + 1)
+	count.Add(maxVal + 1)
 	l := atomicLimiter{
-		max:      max,
+		max:      maxVal,
 		count:    count,
 		interval: 1,
+		done:     make(chan struct{}),
 	}
 
 	require.True(t, l.throttled())
@@ -227,6 +233,7 @@ func TestThrottledLimiter(t *testing.T) {
 	// for it to reset the counter. The limiter will no longer
 	// be in a throttled state and the count will be reset.
 	l.init()
+	defer l.stop()
 	wait := 2 * l.interval
 	time.Sleep(time.Second * wait)
 	require.False(t, l.throttled())
@@ -235,6 +242,7 @@ func TestThrottledLimiter(t *testing.T) {
 
 func TestThrottledCache(t *testing.T) {
 	c := newMemoryCache(3, 120)
+	defer c.stop()
 	require.False(t, c.limiter.throttled())
 	require.Equal(t, 4, int(c.limiter.limit()), "expected limit be cache size + 1")
 	require.Equal(t, float64(120), c.limiter.resetInterval().Seconds(), "expected reset interval to be 120 seconds")

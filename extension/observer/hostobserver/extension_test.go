@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	psnet "github.com/shirou/gopsutil/v3/net"
-	"github.com/shirou/gopsutil/v3/process"
+	psnet "github.com/shirou/gopsutil/v4/net"
+	"github.com/shirou/gopsutil/v4/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/endpointswatcher"
 )
 
 // Tests observer with real connections on system.
@@ -80,11 +81,11 @@ func TestHostObserver(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			hostPorts, notifier := tt.setup()
 			if tt.errorListingConnections {
-				require.Equal(t, len(notifier.endpointsMap), 0)
+				require.Empty(t, notifier.endpointsMap)
 				return
 			}
 
-			require.True(t, len(notifier.endpointsMap) >= len(hostPorts))
+			require.GreaterOrEqual(t, len(notifier.endpointsMap), len(hostPorts))
 
 			for _, hp := range hostPorts {
 				require.NoError(t, hp.err, "Failed to et host and port")
@@ -111,7 +112,6 @@ func TestHostObserver(t *testing.T) {
 				assert.Equal(t, filepath.Base(exe), details.ProcessName)
 				assert.Equal(t, tt.protocol, details.Transport)
 				assert.Equal(t, isIPv6, details.IsIPv6)
-
 			}
 		})
 	}
@@ -156,7 +156,8 @@ func getExpectedHost(host string, isIPv6 bool) string {
 
 func startAndStopObserver(
 	t *testing.T,
-	getConnectionsOverride func() (conns []psnet.ConnectionStat, err error)) mockNotifier {
+	getConnectionsOverride func() (conns []psnet.ConnectionStat, err error),
+) mockNotifier {
 	ml := endpointsLister{
 		logger:                zap.NewNop(),
 		observerName:          "host_observer/1",
@@ -173,7 +174,7 @@ func startAndStopObserver(
 	require.NotNil(t, ml.getProcess)
 	require.NotNil(t, ml.collectProcessDetails)
 
-	h := &hostObserver{EndpointsWatcher: observer.NewEndpointsWatcher(ml, 10*time.Second, zaptest.NewLogger(t))}
+	h := &hostObserver{EndpointsWatcher: endpointswatcher.New(ml, 10*time.Second, zaptest.NewLogger(t))}
 
 	mn := mockNotifier{map[observer.EndpointID]observer.Endpoint{}}
 
@@ -510,7 +511,7 @@ func TestCollectEndpoints(t *testing.T) {
 			newProc: func(pid int32) (*process.Process, error) {
 				return &process.Process{Pid: pid}, nil
 			},
-			procDetails: func(proc *process.Process) (*processDetails, error) {
+			procDetails: func(_ *process.Process) (*processDetails, error) {
 				return nil, errors.New("always fail")
 			},
 			want: []observer.Endpoint{},

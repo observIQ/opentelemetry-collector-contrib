@@ -2,16 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build !linux && !windows
-// +build !linux,!windows
 
 package diskscraper // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/diskscraper"
 
 import (
-	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v4/disk"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 const systemSpecificMetricsLen = 0
 
-func (s *scraper) recordSystemSpecificDataPoints(_ pcommon.Timestamp, _ map[string]disk.IOCountersStat) {
+func (s *diskScraper) recordSystemSpecificDataPoints(_ pcommon.Timestamp, _ map[string]disk.IOCountersStat) {
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/featuregate"
 	"go.uber.org/zap"
 
@@ -113,9 +114,9 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
@@ -138,9 +139,9 @@ func TestConfigValidate(t *testing.T) {
 		MetricDescriptors:           incorrectDescriptor,
 		logger:                      zap.NewNop(),
 	}
-	assert.NoError(t, component.ValidateConfig(cfg))
+	assert.NoError(t, xconfmap.Validate(cfg))
 
-	assert.Equal(t, 2, len(cfg.MetricDescriptors))
+	assert.Len(t, cfg.MetricDescriptors, 2)
 	assert.Equal(t, []MetricDescriptor{
 		{Unit: "Count", MetricName: "apiserver_total", Overwrite: true},
 		{Unit: "Megabytes", MetricName: "memory_usage"},
@@ -158,8 +159,7 @@ func TestRetentionValidateCorrect(t *testing.T) {
 		ResourceToTelemetrySettings: resourcetotelemetry.Settings{Enabled: true},
 		logger:                      zap.NewNop(),
 	}
-	assert.NoError(t, component.ValidateConfig(cfg))
-
+	assert.NoError(t, xconfmap.Validate(cfg))
 }
 
 func TestRetentionValidateWrong(t *testing.T) {
@@ -173,8 +173,7 @@ func TestRetentionValidateWrong(t *testing.T) {
 		ResourceToTelemetrySettings: resourcetotelemetry.Settings{Enabled: true},
 		logger:                      zap.NewNop(),
 	}
-	assert.Error(t, component.ValidateConfig(wrongcfg))
-
+	assert.Error(t, xconfmap.Validate(wrongcfg))
 }
 
 func TestValidateTags(t *testing.T) {
@@ -185,24 +184,23 @@ func TestValidateTags(t *testing.T) {
 	tooLongValue := strings.Repeat("a", 257)
 
 	// Create a map with no items and then one with too many items for testing
-	emptyMap := make(map[string]*string)
-	bigMap := make(map[string]*string)
+	bigMap := make(map[string]string)
 	for i := 0; i < 51; i++ {
-		bigMap[strconv.Itoa(i)] = &basicValue
+		bigMap[strconv.Itoa(i)] = basicValue
 	}
 
 	tests := []struct {
 		id           component.ID
-		tags         map[string]*string
+		tags         map[string]string
 		errorMessage string
 	}{
 		{
 			id:   component.NewIDWithName(metadata.Type, "validate-correct"),
-			tags: map[string]*string{"basicKey": &basicValue},
+			tags: map[string]string{"basicKey": basicValue},
 		},
 		{
 			id:           component.NewIDWithName(metadata.Type, "too-little-tags"),
-			tags:         emptyMap,
+			tags:         make(map[string]string),
 			errorMessage: "invalid amount of items. Please input at least 1 tag or remove the tag field",
 		},
 		{
@@ -212,32 +210,32 @@ func TestValidateTags(t *testing.T) {
 		},
 		{
 			id:           component.NewIDWithName(metadata.Type, "wrong-key-regex"),
-			tags:         map[string]*string{"***": &basicValue},
+			tags:         map[string]string{"***": basicValue},
 			errorMessage: "key - *** does not follow the regex pattern" + `^([\p{L}\p{Z}\p{N}_.:/=+\-@]+)$`,
 		},
 		{
 			id:           component.NewIDWithName(metadata.Type, "wrong-value-regex"),
-			tags:         map[string]*string{"basicKey": &wrongRegexValue},
+			tags:         map[string]string{"basicKey": wrongRegexValue},
 			errorMessage: "value - " + wrongRegexValue + " does not follow the regex pattern" + `^([\p{L}\p{Z}\p{N}_.:/=+\-@]*)$`,
 		},
 		{
 			id:           component.NewIDWithName(metadata.Type, "key-too-short"),
-			tags:         map[string]*string{"": &basicValue},
+			tags:         map[string]string{"": basicValue},
 			errorMessage: "key -  has an invalid length. Please use keys with a length of 1 to 128 characters",
 		},
 		{
 			id:           component.NewIDWithName(metadata.Type, "key-too-long"),
-			tags:         map[string]*string{strings.Repeat("a", 129): &basicValue},
+			tags:         map[string]string{strings.Repeat("a", 129): basicValue},
 			errorMessage: "key - " + strings.Repeat("a", 129) + " has an invalid length. Please use keys with a length of 1 to 128 characters",
 		},
 		{
 			id:           component.NewIDWithName(metadata.Type, "value-too-short"),
-			tags:         map[string]*string{"basicKey": &emptyValue},
+			tags:         map[string]string{"basicKey": emptyValue},
 			errorMessage: "value - " + emptyValue + " has an invalid length. Please use values with a length of 1 to 256 characters",
 		},
 		{
 			id:           component.NewIDWithName(metadata.Type, "value-too-long"),
-			tags:         map[string]*string{"basicKey": &tooLongValue},
+			tags:         map[string]string{"basicKey": tooLongValue},
 			errorMessage: "value - " + tooLongValue + " has an invalid length. Please use values with a length of 1 to 256 characters",
 		},
 	}
@@ -254,10 +252,10 @@ func TestValidateTags(t *testing.T) {
 				logger:                      zap.NewNop(),
 			}
 			if tt.errorMessage != "" {
-				assert.EqualError(t, component.ValidateConfig(cfg), tt.errorMessage)
+				assert.ErrorContains(t, xconfmap.Validate(cfg), tt.errorMessage)
 				return
 			}
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 		})
 	}
 }
@@ -267,6 +265,60 @@ func TestNoDimensionRollupFeatureGate(t *testing.T) {
 	require.NoError(t, err)
 	cfg := createDefaultConfig()
 
-	assert.Equal(t, cfg.(*Config).DimensionRollupOption, "NoDimensionRollup")
+	assert.Equal(t, "NoDimensionRollup", cfg.(*Config).DimensionRollupOption)
 	_ = featuregate.GlobalRegistry().Set("awsemf.nodimrollupdefault", false)
+}
+
+func TestIsApplicationSignalsEnabled(t *testing.T) {
+	tests := []struct {
+		name            string
+		metricNameSpace string
+		logGroupName    string
+		expectedResult  bool
+	}{
+		{
+			"validApplicationSignalsEMF",
+			"ApplicationSignals",
+			"/aws/application-signals/data",
+			true,
+		},
+		{
+			"invalidApplicationSignalsLogsGroup",
+			"ApplicationSignals",
+			"/nonaws/application-signals/eks",
+			false,
+		},
+		{
+			"invalidApplicationSignalsMetricNamespace",
+			"NonApplicationSignals",
+			"/aws/application-signals/data",
+			false,
+		},
+		{
+			"invalidApplicationSignalsEMF",
+			"NonApplicationSignals",
+			"/nonaws/application-signals/eks",
+			false,
+		},
+		{
+			"defaultConfig",
+			"",
+			"",
+			false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			factory := NewFactory()
+			cfg := factory.CreateDefaultConfig().(*Config)
+			if len(tc.metricNameSpace) > 0 {
+				cfg.Namespace = tc.metricNameSpace
+			}
+			if len(tc.logGroupName) > 0 {
+				cfg.LogGroupName = tc.logGroupName
+			}
+
+			assert.Equal(t, tc.expectedResult, cfg.isAppSignalsEnabled())
+		})
+	}
 }

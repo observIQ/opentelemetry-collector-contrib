@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build windows
-// +build windows
 
 package pagingscraper // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/pagingscraper"
 
@@ -11,15 +10,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v4/host"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scrapererror"
+	"go.opentelemetry.io/collector/scraper"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
 	"go.uber.org/zap"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/perfcounters"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/winperfcounters"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/pagingscraper/internal/metadata"
 )
 
@@ -34,31 +33,33 @@ const (
 )
 
 // scraper for Paging Metrics
-type scraper struct {
-	settings receiver.CreateSettings
+type pagingScraper struct {
+	settings scraper.Settings
 	config   *Config
 	mb       *metadata.MetricsBuilder
 
-	perfCounterScraper perfcounters.PerfCounterScraper
-	skipScrape         bool
+	pageReadsPerfCounter  winperfcounters.PerfCounterWatcher
+	pageWritesPerfCounter winperfcounters.PerfCounterWatcher
+	skipScrape            bool
 
 	// for mocking
-	bootTime      func(context.Context) (uint64, error)
-	pageFileStats func() ([]*pageFileStats, error)
+	bootTime           func(context.Context) (uint64, error)
+	pageFileStats      func() ([]*pageFileStats, error)
+	perfCounterFactory func(string, string, string) (winperfcounters.PerfCounterWatcher, error)
 }
 
 // newPagingScraper creates a Paging Scraper
-func newPagingScraper(_ context.Context, settings receiver.CreateSettings, cfg *Config) *scraper {
-	return &scraper{
+func newPagingScraper(_ context.Context, settings scraper.Settings, cfg *Config) *pagingScraper {
+	return &pagingScraper{
 		settings:           settings,
 		config:             cfg,
-		perfCounterScraper: &perfcounters.PerfLibScraper{},
 		bootTime:           host.BootTimeWithContext,
 		pageFileStats:      getPageFileStats,
+		perfCounterFactory: winperfcounters.NewWatcher,
 	}
 }
 
-func (s *scraper) start(ctx context.Context, _ component.Host) error {
+func (s *pagingScraper) start(ctx context.Context, _ component.Host) error {
 	bootTime, err := s.bootTime(ctx)
 	if err != nil {
 		return err
@@ -66,14 +67,22 @@ func (s *scraper) start(ctx context.Context, _ component.Host) error {
 
 	s.mb = metadata.NewMetricsBuilder(s.config.MetricsBuilderConfig, s.settings, metadata.WithStartTime(pcommon.Timestamp(bootTime*1e9)))
 
-	if err = s.perfCounterScraper.Initialize(memory); err != nil {
-		s.settings.Logger.Error("Failed to initialize performance counter, paging metrics will not scrape", zap.Error(err))
+	s.pageReadsPerfCounter, err = s.perfCounterFactory(memory, "", pageReadsPerSec)
+	if err != nil {
+		s.settings.Logger.Error("Failed to create performance counter to read pages read / sec", zap.Error(err))
 		s.skipScrape = true
 	}
+
+	s.pageWritesPerfCounter, err = s.perfCounterFactory(memory, "", pageWritesPerSec)
+	if err != nil {
+		s.settings.Logger.Error("Failed to create performance counter to write pages read / sec", zap.Error(err))
+		s.skipScrape = true
+	}
+
 	return nil
 }
 
-func (s *scraper) scrape(context.Context) (pmetric.Metrics, error) {
+func (s *pagingScraper) scrape(context.Context) (pmetric.Metrics, error) {
 	if s.skipScrape {
 		return pmetric.NewMetrics(), nil
 	}
@@ -93,7 +102,7 @@ func (s *scraper) scrape(context.Context) (pmetric.Metrics, error) {
 	return s.mb.Emit(), errors.Combine()
 }
 
-func (s *scraper) scrapePagingUsageMetric() error {
+func (s *pagingScraper) scrapePagingUsageMetric() error {
 	now := pcommon.NewTimestampFromTime(time.Now())
 	pageFiles, err := s.pageFileStats()
 	if err != nil {
@@ -106,45 +115,40 @@ func (s *scraper) scrapePagingUsageMetric() error {
 	return nil
 }
 
-func (s *scraper) recordPagingUsageDataPoints(now pcommon.Timestamp, pageFiles []*pageFileStats) {
+func (s *pagingScraper) recordPagingUsageDataPoints(now pcommon.Timestamp, pageFiles []*pageFileStats) {
 	for _, pageFile := range pageFiles {
 		s.mb.RecordSystemPagingUsageDataPoint(now, int64(pageFile.usedBytes), pageFile.deviceName, metadata.AttributeStateUsed)
 		s.mb.RecordSystemPagingUsageDataPoint(now, int64(pageFile.freeBytes), pageFile.deviceName, metadata.AttributeStateFree)
 	}
 }
 
-func (s *scraper) recordPagingUtilizationDataPoints(now pcommon.Timestamp, pageFiles []*pageFileStats) {
+func (s *pagingScraper) recordPagingUtilizationDataPoints(now pcommon.Timestamp, pageFiles []*pageFileStats) {
 	for _, pageFile := range pageFiles {
 		s.mb.RecordSystemPagingUtilizationDataPoint(now, float64(pageFile.usedBytes)/float64(pageFile.totalBytes), pageFile.deviceName, metadata.AttributeStateUsed)
 		s.mb.RecordSystemPagingUtilizationDataPoint(now, float64(pageFile.freeBytes)/float64(pageFile.totalBytes), pageFile.deviceName, metadata.AttributeStateFree)
 	}
 }
 
-func (s *scraper) scrapePagingOperationsMetric() error {
+func (s *pagingScraper) scrapePagingOperationsMetric() error {
 	now := pcommon.NewTimestampFromTime(time.Now())
 
-	counters, err := s.perfCounterScraper.Scrape()
+	var pageReadsPerSecValue int64
+	pageReadsHasValue, err := s.pageReadsPerfCounter.ScrapeRawValue(&pageReadsPerSecValue)
 	if err != nil {
 		return err
 	}
+	if pageReadsHasValue {
+		s.mb.RecordSystemPagingOperationsDataPoint(now, pageReadsPerSecValue, metadata.AttributeDirectionPageIn, metadata.AttributeTypeMajor)
+	}
 
-	memoryObject, err := counters.GetObject(memory)
+	var pageWritesPerSecValue int64
+	pageWritesHasValue, err := s.pageWritesPerfCounter.ScrapeRawValue(&pageWritesPerSecValue)
 	if err != nil {
 		return err
 	}
-
-	memoryCounterValues, err := memoryObject.GetValues(pageReadsPerSec, pageWritesPerSec)
-	if err != nil {
-		return err
+	if pageWritesHasValue {
+		s.mb.RecordSystemPagingOperationsDataPoint(now, pageWritesPerSecValue, metadata.AttributeDirectionPageOut, metadata.AttributeTypeMajor)
 	}
 
-	if len(memoryCounterValues) > 0 {
-		s.recordPagingOperationsDataPoints(now, memoryCounterValues[0])
-	}
 	return nil
-}
-
-func (s *scraper) recordPagingOperationsDataPoints(now pcommon.Timestamp, memoryCounterValues *perfcounters.CounterValues) {
-	s.mb.RecordSystemPagingOperationsDataPoint(now, memoryCounterValues.Values[pageReadsPerSec], metadata.AttributeDirectionPageIn, metadata.AttributeTypeMajor)
-	s.mb.RecordSystemPagingOperationsDataPoint(now, memoryCounterValues.Values[pageWritesPerSec], metadata.AttributeDirectionPageOut, metadata.AttributeTypeMajor)
 }

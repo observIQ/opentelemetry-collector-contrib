@@ -4,19 +4,15 @@
 package adapter
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
-	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/entry"
 )
@@ -24,6 +20,7 @@ import (
 func BenchmarkConvertSimple(b *testing.B) {
 	b.StopTimer()
 	ent := entry.New()
+	b.ReportAllocs()
 	b.StartTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -34,15 +31,12 @@ func BenchmarkConvertSimple(b *testing.B) {
 func BenchmarkConvertComplex(b *testing.B) {
 	b.StopTimer()
 	ent := complexEntry()
+	b.ReportAllocs()
 	b.StartTimer()
 
 	for i := 0; i < b.N; i++ {
 		convert(ent)
 	}
-}
-
-func complexEntries(count int) []*entry.Entry {
-	return complexEntriesForNDifferentHosts(count, 1)
 }
 
 func complexEntriesForNDifferentHosts(count int, n int) []*entry.Entry {
@@ -85,6 +79,53 @@ func complexEntriesForNDifferentHosts(count int, n int) []*entry.Entry {
 			},
 		}
 		ret[i] = e
+	}
+	return ret
+}
+
+func complexEntriesForNDifferentHostsMDifferentScopes(count int, n int, m int) []*entry.Entry {
+	ret := make([]*entry.Entry, count)
+	for i := 0; i < count; i++ {
+		for j := 0; j < m; j++ {
+			e := entry.New()
+			e.Severity = entry.Error
+			e.Resource = map[string]any{
+				"host":   fmt.Sprintf("host-%d", i%n),
+				"bool":   true,
+				"int":    123,
+				"double": 12.34,
+				"string": "hello",
+				"object": map[string]any{
+					"bool":   true,
+					"int":    123,
+					"double": 12.34,
+					"string": "hello",
+				},
+			}
+			e.Body = map[string]any{
+				"bool":   true,
+				"int":    123,
+				"double": 12.34,
+				"string": "hello",
+				"bytes":  []byte("asdf"),
+				"object": map[string]any{
+					"bool":   true,
+					"int":    123,
+					"double": 12.34,
+					"string": "hello",
+					"bytes":  []byte("asdf"),
+					"object": map[string]any{
+						"bool":   true,
+						"int":    123,
+						"double": 12.34,
+						"string": "hello",
+						"bytes":  []byte("asdf"),
+					},
+				},
+			}
+			e.ScopeName = fmt.Sprintf("scope-%d", i%m)
+			ret[i] = e
+		}
 	}
 	return ret
 }
@@ -320,115 +361,45 @@ func TestHashResource(t *testing.T) {
 	}
 }
 
-func TestAllConvertedEntriesAreSentAndReceived(t *testing.T) {
+func TestAllConvertedEntriesScopeGrouping(t *testing.T) {
 	t.Parallel()
 
 	testcases := []struct {
-		entries       int
-		maxFlushCount uint
+		numberOFScopes int
+		logsPerScope   int
+		scopeName      string
 	}{
 		{
-			entries:       10,
-			maxFlushCount: 10,
+			numberOFScopes: 1,
+			logsPerScope:   100,
 		},
 		{
-			entries:       10,
-			maxFlushCount: 3,
-		},
-		{
-			entries:       100,
-			maxFlushCount: 20,
+			numberOFScopes: 2,
+			logsPerScope:   50,
 		},
 	}
 
 	for i, tc := range testcases {
-		tc := tc
-
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
 
-			converter := NewConverter(zap.NewNop())
-			converter.Start()
-			defer converter.Stop()
+			entries := complexEntriesForNDifferentHostsMDifferentScopes(100, 1, tc.numberOFScopes)
 
-			go func() {
-				entries := complexEntries(tc.entries)
-				for from := 0; from < tc.entries; from += int(tc.maxFlushCount) {
-					to := from + int(tc.maxFlushCount)
-					if to > tc.entries {
-						to = tc.entries
-					}
-					assert.NoError(t, converter.Batch(entries[from:to]))
-				}
-			}()
+			pLogs := ConvertEntries(entries)
 
-			var (
-				actualCount  int
-				timeoutTimer = time.NewTimer(10 * time.Second)
-				ch           = converter.OutChannel()
-			)
-			defer timeoutTimer.Stop()
+			rLogs := pLogs.ResourceLogs()
+			rLog := rLogs.At(0)
 
-		forLoop:
-			for {
-				if tc.entries == actualCount {
-					break
-				}
+			ills := rLog.ScopeLogs()
+			require.Equal(t, ills.Len(), tc.numberOFScopes)
 
-				select {
-				case pLogs, ok := <-ch:
-					if !ok {
-						break forLoop
-					}
-
-					rLogs := pLogs.ResourceLogs()
-					require.Equal(t, 1, rLogs.Len())
-
-					rLog := rLogs.At(0)
-					ills := rLog.ScopeLogs()
-					require.Equal(t, 1, ills.Len())
-
-					sl := ills.At(0)
-
-					actualCount += sl.LogRecords().Len()
-
-					assert.LessOrEqual(t, uint(sl.LogRecords().Len()), tc.maxFlushCount,
-						"Received more log records in one flush than configured by maxFlushCount",
-					)
-
-				case <-timeoutTimer.C:
-					break forLoop
-				}
+			for i := 0; i < tc.numberOFScopes; i++ {
+				sl := ills.At(i)
+				require.Equal(t, sl.Scope().Name(), fmt.Sprintf("scope-%d", i%tc.numberOFScopes))
+				require.Equal(t, sl.LogRecords().Len(), tc.logsPerScope)
 			}
-
-			assert.Equal(t, tc.entries, actualCount,
-				"didn't receive expected number of entries after conversion",
-			)
 		})
 	}
-}
-
-func TestConverterCancelledContextCancellsTheFlush(t *testing.T) {
-	converter := NewConverter(zap.NewNop())
-	converter.Start()
-	defer converter.Stop()
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	go func() {
-		defer wg.Done()
-		pLogs := plog.NewLogs()
-		ills := pLogs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty()
-
-		lr := convert(complexEntry())
-		lr.CopyTo(ills.LogRecords().AppendEmpty())
-
-		assert.Error(t, converter.flush(ctx, pLogs))
-	}()
-	wg.Wait()
 }
 
 func TestConvertMetadata(t *testing.T) {
@@ -448,6 +419,7 @@ func TestConvertMetadata(t *testing.T) {
 			"int":    123,
 			"double": 12.34,
 			"string": "hello",
+			"empty":  nil,
 		},
 	}
 	e.Body = true
@@ -477,7 +449,7 @@ func TestConvertMetadata(t *testing.T) {
 	require.True(t, ok)
 
 	mapVal := attVal.Map()
-	require.Equal(t, 4, mapVal.Len())
+	require.Equal(t, 5, mapVal.Len())
 
 	attVal, ok = mapVal.Get("bool")
 	require.True(t, ok)
@@ -494,6 +466,10 @@ func TestConvertMetadata(t *testing.T) {
 	attVal, ok = mapVal.Get("string")
 	require.True(t, ok)
 	require.Equal(t, "hello", attVal.Str())
+
+	attVal, ok = mapVal.Get("empty")
+	require.True(t, ok)
+	require.Equal(t, pcommon.ValueTypeEmpty, attVal.Type())
 
 	bod := result.Body()
 	require.Equal(t, pcommon.ValueTypeBool, bod.Type())
@@ -772,7 +748,8 @@ func TestConvertTrace(t *testing.T) {
 		},
 		TraceFlags: []byte{
 			0x01,
-		}})
+		},
+	})
 
 	require.Equal(t, pcommon.TraceID(
 		[16]byte{
@@ -793,7 +770,8 @@ func TestConvertTraceEmptyFlags(t *testing.T) {
 		SpanID: []byte{
 			0x32, 0xf0, 0xa2, 0x2b, 0x6a, 0x81, 0x2c, 0xff,
 		},
-		TraceFlags: []byte{}})
+		TraceFlags: []byte{},
+	})
 
 	require.Equal(t, pcommon.TraceID(
 		[16]byte{
@@ -821,54 +799,17 @@ func BenchmarkConverter(b *testing.B) {
 	for _, wc := range workerCounts {
 		b.Run(fmt.Sprintf("worker_count=%d", wc), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-
-				converter := NewConverter(zap.NewNop(), withWorkerCount(wc))
-				converter.Start()
-				defer converter.Stop()
-
 				b.ReportAllocs()
 
-				go func() {
-					for from := 0; from < entryCount; from += int(batchSize) {
-						to := from + int(batchSize)
-						if to > entryCount {
-							to = entryCount
-						}
-						assert.NoError(b, converter.Batch(entries[from:to]))
+				for from := 0; from < entryCount; from += int(batchSize) {
+					to := from + int(batchSize)
+					if to > entryCount {
+						to = entryCount
 					}
-				}()
-
-				var (
-					timeoutTimer = time.NewTimer(10 * time.Second)
-					ch           = converter.OutChannel()
-				)
-				defer timeoutTimer.Stop()
-
-				var n int
-			forLoop:
-				for {
-					if n == entryCount {
-						break
-					}
-
-					select {
-					case pLogs, ok := <-ch:
-						if !ok {
-							break forLoop
-						}
-
-						rLogs := pLogs.ResourceLogs()
-						require.Equal(b, hostsCount, rLogs.Len())
-						n += pLogs.LogRecordCount()
-
-					case <-timeoutTimer.C:
-						break forLoop
-					}
+					pLogs := ConvertEntries(entries[from:to])
+					rLogs := pLogs.ResourceLogs()
+					require.Equal(b, hostsCount, rLogs.Len())
 				}
-
-				assert.Equal(b, entryCount, n,
-					"didn't receive expected number of entries after conversion",
-				)
 			}
 		})
 	}
@@ -921,6 +862,10 @@ func BenchmarkGetResourceIDComplexResource(b *testing.B) {
 
 func getResource() map[string]any {
 	return map[string]any{
+		"bool":             true,
+		"int":              123,
+		"double":           12.34,
+		"string":           "hello",
 		"file.name":        "filename.log",
 		"file.directory":   "/some_directory",
 		"host.name":        "localhost",
@@ -1021,4 +966,11 @@ func TestGetResourceIDEmptyAndNilAreEqual(t *testing.T) {
 	nilID := HashResource(nil)
 	emptyID := HashResource(map[string]any{})
 	require.Equal(t, nilID, emptyID)
+}
+
+// convert converts one entry.Entry into plog.LogRecord allocating it.
+func convert(ent *entry.Entry) plog.LogRecord {
+	dest := plog.NewLogRecord()
+	convertInto(ent, dest)
+	return dest
 }

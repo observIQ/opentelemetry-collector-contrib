@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/zipkinexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver"
 )
@@ -40,7 +41,7 @@ import (
 func TestZipkinExporter_roundtripJSON(t *testing.T) {
 	buf := new(bytes.Buffer)
 	var sizes []int64
-	cst := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	cst := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		s, _ := io.Copy(buf, r.Body)
 		sizes = append(sizes, s)
 		r.Body.Close()
@@ -48,12 +49,12 @@ func TestZipkinExporter_roundtripJSON(t *testing.T) {
 	defer cst.Close()
 
 	cfg := &Config{
-		HTTPClientSettings: confighttp.HTTPClientSettings{
+		ClientConfig: confighttp.ClientConfig{
 			Endpoint: cst.URL,
 		},
 		Format: "json",
 	}
-	zexp, err := NewFactory().CreateTracesExporter(context.Background(), exportertest.NewNopCreateSettings(), cfg)
+	zexp, err := NewFactory().CreateTraces(context.Background(), exportertest.NewNopSettings(metadata.Type), cfg)
 	assert.NoError(t, err)
 	require.NotNil(t, zexp)
 
@@ -66,11 +67,11 @@ func TestZipkinExporter_roundtripJSON(t *testing.T) {
 	// Run the Zipkin receiver to "receive spans upload from a client application"
 	addr := testutil.GetAvailableLocalAddress(t)
 	recvCfg := &zipkinreceiver.Config{
-		HTTPServerSettings: confighttp.HTTPServerSettings{
+		ServerConfig: confighttp.ServerConfig{
 			Endpoint: addr,
 		},
 	}
-	zi, err := zipkinreceiver.NewFactory().CreateTracesReceiver(context.Background(), receivertest.NewNopCreateSettings(), recvCfg, zexp)
+	zi, err := zipkinreceiver.NewFactory().CreateTraces(context.Background(), receivertest.NewNopSettings(metadata.Type), recvCfg, zexp)
 	assert.NoError(t, err)
 	require.NotNil(t, zi)
 
@@ -150,6 +151,7 @@ var _ zipkinreporter.Reporter = (*mockZipkinReporter)(nil)
 func (r *mockZipkinReporter) Send(span zipkinmodel.SpanModel) {
 	r.batch = append(r.batch, &span)
 }
+
 func (r *mockZipkinReporter) Close() error {
 	return nil
 }
@@ -175,7 +177,7 @@ func (r *mockZipkinReporter) Flush() error {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", r.url, bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, r.url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -271,14 +273,14 @@ const zipkinSpansJSONJavaLibrary = `
 
 func TestZipkinExporter_invalidFormat(t *testing.T) {
 	config := &Config{
-		HTTPClientSettings: confighttp.HTTPClientSettings{
+		ClientConfig: confighttp.ClientConfig{
 			Endpoint: "1.2.3.4",
 		},
 		Format: "foobar",
 	}
 	f := NewFactory()
-	set := exportertest.NewNopCreateSettings()
-	_, err := f.CreateTracesExporter(context.Background(), set, config)
+	set := exportertest.NewNopSettings(metadata.Type)
+	_, err := f.CreateTraces(context.Background(), set, config)
 	require.Error(t, err)
 }
 
@@ -286,7 +288,7 @@ func TestZipkinExporter_invalidFormat(t *testing.T) {
 func TestZipkinExporter_roundtripProto(t *testing.T) {
 	buf := new(bytes.Buffer)
 	var contentType string
-	cst := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	cst := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, err := io.Copy(buf, r.Body)
 		assert.NoError(t, err)
 		contentType = r.Header.Get("Content-Type")
@@ -295,12 +297,12 @@ func TestZipkinExporter_roundtripProto(t *testing.T) {
 	defer cst.Close()
 
 	cfg := &Config{
-		HTTPClientSettings: confighttp.HTTPClientSettings{
+		ClientConfig: confighttp.ClientConfig{
 			Endpoint: cst.URL,
 		},
 		Format: "proto",
 	}
-	zexp, err := NewFactory().CreateTracesExporter(context.Background(), exportertest.NewNopCreateSettings(), cfg)
+	zexp, err := NewFactory().CreateTraces(context.Background(), exportertest.NewNopSettings(metadata.Type), cfg)
 	require.NoError(t, err)
 
 	require.NoError(t, zexp.Start(context.Background(), componenttest.NewNopHost()))
@@ -314,11 +316,11 @@ func TestZipkinExporter_roundtripProto(t *testing.T) {
 	// Run the Zipkin receiver to "receive spans upload from a client application"
 	addr := testutil.GetAvailableLocalAddress(t)
 	recvCfg := &zipkinreceiver.Config{
-		HTTPServerSettings: confighttp.HTTPServerSettings{
+		ServerConfig: confighttp.ServerConfig{
 			Endpoint: addr,
 		},
 	}
-	zi, err := zipkinreceiver.NewFactory().CreateTracesReceiver(context.Background(), receivertest.NewNopCreateSettings(), recvCfg, zexp)
+	zi, err := zipkinreceiver.NewFactory().CreateTraces(context.Background(), receivertest.NewNopSettings(metadata.Type), recvCfg, zexp)
 	require.NoError(t, err)
 
 	err = zi.Start(context.Background(), componenttest.NewNopHost())

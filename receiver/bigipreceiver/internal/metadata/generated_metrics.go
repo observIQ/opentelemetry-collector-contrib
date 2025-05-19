@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/filter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
 )
 
-// AttributeActiveStatus specifies the a value active.status attribute.
+// AttributeActiveStatus specifies the value active.status attribute.
 type AttributeActiveStatus int
 
 const (
@@ -37,7 +38,7 @@ var MapAttributeActiveStatus = map[string]AttributeActiveStatus{
 	"inactive": AttributeActiveStatusInactive,
 }
 
-// AttributeAvailabilityStatus specifies the a value availability.status attribute.
+// AttributeAvailabilityStatus specifies the value availability.status attribute.
 type AttributeAvailabilityStatus int
 
 const (
@@ -67,7 +68,7 @@ var MapAttributeAvailabilityStatus = map[string]AttributeAvailabilityStatus{
 	"available": AttributeAvailabilityStatusAvailable,
 }
 
-// AttributeDirection specifies the a value direction attribute.
+// AttributeDirection specifies the value direction attribute.
 type AttributeDirection int
 
 const (
@@ -93,7 +94,7 @@ var MapAttributeDirection = map[string]AttributeDirection{
 	"received": AttributeDirectionReceived,
 }
 
-// AttributeEnabledStatus specifies the a value enabled.status attribute.
+// AttributeEnabledStatus specifies the value enabled.status attribute.
 type AttributeEnabledStatus int
 
 const (
@@ -117,6 +118,124 @@ func (av AttributeEnabledStatus) String() string {
 var MapAttributeEnabledStatus = map[string]AttributeEnabledStatus{
 	"disabled": AttributeEnabledStatusDisabled,
 	"enabled":  AttributeEnabledStatusEnabled,
+}
+
+var MetricsInfo = metricsInfo{
+	BigipNodeAvailability: metricInfo{
+		Name: "bigip.node.availability",
+	},
+	BigipNodeConnectionCount: metricInfo{
+		Name: "bigip.node.connection.count",
+	},
+	BigipNodeDataTransmitted: metricInfo{
+		Name: "bigip.node.data.transmitted",
+	},
+	BigipNodeEnabled: metricInfo{
+		Name: "bigip.node.enabled",
+	},
+	BigipNodePacketCount: metricInfo{
+		Name: "bigip.node.packet.count",
+	},
+	BigipNodeRequestCount: metricInfo{
+		Name: "bigip.node.request.count",
+	},
+	BigipNodeSessionCount: metricInfo{
+		Name: "bigip.node.session.count",
+	},
+	BigipPoolAvailability: metricInfo{
+		Name: "bigip.pool.availability",
+	},
+	BigipPoolConnectionCount: metricInfo{
+		Name: "bigip.pool.connection.count",
+	},
+	BigipPoolDataTransmitted: metricInfo{
+		Name: "bigip.pool.data.transmitted",
+	},
+	BigipPoolEnabled: metricInfo{
+		Name: "bigip.pool.enabled",
+	},
+	BigipPoolMemberCount: metricInfo{
+		Name: "bigip.pool.member.count",
+	},
+	BigipPoolPacketCount: metricInfo{
+		Name: "bigip.pool.packet.count",
+	},
+	BigipPoolRequestCount: metricInfo{
+		Name: "bigip.pool.request.count",
+	},
+	BigipPoolMemberAvailability: metricInfo{
+		Name: "bigip.pool_member.availability",
+	},
+	BigipPoolMemberConnectionCount: metricInfo{
+		Name: "bigip.pool_member.connection.count",
+	},
+	BigipPoolMemberDataTransmitted: metricInfo{
+		Name: "bigip.pool_member.data.transmitted",
+	},
+	BigipPoolMemberEnabled: metricInfo{
+		Name: "bigip.pool_member.enabled",
+	},
+	BigipPoolMemberPacketCount: metricInfo{
+		Name: "bigip.pool_member.packet.count",
+	},
+	BigipPoolMemberRequestCount: metricInfo{
+		Name: "bigip.pool_member.request.count",
+	},
+	BigipPoolMemberSessionCount: metricInfo{
+		Name: "bigip.pool_member.session.count",
+	},
+	BigipVirtualServerAvailability: metricInfo{
+		Name: "bigip.virtual_server.availability",
+	},
+	BigipVirtualServerConnectionCount: metricInfo{
+		Name: "bigip.virtual_server.connection.count",
+	},
+	BigipVirtualServerDataTransmitted: metricInfo{
+		Name: "bigip.virtual_server.data.transmitted",
+	},
+	BigipVirtualServerEnabled: metricInfo{
+		Name: "bigip.virtual_server.enabled",
+	},
+	BigipVirtualServerPacketCount: metricInfo{
+		Name: "bigip.virtual_server.packet.count",
+	},
+	BigipVirtualServerRequestCount: metricInfo{
+		Name: "bigip.virtual_server.request.count",
+	},
+}
+
+type metricsInfo struct {
+	BigipNodeAvailability             metricInfo
+	BigipNodeConnectionCount          metricInfo
+	BigipNodeDataTransmitted          metricInfo
+	BigipNodeEnabled                  metricInfo
+	BigipNodePacketCount              metricInfo
+	BigipNodeRequestCount             metricInfo
+	BigipNodeSessionCount             metricInfo
+	BigipPoolAvailability             metricInfo
+	BigipPoolConnectionCount          metricInfo
+	BigipPoolDataTransmitted          metricInfo
+	BigipPoolEnabled                  metricInfo
+	BigipPoolMemberCount              metricInfo
+	BigipPoolPacketCount              metricInfo
+	BigipPoolRequestCount             metricInfo
+	BigipPoolMemberAvailability       metricInfo
+	BigipPoolMemberConnectionCount    metricInfo
+	BigipPoolMemberDataTransmitted    metricInfo
+	BigipPoolMemberEnabled            metricInfo
+	BigipPoolMemberPacketCount        metricInfo
+	BigipPoolMemberRequestCount       metricInfo
+	BigipPoolMemberSessionCount       metricInfo
+	BigipVirtualServerAvailability    metricInfo
+	BigipVirtualServerConnectionCount metricInfo
+	BigipVirtualServerDataTransmitted metricInfo
+	BigipVirtualServerEnabled         metricInfo
+	BigipVirtualServerPacketCount     metricInfo
+	BigipVirtualServerRequestCount    metricInfo
+}
+
+type metricInfo struct {
+	Name string
 }
 
 type metricBigipNodeAvailability struct {
@@ -1522,6 +1641,8 @@ type MetricsBuilder struct {
 	metricsCapacity                         int                  // maximum observed number of metrics per resource.
 	metricsBuffer                           pmetric.Metrics      // accumulates metrics data before emitting.
 	buildInfo                               component.BuildInfo  // contains version information.
+	resourceAttributeIncludeFilter          map[string]filter.Filter
+	resourceAttributeExcludeFilter          map[string]filter.Filter
 	metricBigipNodeAvailability             metricBigipNodeAvailability
 	metricBigipNodeConnectionCount          metricBigipNodeConnectionCount
 	metricBigipNodeDataTransmitted          metricBigipNodeDataTransmitted
@@ -1551,17 +1672,24 @@ type MetricsBuilder struct {
 	metricBigipVirtualServerRequestCount    metricBigipVirtualServerRequestCount
 }
 
-// metricBuilderOption applies changes to default metrics builder.
-type metricBuilderOption func(*MetricsBuilder)
-
-// WithStartTime sets startTime on the metrics builder.
-func WithStartTime(startTime pcommon.Timestamp) metricBuilderOption {
-	return func(mb *MetricsBuilder) {
-		mb.startTime = startTime
-	}
+// MetricBuilderOption applies changes to default metrics builder.
+type MetricBuilderOption interface {
+	apply(*MetricsBuilder)
 }
 
-func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSettings, options ...metricBuilderOption) *MetricsBuilder {
+type metricBuilderOptionFunc func(mb *MetricsBuilder)
+
+func (mbof metricBuilderOptionFunc) apply(mb *MetricsBuilder) {
+	mbof(mb)
+}
+
+// WithStartTime sets startTime on the metrics builder.
+func WithStartTime(startTime pcommon.Timestamp) MetricBuilderOption {
+	return metricBuilderOptionFunc(func(mb *MetricsBuilder) {
+		mb.startTime = startTime
+	})
+}
+func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.Settings, options ...MetricBuilderOption) *MetricsBuilder {
 	mb := &MetricsBuilder{
 		config:                                  mbc,
 		startTime:                               pcommon.NewTimestampFromTime(time.Now()),
@@ -1594,9 +1722,54 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricBigipVirtualServerEnabled:         newMetricBigipVirtualServerEnabled(mbc.Metrics.BigipVirtualServerEnabled),
 		metricBigipVirtualServerPacketCount:     newMetricBigipVirtualServerPacketCount(mbc.Metrics.BigipVirtualServerPacketCount),
 		metricBigipVirtualServerRequestCount:    newMetricBigipVirtualServerRequestCount(mbc.Metrics.BigipVirtualServerRequestCount),
+		resourceAttributeIncludeFilter:          make(map[string]filter.Filter),
+		resourceAttributeExcludeFilter:          make(map[string]filter.Filter),
 	}
+	if mbc.ResourceAttributes.BigipNodeIPAddress.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["bigip.node.ip_address"] = filter.CreateFilter(mbc.ResourceAttributes.BigipNodeIPAddress.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.BigipNodeIPAddress.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["bigip.node.ip_address"] = filter.CreateFilter(mbc.ResourceAttributes.BigipNodeIPAddress.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.BigipNodeName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["bigip.node.name"] = filter.CreateFilter(mbc.ResourceAttributes.BigipNodeName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.BigipNodeName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["bigip.node.name"] = filter.CreateFilter(mbc.ResourceAttributes.BigipNodeName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.BigipPoolName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["bigip.pool.name"] = filter.CreateFilter(mbc.ResourceAttributes.BigipPoolName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.BigipPoolName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["bigip.pool.name"] = filter.CreateFilter(mbc.ResourceAttributes.BigipPoolName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.BigipPoolMemberIPAddress.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["bigip.pool_member.ip_address"] = filter.CreateFilter(mbc.ResourceAttributes.BigipPoolMemberIPAddress.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.BigipPoolMemberIPAddress.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["bigip.pool_member.ip_address"] = filter.CreateFilter(mbc.ResourceAttributes.BigipPoolMemberIPAddress.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.BigipPoolMemberName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["bigip.pool_member.name"] = filter.CreateFilter(mbc.ResourceAttributes.BigipPoolMemberName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.BigipPoolMemberName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["bigip.pool_member.name"] = filter.CreateFilter(mbc.ResourceAttributes.BigipPoolMemberName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.BigipVirtualServerDestination.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["bigip.virtual_server.destination"] = filter.CreateFilter(mbc.ResourceAttributes.BigipVirtualServerDestination.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.BigipVirtualServerDestination.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["bigip.virtual_server.destination"] = filter.CreateFilter(mbc.ResourceAttributes.BigipVirtualServerDestination.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.BigipVirtualServerName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["bigip.virtual_server.name"] = filter.CreateFilter(mbc.ResourceAttributes.BigipVirtualServerName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.BigipVirtualServerName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["bigip.virtual_server.name"] = filter.CreateFilter(mbc.ResourceAttributes.BigipVirtualServerName.MetricsExclude)
+	}
+
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 	return mb
 }
@@ -1614,20 +1787,28 @@ func (mb *MetricsBuilder) updateCapacity(rm pmetric.ResourceMetrics) {
 }
 
 // ResourceMetricsOption applies changes to provided resource metrics.
-type ResourceMetricsOption func(pmetric.ResourceMetrics)
+type ResourceMetricsOption interface {
+	apply(pmetric.ResourceMetrics)
+}
+
+type resourceMetricsOptionFunc func(pmetric.ResourceMetrics)
+
+func (rmof resourceMetricsOptionFunc) apply(rm pmetric.ResourceMetrics) {
+	rmof(rm)
+}
 
 // WithResource sets the provided resource on the emitted ResourceMetrics.
 // It's recommended to use ResourceBuilder to create the resource.
 func WithResource(res pcommon.Resource) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		res.CopyTo(rm.Resource())
-	}
+	})
 }
 
 // WithStartTimeOverride overrides start time for all the resource metrics data points.
 // This option should be only used if different start time has to be set on metrics coming from different resources.
 func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		var dps pmetric.NumberDataPointSlice
 		metrics := rm.ScopeMetrics().At(0).Metrics()
 		for i := 0; i < metrics.Len(); i++ {
@@ -1641,7 +1822,7 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 				dps.At(j).SetStartTimestamp(start)
 			}
 		}
-	}
+	})
 }
 
 // EmitForResource saves all the generated metrics under a new resource and updates the internal state to be ready for
@@ -1649,10 +1830,10 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 // needs to emit metrics from several resources. Otherwise calling this function is not required,
 // just `Emit` function can be called instead.
 // Resource attributes should be provided as ResourceMetricsOption arguments.
-func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
+func (mb *MetricsBuilder) EmitForResource(options ...ResourceMetricsOption) {
 	rm := pmetric.NewResourceMetrics()
 	ils := rm.ScopeMetrics().AppendEmpty()
-	ils.Scope().SetName("otelcol/bigipreceiver")
+	ils.Scope().SetName(ScopeName)
 	ils.Scope().SetVersion(mb.buildInfo.Version)
 	ils.Metrics().EnsureCapacity(mb.metricsCapacity)
 	mb.metricBigipNodeAvailability.emit(ils.Metrics())
@@ -1683,9 +1864,20 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricBigipVirtualServerPacketCount.emit(ils.Metrics())
 	mb.metricBigipVirtualServerRequestCount.emit(ils.Metrics())
 
-	for _, op := range rmo {
-		op(rm)
+	for _, op := range options {
+		op.apply(rm)
 	}
+	for attr, filter := range mb.resourceAttributeIncludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && !filter.Matches(val.AsString()) {
+			return
+		}
+	}
+	for attr, filter := range mb.resourceAttributeExcludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && filter.Matches(val.AsString()) {
+			return
+		}
+	}
+
 	if ils.Metrics().Len() > 0 {
 		mb.updateCapacity(rm)
 		rm.MoveTo(mb.metricsBuffer.ResourceMetrics().AppendEmpty())
@@ -1695,8 +1887,8 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 // Emit returns all the metrics accumulated by the metrics builder and updates the internal state to be ready for
 // recording another set of metrics. This function will be responsible for applying all the transformations required to
 // produce metric representation defined in metadata and user config, e.g. delta or cumulative.
-func (mb *MetricsBuilder) Emit(rmo ...ResourceMetricsOption) pmetric.Metrics {
-	mb.EmitForResource(rmo...)
+func (mb *MetricsBuilder) Emit(options ...ResourceMetricsOption) pmetric.Metrics {
+	mb.EmitForResource(options...)
 	metrics := mb.metricsBuffer
 	mb.metricsBuffer = pmetric.NewMetrics()
 	return metrics
@@ -1839,9 +2031,9 @@ func (mb *MetricsBuilder) RecordBigipVirtualServerRequestCountDataPoint(ts pcomm
 
 // Reset resets metrics builder to its initial state. It should be used when external metrics source is restarted,
 // and metrics builder should update its startTime and reset it's internal state accordingly.
-func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
+func (mb *MetricsBuilder) Reset(options ...MetricBuilderOption) {
 	mb.startTime = pcommon.NewTimestampFromTime(time.Now())
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 }

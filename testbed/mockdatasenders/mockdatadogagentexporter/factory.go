@@ -17,27 +17,25 @@ import (
 
 // This file implements factory for awsxray receiver.
 
-const (
-	// The value of "type" key in configuration.
-	typeStr = "datadog"
-)
+// The value of "type" key in configuration.
+var compType = component.MustNewType("datadog")
 
 func NewFactory() exporter.Factory {
-	return exporter.NewFactory(typeStr,
+	return exporter.NewFactory(compType,
 		createDefaultConfig,
 		exporter.WithTraces(CreateTracesExporter, component.StabilityLevelAlpha))
 }
 
 // CreateDefaultConfig creates the default configuration for DDAPM Exporter
 func createDefaultConfig() component.Config {
-	return &Config{
-		HTTPClientSettings: confighttp.HTTPClientSettings{Endpoint: "localhost:8126"},
-	}
+	client := confighttp.NewDefaultClientConfig()
+	client.Endpoint = "localhost:8126"
+	return client
 }
 
 func CreateTracesExporter(
 	_ context.Context,
-	set exporter.CreateSettings,
+	set exporter.Settings,
 	cfg component.Config,
 ) (exporter.Traces, error) {
 	c := cfg.(*Config)
@@ -51,12 +49,12 @@ func CreateTracesExporter(
 	if err != nil {
 		return nil, err
 	}
-	return exporterhelper.NewTracesExporter(
+	return exporterhelper.NewTraces(
 		context.Background(),
 		set,
 		dd.pushTraces,
 		consumer.ConsumeTracesFunc(dd.pushTraces),
 		// explicitly disable since we rely on http.Client timeout logic.
-		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}),
+		exporterhelper.WithTimeout(exporterhelper.TimeoutConfig{Timeout: 0}),
 	)
 }

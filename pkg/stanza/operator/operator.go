@@ -36,8 +36,10 @@ type Operator interface {
 
 	// CanProcess indicates if the operator will process entries from other operators.
 	CanProcess() bool
+	// ProcessBatch processes a batch of entries from an operator.
+	ProcessBatch(context.Context, []*entry.Entry) error
 	// Process will process an entry from an operator.
 	Process(context.Context, *entry.Entry) error
 	// Logger returns the operator's logger
-	Logger() *zap.SugaredLogger
+	Logger() *zap.Logger
 }

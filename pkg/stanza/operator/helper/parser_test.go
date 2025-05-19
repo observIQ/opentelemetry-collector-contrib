@@ -5,13 +5,14 @@ package helper
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/entry"
@@ -21,9 +22,9 @@ import (
 
 func TestParserConfigMissingBase(t *testing.T) {
 	config := ParserConfig{}
-	_, err := config.Build(testutil.Logger(t))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing required `type` field.")
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := config.Build(set)
+	require.ErrorContains(t, err, "missing required `type` field.")
 }
 
 func TestParserConfigInvalidTimeParser(t *testing.T) {
@@ -35,9 +36,9 @@ func TestParserConfigInvalidTimeParser(t *testing.T) {
 		LayoutType: "strptime",
 	}
 
-	_, err := cfg.Build(testutil.Logger(t))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing required configuration parameter `layout`")
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := cfg.Build(set)
+	require.ErrorContains(t, err, "missing required configuration parameter `layout`")
 }
 
 func TestParserConfigBodyCollision(t *testing.T) {
@@ -47,9 +48,9 @@ func TestParserConfigBodyCollision(t *testing.T) {
 	b := entry.NewAttributeField("message")
 	cfg.BodyField = &b
 
-	_, err := cfg.Build(testutil.Logger(t))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "`parse_to: body` not allowed when `body` is configured")
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := cfg.Build(set)
+	require.ErrorContains(t, err, "`parse_to: body` not allowed when `body` is configured")
 }
 
 func TestParserConfigBuildValid(t *testing.T) {
@@ -87,7 +88,8 @@ func TestParserConfigBuildValid(t *testing.T) {
 		ParseFrom: scopeNameField,
 	}
 
-	op, err := cfg.Build(testutil.Logger(t))
+	set := componenttest.NewNopTelemetrySettings()
+	op, err := cfg.Build(set)
 	require.NoError(t, err)
 
 	require.NotNil(t, op.TimeParser)
@@ -97,13 +99,15 @@ func TestParserConfigBuildValid(t *testing.T) {
 }
 
 func TestParserMissingField(t *testing.T) {
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	parser := ParserOperator{
 		TransformerOperator: TransformerOperator{
 			WriterOperator: WriterOperator{
 				BasicOperator: BasicOperator{
-					OperatorID:    "test-id",
-					OperatorType:  "test-type",
-					SugaredLogger: zaptest.NewLogger(t).Sugar(),
+					OperatorID:   "test-id",
+					OperatorType: "test-type",
+					set:          set,
 				},
 			},
 			OnError: DropOnError,
@@ -116,8 +120,7 @@ func TestParserMissingField(t *testing.T) {
 	ctx := context.Background()
 	testEntry := entry.New()
 	err := parser.ProcessWith(ctx, testEntry, parse)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "Entry is missing the expected parse_from field.")
+	require.ErrorContains(t, err, "Entry is missing the expected parse_from field.")
 }
 
 func TestParserInvalidParseDrop(t *testing.T) {
@@ -130,14 +133,32 @@ func TestParserInvalidParseDrop(t *testing.T) {
 		ParseFrom: entry.NewBodyField(),
 	}
 	parse := func(i any) (any, error) {
-		return i, fmt.Errorf("parse failure")
+		return i, errors.New("parse failure")
 	}
 	ctx := context.Background()
 	testEntry := entry.New()
 	err := parser.ProcessWith(ctx, testEntry, parse)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "parse failure")
+	require.ErrorContains(t, err, "parse failure")
 	fakeOut.ExpectNoEntry(t, 100*time.Millisecond)
+}
+
+func TestParserInvalidParseDropQuiet(t *testing.T) {
+	writer, fakeOut := writerWithFakeOut(t)
+	parser := ParserOperator{
+		TransformerOperator: TransformerOperator{
+			WriterOperator: *writer,
+			OnError:        DropOnErrorQuiet,
+		},
+		ParseFrom: entry.NewBodyField(),
+	}
+	parse := func(i any) (any, error) {
+		return i, errors.New("parse failure")
+	}
+	ctx := context.Background()
+	testEntry := entry.New()
+	err := parser.ProcessWith(ctx, testEntry, parse)
+	require.NoError(t, err, "error should be silent")
+	fakeOut.ExpectNoEntry(t, 100*time.Millisecond) // Entry should be dropped
 }
 
 func TestParserInvalidParseSend(t *testing.T) {
@@ -150,13 +171,32 @@ func TestParserInvalidParseSend(t *testing.T) {
 		ParseFrom: entry.NewBodyField(),
 	}
 	parse := func(i any) (any, error) {
-		return i, fmt.Errorf("parse failure")
+		return i, errors.New("parse failure")
 	}
 	ctx := context.Background()
 	testEntry := entry.New()
 	err := parser.ProcessWith(ctx, testEntry, parse)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "parse failure")
+	require.ErrorContains(t, err, "parse failure")
+	fakeOut.ExpectEntry(t, testEntry)
+	fakeOut.ExpectNoEntry(t, 100*time.Millisecond)
+}
+
+func TestParserInvalidParseSendQuiet(t *testing.T) {
+	writer, fakeOut := writerWithFakeOut(t)
+	parser := ParserOperator{
+		TransformerOperator: TransformerOperator{
+			WriterOperator: *writer,
+			OnError:        SendOnErrorQuiet,
+		},
+		ParseFrom: entry.NewBodyField(),
+	}
+	parse := func(i any) (any, error) {
+		return i, errors.New("parse failure")
+	}
+	ctx := context.Background()
+	testEntry := entry.New()
+	err := parser.ProcessWith(ctx, testEntry, parse)
+	require.NoError(t, err, "error should be silent")
 	fakeOut.ExpectEntry(t, testEntry)
 	fakeOut.ExpectNoEntry(t, 100*time.Millisecond)
 }
@@ -183,8 +223,7 @@ func TestParserInvalidTimeParseDrop(t *testing.T) {
 	ctx := context.Background()
 	testEntry := entry.New()
 	err := parser.ProcessWith(ctx, testEntry, parse)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "time parser: log entry does not have the expected parse_from field")
+	require.ErrorContains(t, err, "time parser: log entry does not have the expected parse_from field")
 	fakeOut.ExpectNoEntry(t, 100*time.Millisecond)
 }
 
@@ -210,11 +249,11 @@ func TestParserInvalidTimeParseSend(t *testing.T) {
 	ctx := context.Background()
 	testEntry := entry.New()
 	err := parser.ProcessWith(ctx, testEntry, parse)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "time parser: log entry does not have the expected parse_from field")
+	require.ErrorContains(t, err, "time parser: log entry does not have the expected parse_from field")
 	fakeOut.ExpectEntry(t, testEntry)
 	fakeOut.ExpectNoEntry(t, 100*time.Millisecond)
 }
+
 func TestParserInvalidSeverityParseDrop(t *testing.T) {
 	writer, fakeOut := writerWithFakeOut(t)
 	parser := ParserOperator{
@@ -234,19 +273,20 @@ func TestParserInvalidSeverityParseDrop(t *testing.T) {
 	ctx := context.Background()
 	testEntry := entry.New()
 	err := parser.ProcessWith(ctx, testEntry, parse)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "severity parser: log entry does not have the expected parse_from field")
+	require.ErrorContains(t, err, "severity parser: log entry does not have the expected parse_from field")
 	fakeOut.ExpectNoEntry(t, 100*time.Millisecond)
 }
 
 func TestParserInvalidTimeValidSeverityParse(t *testing.T) {
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	parser := ParserOperator{
 		TransformerOperator: TransformerOperator{
 			WriterOperator: WriterOperator{
 				BasicOperator: BasicOperator{
-					OperatorID:    "test-id",
-					OperatorType:  "test-type",
-					SugaredLogger: testutil.Logger(t),
+					OperatorID:   "test-id",
+					OperatorType: "test-type",
+					set:          set,
 				},
 			},
 			OnError: DropOnError,
@@ -275,8 +315,7 @@ func TestParserInvalidTimeValidSeverityParse(t *testing.T) {
 	require.NoError(t, err)
 
 	err = parser.ProcessWith(ctx, testEntry, parse)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "time parser: log entry does not have the expected parse_from field")
+	require.ErrorContains(t, err, "time parser: log entry does not have the expected parse_from field")
 
 	// But, this should have been set anyways
 	require.Equal(t, entry.Info, testEntry.Severity)
@@ -293,13 +332,16 @@ func TestParserValidTimeInvalidSeverityParse(t *testing.T) {
 	expected, err := time.ParseInLocation(layout, sample, hst)
 	require.NoError(t, err)
 
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
+
 	parser := ParserOperator{
 		TransformerOperator: TransformerOperator{
 			WriterOperator: WriterOperator{
 				BasicOperator: BasicOperator{
-					OperatorID:    "test-id",
-					OperatorType:  "test-type",
-					SugaredLogger: testutil.Logger(t),
+					OperatorID:   "test-id",
+					OperatorType: "test-type",
+					set:          set,
 				},
 			},
 			OnError: DropOnError,
@@ -327,8 +369,7 @@ func TestParserValidTimeInvalidSeverityParse(t *testing.T) {
 	require.NoError(t, err)
 
 	err = parser.ProcessWith(ctx, testEntry, parse)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "severity parser: log entry does not have the expected parse_from field")
+	require.ErrorContains(t, err, "severity parser: log entry does not have the expected parse_from field")
 
 	require.Equal(t, expected, testEntry.Timestamp)
 }
@@ -338,14 +379,17 @@ func TestParserOutput(t *testing.T) {
 	output.On("ID").Return("test-output")
 	output.On("Process", mock.Anything, mock.Anything).Return(nil)
 
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
+
 	parser := ParserOperator{
 		TransformerOperator: TransformerOperator{
 			OnError: DropOnError,
 			WriterOperator: WriterOperator{
 				BasicOperator: BasicOperator{
-					OperatorID:    "test-id",
-					OperatorType:  "test-type",
-					SugaredLogger: testutil.Logger(t),
+					OperatorID:   "test-id",
+					OperatorType: "test-type",
+					set:          set,
 				},
 				OutputOperators: []operator.Operator{output},
 			},
@@ -627,7 +671,8 @@ func TestParserFields(t *testing.T) {
 			cfg := NewParserConfig("test-id", "test-type")
 			tc.cfgMod(&cfg)
 
-			parser, err := cfg.Build(testutil.Logger(t))
+			set := componenttest.NewNopTelemetrySettings()
+			parser, err := cfg.Build(set)
 			require.NoError(t, err)
 
 			e := tc.input()
@@ -661,11 +706,13 @@ func NewTestParserConfig() ParserConfig {
 
 func writerWithFakeOut(t *testing.T) (*WriterOperator, *testutil.FakeOutput) {
 	fakeOut := testutil.NewFakeOutput(t)
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	writer := &WriterOperator{
 		BasicOperator: BasicOperator{
-			OperatorID:    "test-id",
-			OperatorType:  "test-type",
-			SugaredLogger: testutil.Logger(t),
+			OperatorID:   "test-id",
+			OperatorType: "test-type",
+			set:          set,
 		},
 		OutputIDs: []string{fakeOut.ID()},
 	}

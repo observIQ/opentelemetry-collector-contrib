@@ -9,7 +9,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
+
+	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
 
@@ -27,6 +28,9 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
 					SystemLinuxMemoryAvailable: MetricConfig{Enabled: true},
+					SystemLinuxMemoryDirty:     MetricConfig{Enabled: true},
+					SystemMemoryLimit:          MetricConfig{Enabled: true},
+					SystemMemoryPageSize:       MetricConfig{Enabled: true},
 					SystemMemoryUsage:          MetricConfig{Enabled: true},
 					SystemMemoryUtilization:    MetricConfig{Enabled: true},
 				},
@@ -37,6 +41,9 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
 					SystemLinuxMemoryAvailable: MetricConfig{Enabled: false},
+					SystemLinuxMemoryDirty:     MetricConfig{Enabled: false},
+					SystemMemoryLimit:          MetricConfig{Enabled: false},
+					SystemMemoryPageSize:       MetricConfig{Enabled: false},
 					SystemMemoryUsage:          MetricConfig{Enabled: false},
 					SystemMemoryUtilization:    MetricConfig{Enabled: false},
 				},
@@ -46,9 +53,8 @@ func TestMetricsBuilderConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadMetricsBuilderConfig(t, tt.name)
-			if diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(MetricConfig{})); diff != "" {
-				t.Errorf("Config mismatch (-expected +actual):\n%s", diff)
-			}
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(MetricConfig{}))
+			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}
 }
@@ -59,6 +65,6 @@ func loadMetricsBuilderConfig(t *testing.T, name string) MetricsBuilderConfig {
 	sub, err := cm.Sub(name)
 	require.NoError(t, err)
 	cfg := DefaultMetricsBuilderConfig()
-	require.NoError(t, component.UnmarshalConfig(sub, &cfg))
+	require.NoError(t, sub.Unmarshal(&cfg, confmap.WithIgnoreUnused()))
 	return cfg
 }

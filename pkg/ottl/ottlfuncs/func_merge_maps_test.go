@@ -14,12 +14,11 @@ import (
 )
 
 func Test_MergeMaps(t *testing.T) {
-
 	input := pcommon.NewMap()
 	input.PutStr("attr1", "value1")
 
 	targetGetter := &ottl.StandardPMapGetter[pcommon.Map]{
-		Getter: func(ctx context.Context, tCtx pcommon.Map) (any, error) {
+		Getter: func(_ context.Context, tCtx pcommon.Map) (any, error) {
 			return tCtx, nil
 		},
 	}
@@ -33,7 +32,7 @@ func Test_MergeMaps(t *testing.T) {
 		{
 			name: "Upsert no conflicting keys",
 			source: ottl.StandardPMapGetter[pcommon.Map]{
-				Getter: func(ctx context.Context, _ pcommon.Map) (any, error) {
+				Getter: func(_ context.Context, _ pcommon.Map) (any, error) {
 					m := pcommon.NewMap()
 					m.PutStr("attr2", "value2")
 					return m, nil
@@ -48,7 +47,7 @@ func Test_MergeMaps(t *testing.T) {
 		{
 			name: "Upsert conflicting key",
 			source: ottl.StandardPMapGetter[pcommon.Map]{
-				Getter: func(ctx context.Context, _ pcommon.Map) (any, error) {
+				Getter: func(_ context.Context, _ pcommon.Map) (any, error) {
 					m := pcommon.NewMap()
 					m.PutStr("attr1", "value3")
 					m.PutStr("attr2", "value2")
@@ -64,7 +63,7 @@ func Test_MergeMaps(t *testing.T) {
 		{
 			name: "Insert no conflicting keys",
 			source: ottl.StandardPMapGetter[pcommon.Map]{
-				Getter: func(ctx context.Context, _ pcommon.Map) (any, error) {
+				Getter: func(_ context.Context, _ pcommon.Map) (any, error) {
 					m := pcommon.NewMap()
 					m.PutStr("attr2", "value2")
 					return m, nil
@@ -79,7 +78,7 @@ func Test_MergeMaps(t *testing.T) {
 		{
 			name: "Insert conflicting key",
 			source: ottl.StandardPMapGetter[pcommon.Map]{
-				Getter: func(ctx context.Context, _ pcommon.Map) (any, error) {
+				Getter: func(_ context.Context, _ pcommon.Map) (any, error) {
 					m := pcommon.NewMap()
 					m.PutStr("attr1", "value3")
 					m.PutStr("attr2", "value2")
@@ -95,7 +94,7 @@ func Test_MergeMaps(t *testing.T) {
 		{
 			name: "Update no conflicting keys",
 			source: ottl.StandardPMapGetter[pcommon.Map]{
-				Getter: func(ctx context.Context, _ pcommon.Map) (any, error) {
+				Getter: func(_ context.Context, _ pcommon.Map) (any, error) {
 					m := pcommon.NewMap()
 					m.PutStr("attr2", "value2")
 					return m, nil
@@ -109,7 +108,7 @@ func Test_MergeMaps(t *testing.T) {
 		{
 			name: "Update conflicting key",
 			source: ottl.StandardPMapGetter[pcommon.Map]{
-				Getter: func(ctx context.Context, _ pcommon.Map) (any, error) {
+				Getter: func(_ context.Context, _ pcommon.Map) (any, error) {
 					m := pcommon.NewMap()
 					m.PutStr("attr1", "value3")
 					return m, nil
@@ -143,12 +142,12 @@ func Test_MergeMaps(t *testing.T) {
 
 func Test_MergeMaps_bad_target(t *testing.T) {
 	input := &ottl.StandardPMapGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, tCtx any) (any, error) {
 			return tCtx, nil
 		},
 	}
 	target := &ottl.StandardPMapGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return 1, nil
 		},
 	}
@@ -161,12 +160,12 @@ func Test_MergeMaps_bad_target(t *testing.T) {
 
 func Test_MergeMaps_bad_input(t *testing.T) {
 	input := &ottl.StandardPMapGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return 1, nil
 		},
 	}
 	target := &ottl.StandardPMapGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, tCtx any) (any, error) {
 			return tCtx, nil
 		},
 	}

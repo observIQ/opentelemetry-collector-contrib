@@ -5,66 +5,56 @@ package splunkhecexporter
 import (
 	"context"
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
-
+	"go.opentelemetry.io/collector/confmap/confmaptest"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exportertest"
-
-	"go.opentelemetry.io/collector/confmap/confmaptest"
-
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/testdata"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/ptrace"
 )
 
-// assertNoErrorHost implements a component.Host that asserts that there were no errors.
-type assertNoErrorHost struct {
-	component.Host
-	*testing.T
+var typ = component.MustNewType("splunk_hec")
+
+func TestComponentFactoryType(t *testing.T) {
+	require.Equal(t, typ, NewFactory().Type())
 }
 
-var _ component.Host = (*assertNoErrorHost)(nil)
-
-// newAssertNoErrorHost returns a new instance of assertNoErrorHost.
-func newAssertNoErrorHost(t *testing.T) component.Host {
-	return &assertNoErrorHost{
-		componenttest.NewNopHost(),
-		t,
-	}
+func TestComponentConfigStruct(t *testing.T) {
+	require.NoError(t, componenttest.CheckConfigStruct(NewFactory().CreateDefaultConfig()))
 }
 
-func (aneh *assertNoErrorHost) ReportFatalError(err error) {
-	assert.NoError(aneh, err)
-}
-
-func Test_ComponentLifecycle(t *testing.T) {
+func TestComponentLifecycle(t *testing.T) {
 	factory := NewFactory()
 
 	tests := []struct {
+		createFn func(ctx context.Context, set exporter.Settings, cfg component.Config) (component.Component, error)
 		name     string
-		createFn func(ctx context.Context, set exporter.CreateSettings, cfg component.Config) (component.Component, error)
 	}{
 
 		{
 			name: "logs",
-			createFn: func(ctx context.Context, set exporter.CreateSettings, cfg component.Config) (component.Component, error) {
-				return factory.CreateLogsExporter(ctx, set, cfg)
+			createFn: func(ctx context.Context, set exporter.Settings, cfg component.Config) (component.Component, error) {
+				return factory.CreateLogs(ctx, set, cfg)
 			},
 		},
 
 		{
 			name: "metrics",
-			createFn: func(ctx context.Context, set exporter.CreateSettings, cfg component.Config) (component.Component, error) {
-				return factory.CreateMetricsExporter(ctx, set, cfg)
+			createFn: func(ctx context.Context, set exporter.Settings, cfg component.Config) (component.Component, error) {
+				return factory.CreateMetrics(ctx, set, cfg)
 			},
 		},
 
 		{
 			name: "traces",
-			createFn: func(ctx context.Context, set exporter.CreateSettings, cfg component.Config) (component.Component, error) {
-				return factory.CreateTracesExporter(ctx, set, cfg)
+			createFn: func(ctx context.Context, set exporter.Settings, cfg component.Config) (component.Component, error) {
+				return factory.CreateTraces(ctx, set, cfg)
 			},
 		},
 	}
@@ -74,39 +64,43 @@ func Test_ComponentLifecycle(t *testing.T) {
 	cfg := factory.CreateDefaultConfig()
 	sub, err := cm.Sub("tests::config")
 	require.NoError(t, err)
-	require.NoError(t, component.UnmarshalConfig(sub, cfg))
+	require.NoError(t, sub.Unmarshal(&cfg))
 
-	for _, test := range tests {
-		t.Run(test.name+"-shutdown", func(t *testing.T) {
-			c, err := test.createFn(context.Background(), exportertest.NewNopCreateSettings(), cfg)
+	for _, tt := range tests {
+		t.Run(tt.name+"-shutdown", func(t *testing.T) {
+			c, err := tt.createFn(context.Background(), exportertest.NewNopSettings(typ), cfg)
 			require.NoError(t, err)
 			err = c.Shutdown(context.Background())
 			require.NoError(t, err)
 		})
-
-		t.Run(test.name+"-lifecycle", func(t *testing.T) {
-
-			c, err := test.createFn(context.Background(), exportertest.NewNopCreateSettings(), cfg)
+		t.Run(tt.name+"-lifecycle", func(t *testing.T) {
+			c, err := tt.createFn(context.Background(), exportertest.NewNopSettings(typ), cfg)
 			require.NoError(t, err)
-			host := newAssertNoErrorHost(t)
+			host := componenttest.NewNopHost()
 			err = c.Start(context.Background(), host)
 			require.NoError(t, err)
-			assert.NotPanics(t, func() {
-				switch e := c.(type) {
-				case exporter.Logs:
-					logs := testdata.GenerateLogsManyLogRecordsSameResource(2)
+			require.NotPanics(t, func() {
+				switch tt.name {
+				case "logs":
+					e, ok := c.(exporter.Logs)
+					require.True(t, ok)
+					logs := generateLifecycleTestLogs()
 					if !e.Capabilities().MutatesData {
 						logs.MarkReadOnly()
 					}
 					err = e.ConsumeLogs(context.Background(), logs)
-				case exporter.Metrics:
-					metrics := testdata.GenerateMetricsTwoMetrics()
+				case "metrics":
+					e, ok := c.(exporter.Metrics)
+					require.True(t, ok)
+					metrics := generateLifecycleTestMetrics()
 					if !e.Capabilities().MutatesData {
 						metrics.MarkReadOnly()
 					}
 					err = e.ConsumeMetrics(context.Background(), metrics)
-				case exporter.Traces:
-					traces := testdata.GenerateTracesTwoSpansSameResource()
+				case "traces":
+					e, ok := c.(exporter.Traces)
+					require.True(t, ok)
+					traces := generateLifecycleTestTraces()
 					if !e.Capabilities().MutatesData {
 						traces.MarkReadOnly()
 					}
@@ -118,4 +112,39 @@ func Test_ComponentLifecycle(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func generateLifecycleTestLogs() plog.Logs {
+	logs := plog.NewLogs()
+	rl := logs.ResourceLogs().AppendEmpty()
+	rl.Resource().Attributes().PutStr("resource", "R1")
+	l := rl.ScopeLogs().AppendEmpty().LogRecords().AppendEmpty()
+	l.Body().SetStr("test log message")
+	l.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+	return logs
+}
+
+func generateLifecycleTestMetrics() pmetric.Metrics {
+	metrics := pmetric.NewMetrics()
+	rm := metrics.ResourceMetrics().AppendEmpty()
+	rm.Resource().Attributes().PutStr("resource", "R1")
+	m := rm.ScopeMetrics().AppendEmpty().Metrics().AppendEmpty()
+	m.SetName("test_metric")
+	dp := m.SetEmptyGauge().DataPoints().AppendEmpty()
+	dp.Attributes().PutStr("test_attr", "value_1")
+	dp.SetIntValue(123)
+	dp.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+	return metrics
+}
+
+func generateLifecycleTestTraces() ptrace.Traces {
+	traces := ptrace.NewTraces()
+	rs := traces.ResourceSpans().AppendEmpty()
+	rs.Resource().Attributes().PutStr("resource", "R1")
+	span := rs.ScopeSpans().AppendEmpty().Spans().AppendEmpty()
+	span.Attributes().PutStr("test_attr", "value_1")
+	span.SetName("test_span")
+	span.SetStartTimestamp(pcommon.NewTimestampFromTime(time.Now().Add(-1 * time.Second)))
+	span.SetEndTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+	return traces
 }

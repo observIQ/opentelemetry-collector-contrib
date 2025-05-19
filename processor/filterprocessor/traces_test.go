@@ -16,10 +16,15 @@ import (
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/processor/processorhelper"
 	"go.opentelemetry.io/collector/processor/processortest"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterconfig"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterset"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor/internal/metadata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor/internal/metadatatest"
 )
 
 // All the data we need to test the Span filter
@@ -129,14 +134,14 @@ func TestFilterTraceProcessor(t *testing.T) {
 				},
 			}
 			factory := NewFactory()
-			fmp, err := factory.CreateTracesProcessor(
+			fmp, err := factory.CreateTraces(
 				ctx,
-				processortest.NewNopCreateSettings(),
+				processortest.NewNopSettings(metadata.Type),
 				cfg,
 				next,
 			)
 			require.NotNil(t, fmp)
-			require.Nil(t, err)
+			require.NoError(t, err)
 
 			caps := fmp.Capabilities()
 			require.True(t, caps.MutatesData)
@@ -144,12 +149,12 @@ func TestFilterTraceProcessor(t *testing.T) {
 			require.NoError(t, fmp.Start(ctx, nil))
 
 			cErr := fmp.ConsumeTraces(ctx, test.inTraces)
-			require.Nil(t, cErr)
+			require.NoError(t, cErr)
 			got := next.AllTraces()
 
 			// If all traces got filtered you shouldn't even have ResourceSpans
 			if test.allTracesFiltered {
-				require.Equal(t, 0, len(got))
+				require.Empty(t, got)
 			} else {
 				require.Equal(t, test.spanCountExpected, got[0].SpanCount())
 			}
@@ -258,13 +263,13 @@ func TestFilterTraceProcessorWithOTTL(t *testing.T) {
 					`Substring("", 0, 100) == "test"`,
 				},
 			},
-			want:      func(td ptrace.Traces) {},
+			want:      func(_ ptrace.Traces) {},
 			errorMode: ottl.IgnoreError,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processor, err := newFilterSpansProcessor(componenttest.NewNopTelemetrySettings(), &Config{Traces: tt.conditions, ErrorMode: tt.errorMode})
+			processor, err := newFilterSpansProcessor(processortest.NewNopSettings(metadata.Type), &Config{Traces: tt.conditions, ErrorMode: tt.errorMode})
 			assert.NoError(t, err)
 
 			got, err := processor.processTraces(context.Background(), constructTraces())
@@ -272,13 +277,35 @@ func TestFilterTraceProcessorWithOTTL(t *testing.T) {
 			if tt.filterEverything {
 				assert.Equal(t, processorhelper.ErrSkipProcessingData, err)
 			} else {
-
 				exTd := constructTraces()
 				tt.want(exTd)
 				assert.Equal(t, exTd, got)
 			}
 		})
 	}
+}
+
+func TestFilterTraceProcessorTelemetry(t *testing.T) {
+	tel := componenttest.NewTelemetry()
+	t.Cleanup(func() { require.NoError(t, tel.Shutdown(context.Background())) })
+	processor, err := newFilterSpansProcessor(metadatatest.NewSettings(tel), &Config{
+		Traces: TraceFilters{
+			SpanConditions: []string{
+				`name == "operationA"`,
+			},
+		}, ErrorMode: ottl.IgnoreError,
+	})
+	assert.NoError(t, err)
+
+	_, err = processor.processTraces(context.Background(), constructTraces())
+	assert.NoError(t, err)
+
+	metadatatest.AssertEqualProcessorFilterSpansFiltered(t, tel, []metricdata.DataPoint[int64]{
+		{
+			Value:      2,
+			Attributes: attribute.NewSet(attribute.String("filter", "filter")),
+		},
+	}, metricdatatest.IgnoreTimestamp())
 }
 
 func constructTraces() ptrace.Traces {

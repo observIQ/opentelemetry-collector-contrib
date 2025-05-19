@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build linux
-// +build linux
 
 package cadvisor // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscontainerinsightreceiver/internal/cadvisor"
 
@@ -63,7 +62,8 @@ type createCadvisorManager func(*memory.InMemoryCache, sysfs.SysFs, manager.Hous
 // a better way to mock the cadvisor related part in the future.
 var defaultCreateManager = func(memoryCache *memory.InMemoryCache, sysfs sysfs.SysFs, housekeepingConfig manager.HousekeepingConfig,
 	includedMetricsSet cadvisormetrics.MetricSet, collectorHTTPClient *http.Client, rawContainerCgroupPathPrefixWhiteList []string,
-	perfEventsFile string) (cadvisorManager, error) {
+	perfEventsFile string,
+) (cadvisorManager, error) {
 	return manager.New(memoryCache, sysfs, housekeepingConfig, includedMetricsSet, collectorHTTPClient, rawContainerCgroupPathPrefixWhiteList, []string{}, perfEventsFile, 0)
 }
 
@@ -123,6 +123,7 @@ type Cadvisor struct {
 	k8sDecorator          Decorator
 	ecsInfo               EcsInfo
 	containerOrchestrator string
+	metricsExtractors     []extractors.MetricExtractor
 }
 
 func init() {
@@ -159,15 +160,13 @@ func New(containerOrchestrator string, hostInfo hostInfo, logger *zap.Logger, op
 	return c, nil
 }
 
-var metricsExtractors = []extractors.MetricExtractor{}
-
-func GetMetricsExtractors() []extractors.MetricExtractor {
-	return metricsExtractors
+func (c *Cadvisor) GetMetricsExtractors() []extractors.MetricExtractor {
+	return c.metricsExtractors
 }
 
 func (c *Cadvisor) Shutdown() error {
 	var errs error
-	for _, ext := range metricsExtractors {
+	for _, ext := range c.metricsExtractors {
 		errs = errors.Join(errs, ext.Shutdown())
 	}
 
@@ -177,7 +176,7 @@ func (c *Cadvisor) Shutdown() error {
 	return errs
 }
 
-func (c *Cadvisor) addEbsVolumeInfo(tags map[string]string, ebsVolumeIdsUsedAsPV map[string]string) {
+func (c *Cadvisor) addEbsVolumeInfo(tags map[string]string, ebsVolumeIDsUsedAsPV map[string]string) {
 	deviceName, ok := tags[ci.DiskDev]
 	if !ok {
 		return
@@ -191,14 +190,13 @@ func (c *Cadvisor) addEbsVolumeInfo(tags map[string]string, ebsVolumeIdsUsedAsPV
 
 	if tags[ci.MetricType] == ci.TypeContainerFS || tags[ci.MetricType] == ci.TypeNodeFS ||
 		tags[ci.MetricType] == ci.TypeNodeDiskIO || tags[ci.MetricType] == ci.TypeContainerDiskIO {
-		if volID := ebsVolumeIdsUsedAsPV[deviceName]; volID != "" {
+		if volID := ebsVolumeIDsUsedAsPV[deviceName]; volID != "" {
 			tags[ci.EbsVolumeID] = volID
 		}
 	}
 }
 
 func (c *Cadvisor) addECSMetrics(cadvisormetrics []*extractors.CAdvisorMetric) {
-
 	if len(cadvisormetrics) == 0 {
 		c.logger.Warn("cadvisor can't collect any metrics!")
 	}
@@ -257,11 +255,11 @@ func addECSResources(tags map[string]string) {
 }
 
 func (c *Cadvisor) decorateMetrics(cadvisormetrics []*extractors.CAdvisorMetric) []*extractors.CAdvisorMetric {
-	ebsVolumeIdsUsedAsPV := c.hostInfo.ExtractEbsIDsUsedByKubernetes()
+	ebsVolumeIDsUsedAsPV := c.hostInfo.ExtractEbsIDsUsedByKubernetes()
 	var result []*extractors.CAdvisorMetric
 	for _, m := range cadvisormetrics {
 		tags := m.GetTags()
-		c.addEbsVolumeInfo(tags, ebsVolumeIdsUsedAsPV)
+		c.addEbsVolumeInfo(tags, ebsVolumeIDsUsedAsPV)
 
 		// add version
 		tags[ci.Version] = c.version
@@ -302,7 +300,6 @@ func (c *Cadvisor) decorateMetrics(cadvisormetrics []*extractors.CAdvisorMetric)
 
 		// add tags for EKS
 		if c.containerOrchestrator == ci.EKS {
-
 			tags[ci.ClusterNameKey] = c.hostInfo.GetClusterName()
 
 			out := c.k8sDecorator.Decorate(m)
@@ -310,7 +307,6 @@ func (c *Cadvisor) decorateMetrics(cadvisormetrics []*extractors.CAdvisorMetric)
 				result = append(result, out)
 			}
 		}
-
 	}
 
 	return result
@@ -342,7 +338,7 @@ func (c *Cadvisor) GetMetrics() []pmetric.Metrics {
 		return result
 	}
 
-	out := processContainers(containerinfos, c.hostInfo, c.containerOrchestrator, c.logger)
+	out := processContainers(containerinfos, c.hostInfo, c.containerOrchestrator, c.logger, c.GetMetricsExtractors())
 	results := c.decorateMetrics(out)
 
 	if c.containerOrchestrator == ci.ECS {
@@ -395,12 +391,12 @@ func (c *Cadvisor) initManager(createManager createCadvisorManager) error {
 		return err
 	}
 
-	metricsExtractors = []extractors.MetricExtractor{}
-	metricsExtractors = append(metricsExtractors, extractors.NewCPUMetricExtractor(c.logger))
-	metricsExtractors = append(metricsExtractors, extractors.NewMemMetricExtractor(c.logger))
-	metricsExtractors = append(metricsExtractors, extractors.NewDiskIOMetricExtractor(c.logger))
-	metricsExtractors = append(metricsExtractors, extractors.NewNetMetricExtractor(c.logger))
-	metricsExtractors = append(metricsExtractors, extractors.NewFileSystemMetricExtractor(c.logger))
+	c.metricsExtractors = make([]extractors.MetricExtractor, 0, 5)
+	c.metricsExtractors = append(c.metricsExtractors, extractors.NewCPUMetricExtractor(c.logger))
+	c.metricsExtractors = append(c.metricsExtractors, extractors.NewMemMetricExtractor(c.logger))
+	c.metricsExtractors = append(c.metricsExtractors, extractors.NewDiskIOMetricExtractor(c.logger))
+	c.metricsExtractors = append(c.metricsExtractors, extractors.NewNetMetricExtractor(c.logger))
+	c.metricsExtractors = append(c.metricsExtractors, extractors.NewFileSystemMetricExtractor(c.logger))
 
 	return nil
 }

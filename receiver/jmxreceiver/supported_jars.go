@@ -31,6 +31,62 @@ func oldFormatProperties(c *Config, j supportedJar) error {
 // If you change this variable name, please open an issue in opentelemetry-java-contrib
 // so that repository's release automation can be updated
 var jmxMetricsGathererVersions = map[string]supportedJar{
+	"291c6071e6702ae8d81b712582f8e2f312e6b35633b603eada46e3984e5cd020": {
+		version: "1.46.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"e0fc9b92364413ae33d1c33b5927e4eead70d6fab7ca626b56649947352636b4": {
+		version: "1.45.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"67a415eace3d513c3c5bf30518a9035c48b14e7c8ad43b0ddb572588de7b4ce6": {
+		version: "1.44.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"6c1d4c82d76f2826acf43981ef0b222f55eea841aebcc604a0daafbb2bddb93c": {
+		version: "1.43.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"e19041d478c2f3641cee499bae74baa66c97c193b0012369deeb587d5add958a": {
+		version: "1.42.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"8005bee5861f0a9f72577ee6e64d2f9f7ce72a063c88ba38db9568785c7f0cfd": {
+		version: "1.41.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"a51b50329446ae7516888ef915e4b20fb61b986b2230d66eacaf61d8690525c9": {
+		version: "1.40.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"43543679b12c7772fffe78ad9dcde3421cb5dd2a704231f9901d32578b2cf69e": {
+		version: "1.39.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"75d03922df2306086b9eee2daccbfd8c9b94ce140a482fb4698a839ec3d3f192": {
+		version: "1.38.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"74d23e8714deab770c940a14175ab5dfd0cd0c16e198861e45a72fbb854bc727": {
+		version: "1.37.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"ab53c54b7cd8a6e31bb40e8ab3a9a9dedc9386cb4905c2a7f2188d3baae99f39": {
+		version: "1.36.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"60b2ee1a798c35d10f6e3602ea46f1b1c0298080262636d73b4fc652b7dcd0da": {
+		version: "1.35.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"a939251bbdb91ede2b5fbe891fd50775dd21f41c3369b5abec7dd74e4bf1a9fd": {
+		version: "1.34.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
+	"50ad8ed45fa17bc6edafe4649008d1f0b57181d3162e64c76d6da9a49272db33": {
+		version: "1.33.0-alpha",
+		jar:     "JMX metrics gatherer",
+	},
 	"0ba6647cc31b627dbe20de87d696c3cffb0f72f0fc2ad3d3fe2be8aa3582bf26": {
 		version: "1.32.0-alpha",
 		jar:     "JMX metrics gatherer",

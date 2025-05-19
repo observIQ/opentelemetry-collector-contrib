@@ -24,7 +24,6 @@ func (m *mockHTTPClient) Do(_ *http.Request) (*http.Response, error) {
 }
 
 func TestGetContainerInstanceIDFromArn(t *testing.T) {
-
 	oldFormatARN := "arn:aws:ecs:region:aws_account_id:task/task-id"
 	result, _ := GetContainerInstanceIDFromArn(oldFormatARN)
 	assert.Equal(t, "task-id", result, "Expected to be equal")
@@ -35,26 +34,23 @@ func TestGetContainerInstanceIDFromArn(t *testing.T) {
 
 	wrongFormatARN := "arn:aws:ecs:region:aws_account_id:task"
 	_, err := GetContainerInstanceIDFromArn(wrongFormatARN)
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 }
 
 func TestIsClosed(t *testing.T) {
-
 	channel := make(chan bool)
 
-	assert.Equal(t, false, isClosed(channel))
+	assert.False(t, isClosed(channel))
 
 	close(channel)
 
-	assert.Equal(t, true, isClosed(channel))
-
+	assert.True(t, isClosed(channel))
 }
 
 func TestRequestSuccessWithKnownLength(t *testing.T) {
-
 	respBody := "body"
 	response := &http.Response{
-		StatusCode:    200,
+		StatusCode:    http.StatusOK,
 		Body:          io.NopCloser(bytes.NewBufferString(respBody)),
 		Header:        make(http.Header),
 		ContentLength: 5 * 1024,
@@ -69,17 +65,15 @@ func TestRequestSuccessWithKnownLength(t *testing.T) {
 
 	body, err := request(ctx, "0.0.0.0", MockHTTPClient)
 
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	assert.NotNil(t, body)
-
 }
 
 func TestRequestSuccessWithUnknownLength(t *testing.T) {
-
 	respBody := "body"
 	response := &http.Response{
-		StatusCode:    200,
+		StatusCode:    http.StatusOK,
 		Body:          io.NopCloser(bytes.NewBufferString(respBody)),
 		Header:        make(http.Header),
 		ContentLength: -1,
@@ -94,18 +88,16 @@ func TestRequestSuccessWithUnknownLength(t *testing.T) {
 
 	body, err := request(ctx, "0.0.0.0", MockHTTPClient)
 
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	assert.NotNil(t, body)
-
 }
 
 func TestRequestWithFailedStatus(t *testing.T) {
-
 	respBody := "body"
 	response := &http.Response{
 		Status:        "Bad Request",
-		StatusCode:    400,
+		StatusCode:    http.StatusBadRequest,
 		Body:          io.NopCloser(bytes.NewBufferString(respBody)),
 		Header:        make(http.Header),
 		ContentLength: 5 * 1024,
@@ -122,15 +114,13 @@ func TestRequestWithFailedStatus(t *testing.T) {
 
 	assert.Nil(t, body)
 
-	assert.NotNil(t, err)
-
+	assert.Error(t, err)
 }
 
 func TestRequestWithLargeContentLength(t *testing.T) {
-
 	respBody := "body"
 	response := &http.Response{
-		StatusCode:    200,
+		StatusCode:    http.StatusOK,
 		Body:          io.NopCloser(bytes.NewBufferString(respBody)),
 		Header:        make(http.Header),
 		ContentLength: 5 * 1024 * 1024,
@@ -147,6 +137,5 @@ func TestRequestWithLargeContentLength(t *testing.T) {
 
 	assert.Nil(t, body)
 
-	assert.NotNil(t, err)
-
+	assert.Error(t, err)
 }

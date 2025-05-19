@@ -12,6 +12,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/azureblobreceiver/internal/metadata"
 )
 
 var (
@@ -38,7 +40,7 @@ func TestConsumeLogsJSON(t *testing.T) {
 
 	err := logsConsumer.consumeLogsJSON(context.Background(), logsJSON)
 	require.NoError(t, err)
-	assert.Equal(t, logsSink.LogRecordCount(), 1)
+	assert.Equal(t, 1, logsSink.LogRecordCount())
 }
 
 func TestConsumeTracesJSON(t *testing.T) {
@@ -52,11 +54,11 @@ func TestConsumeTracesJSON(t *testing.T) {
 
 	err := tracesConsumer.consumeTracesJSON(context.Background(), tracesJSON)
 	require.NoError(t, err)
-	assert.Equal(t, tracesSink.SpanCount(), 2)
+	assert.Equal(t, 2, tracesSink.SpanCount())
 }
 
 func getBlobReceiver(t *testing.T) (component.Component, error) {
-	set := receivertest.NewNopCreateSettings()
+	set := receivertest.NewNopSettings(metadata.Type)
 
 	blobClient := newMockBlobClient()
 	blobEventHandler := getBlobEventHandler(t, blobClient)

@@ -22,37 +22,15 @@ import (
 	"github.com/scalyr/dataset-go/pkg/api/request"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/testdata"
 )
-
-func TestCreateLogsExporter(t *testing.T) {
-	ctx := context.Background()
-	createSettings := exportertest.NewNopCreateSettings()
-	tests := createExporterTests()
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(*testing.T) {
-			logs, err := createLogsExporter(ctx, createSettings, tt.config)
-
-			if err == nil {
-				assert.Nil(t, tt.expectedError, tt.name)
-				assert.NotNil(t, logs, tt.name)
-			} else {
-				if tt.expectedError == nil {
-					assert.Nil(t, err, tt.name)
-				} else {
-					assert.Equal(t, tt.expectedError.Error(), err.Error(), tt.name)
-					assert.Nil(t, logs, tt.name)
-				}
-			}
-		})
-	}
-}
 
 func TestBuildBody(t *testing.T) {
 	slice := pcommon.NewValueSlice()
@@ -627,7 +605,6 @@ func TestBuildEventFromLog(t *testing.T) {
 			assert.Equal(t, expected, was)
 		})
 	}
-
 }
 
 func TestBuildEventFromLogExportResources(t *testing.T) {
@@ -696,6 +673,7 @@ func TestBuildEventFromLogExportScopeInfo(t *testing.T) {
 
 	assert.Equal(t, expected, was)
 }
+
 func TestBuildEventFromLogEventWithoutTimestampWithObservedTimestampUseObservedTimestamp(t *testing.T) {
 	// When LogRecord doesn't have timestamp set, but it has ObservedTimestamp set,
 	// ObservedTimestamp should be used
@@ -735,7 +713,7 @@ func TestBuildEventFromLogEventWithoutTimestampWithOutObservedTimestampUseCurren
 	now = func() time.Time { return time.Unix(123456789, 0) }
 	currentTime := now()
 	assert.Equal(t, currentTime, time.Unix(123456789, 0))
-	assert.Equal(t, strconv.FormatInt(currentTime.UnixNano(), 10), "123456789000000000")
+	assert.Equal(t, "123456789000000000", strconv.FormatInt(currentTime.UnixNano(), 10))
 
 	lr := testdata.GenerateLogsOneLogRecord()
 	ld := lr.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0)
@@ -778,7 +756,7 @@ func extract(req *http.Request) (add_events.AddEventsRequest, error) {
 }
 
 func TestConsumeLogsShouldSucceed(t *testing.T) {
-	createSettings := exportertest.NewNopCreateSettings()
+	createSettings := exportertest.NewNopSettings(metadata.Type)
 
 	attempt := atomic.Uint64{}
 	wasSuccessful := atomic.Bool{}
@@ -812,11 +790,13 @@ func TestConsumeLogsShouldSucceed(t *testing.T) {
 		Debug:      true,
 		BufferSettings: BufferSettings{
 			MaxLifetime:          2 * time.Second,
+			PurgeOlderThan:       10 * time.Second,
 			GroupBy:              []string{"attributes.container_id"},
 			RetryInitialInterval: time.Second,
 			RetryMaxInterval:     time.Minute,
 			RetryMaxElapsedTime:  time.Hour,
 			RetryShutdownTimeout: time.Minute,
+			MaxParallelOutgoing:  100,
 		},
 		LogsSettings: LogsSettings{
 			ExportResourceInfo:   true,
@@ -837,9 +817,9 @@ func TestConsumeLogsShouldSucceed(t *testing.T) {
 		ServerHostSettings: ServerHostSettings{
 			ServerHost: testServerHost,
 		},
-		RetrySettings:   exporterhelper.NewDefaultRetrySettings(),
-		QueueSettings:   exporterhelper.NewDefaultQueueSettings(),
-		TimeoutSettings: exporterhelper.NewDefaultTimeoutSettings(),
+		BackOffConfig:   configretry.NewDefaultBackOffConfig(),
+		QueueSettings:   exporterhelper.NewDefaultQueueConfig(),
+		TimeoutSettings: exporterhelper.NewDefaultTimeoutConfig(),
 	}
 
 	lr1 := testdata.GenerateLogsOneLogRecord()
@@ -880,10 +860,10 @@ func TestConsumeLogsShouldSucceed(t *testing.T) {
 
 		assert.NotNil(t, logs)
 		err = logs.ConsumeLogs(context.Background(), ld)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		time.Sleep(time.Second)
 		err = logs.Shutdown(context.Background())
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	}
 
 	assert.True(t, wasSuccessful.Load())
@@ -1111,7 +1091,6 @@ func TestOtelSeverityToDataSetSeverityWithSeverityNumberNoSeverityTextInvalidVal
 
 	ld = makeLogRecordWithSeverityNumberAndSeverityText(100, "")
 	assert.Equal(t, defaultDataSetSeverityLevel, mapOtelSeverityToDataSetSeverity(ld))
-
 }
 
 func TestOtelSeverityToDataSetSeverityWithSeverityNumberNoSeverityTextDataSetTraceLogLevel(t *testing.T) {

@@ -29,23 +29,23 @@ func createDefaultConfig() component.Config {
 
 func createLogsExporter(
 	ctx context.Context,
-	set exporter.CreateSettings,
+	set exporter.Settings,
 	cfg component.Config,
 ) (exporter.Logs, error) {
 	cf := cfg.(*Config)
 
-	logsExp, err := newHoneycombLogsExporter(set.TelemetrySettings, cf)
+	logsExp, err := newHoneycombLogsExporter(set, cf)
 	if err != nil {
 		return nil, err
 	}
 
-	return exporterhelper.NewLogsExporter(
+	return exporterhelper.NewLogs(
 		ctx,
 		set,
 		cfg,
 		logsExp.exportMarkers,
-		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}),
-		exporterhelper.WithRetry(cf.RetrySettings),
+		exporterhelper.WithTimeout(exporterhelper.TimeoutConfig{Timeout: 0}),
+		exporterhelper.WithRetry(cf.BackOffConfig),
 		exporterhelper.WithQueue(cf.QueueSettings),
 		exporterhelper.WithStart(logsExp.start),
 	)

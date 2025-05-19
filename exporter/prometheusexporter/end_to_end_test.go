@@ -16,13 +16,14 @@ import (
 	"testing"
 	"time"
 
-	promconfig "github.com/prometheus/prometheus/config"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver"
 )
 
@@ -33,13 +34,13 @@ func TestEndToEndSummarySupport(t *testing.T) {
 
 	// 1. Create the Prometheus scrape endpoint.
 	var wg sync.WaitGroup
-	var currentScrapeIndex = 0
+	currentScrapeIndex := 0
 	wg.Add(1) // scrape one endpoint
 
-	dropWizardServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	dropWizardServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 		// Serve back the metrics as if they were from DropWizard.
 		_, err := rw.Write([]byte(dropWizardResponse))
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		currentScrapeIndex++
 		if currentScrapeIndex == 8 { // We shall let the Prometheus receiver scrape the DropWizard mock server, at least 8 times.
 			wg.Done() // done scraping dropWizardResponse 8 times
@@ -48,9 +49,7 @@ func TestEndToEndSummarySupport(t *testing.T) {
 	defer dropWizardServer.Close()
 
 	srvURL, err := url.Parse(dropWizardServer.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -58,21 +57,17 @@ func TestEndToEndSummarySupport(t *testing.T) {
 	// 2. Create the Prometheus metrics exporter that'll receive and verify the metrics produced.
 	exporterCfg := &Config{
 		Namespace: "test",
-		HTTPServerSettings: confighttp.HTTPServerSettings{
+		ServerConfig: confighttp.ServerConfig{
 			Endpoint: "localhost:8787",
 		},
 		SendTimestamps:   true,
 		MetricExpiration: 2 * time.Hour,
 	}
 	exporterFactory := NewFactory()
-	set := exportertest.NewNopCreateSettings()
-	exporter, err := exporterFactory.CreateMetricsExporter(ctx, set, exporterCfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = exporter.Start(ctx, nil); err != nil {
-		t.Fatalf("Failed to start the Prometheus exporter: %v", err)
-	}
+	set := exportertest.NewNopSettings(metadata.Type)
+	exporter, err := exporterFactory.CreateMetrics(ctx, set, exporterCfg)
+	require.NoError(t, err)
+	require.NoError(t, exporter.Start(ctx, nil), "Failed to start the Prometheus exporter")
 	t.Cleanup(func() { require.NoError(t, exporter.Shutdown(ctx)) })
 
 	// 3. Create the Prometheus receiver scraping from the DropWizard mock server and
@@ -88,38 +83,28 @@ func TestEndToEndSummarySupport(t *testing.T) {
               static_configs:
                 - targets: ['%s']
         `, srvURL.Host))
-	receiverConfig := new(promconfig.Config)
-	if err = yaml.Unmarshal(yamlConfig, receiverConfig); err != nil {
-		t.Fatal(err)
-	}
+	receiverConfig := new(prometheusreceiver.PromConfig)
+	require.NoError(t, yaml.Unmarshal(yamlConfig, receiverConfig))
 
 	receiverFactory := prometheusreceiver.NewFactory()
-	receiverCreateSet := receivertest.NewNopCreateSettings()
+	receiverCreateSet := receivertest.NewNopSettings(metadata.Type)
 	rcvCfg := &prometheusreceiver.Config{
 		PrometheusConfig: receiverConfig,
 	}
 	// 3.5 Create the Prometheus receiver and pass in the previously created Prometheus exporter.
-	prometheusReceiver, err := receiverFactory.CreateMetricsReceiver(ctx, receiverCreateSet, rcvCfg, exporter)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = prometheusReceiver.Start(ctx, nil); err != nil {
-		t.Fatalf("Failed to start the Prometheus receiver: %v", err)
-	}
+	prometheusReceiver, err := receiverFactory.CreateMetrics(ctx, receiverCreateSet, rcvCfg, exporter)
+	require.NoError(t, err)
+	require.NoError(t, prometheusReceiver.Start(ctx, nil), "Failed to start the Prometheus receiver")
 	t.Cleanup(func() { require.NoError(t, prometheusReceiver.Shutdown(ctx)) })
 
 	// 4. Scrape from the Prometheus receiver to ensure that we export summary metrics
 	wg.Wait()
 
 	res, err := http.Get("http://" + exporterCfg.Endpoint + "/metrics")
-	if err != nil {
-		t.Fatalf("Failed to scrape from the exporter: %v", err)
-	}
+	require.NoError(t, err, "Failed to scrape from the exporter")
 	prometheusExporterScrape, err := io.ReadAll(res.Body)
 	res.Body.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// 5. Verify that we have the summary metrics and that their values make sense.
 	wantLineRegexps := []string{
@@ -159,7 +144,7 @@ func TestEndToEndSummarySupport(t *testing.T) {
 		`test_up.instance="127.0.0.1:.*",job="otel-collector". 1 .*`,
 		`. HELP test_target_info Target metadata`,
 		`. TYPE test_target_info gauge`,
-		`test_target_info.http_scheme="http",instance="127.0.0.1:.*",job="otel-collector",net_host_port=".*". 1`,
+		`test_target_info.instance="127.0.0.1:.*",job="otel-collector",server_port=".*",url_scheme="http". 1`,
 	}
 
 	// 5.5: Perform a complete line by line prefix verification to ensure we extract back the inputs
@@ -171,14 +156,10 @@ func TestEndToEndSummarySupport(t *testing.T) {
 	// After this replacement, there should ONLY be newlines present.
 	prometheusExporterScrape = bytes.ReplaceAll(prometheusExporterScrape, []byte("\n"), []byte(""))
 	// Now assert that NO output was left over.
-	if len(prometheusExporterScrape) != 0 {
-		t.Fatalf("Left-over unmatched Prometheus scrape content: %q\n", prometheusExporterScrape)
-	}
-
+	require.Empty(t, prometheusExporterScrape, "Left-over unmatched Prometheus scrape content: %q\n", prometheusExporterScrape)
 }
 
-// the following triggers G101: Potential hardcoded credentials
-// nolint:gosec
+//nolint:gosec // the following triggers G101: Potential hardcoded credentials
 const dropWizardResponse = `
 # HELP jvm_memory_pool_bytes_used Used bytes of a given JVM memory pool.
 # TYPE jvm_memory_pool_bytes_used gauge

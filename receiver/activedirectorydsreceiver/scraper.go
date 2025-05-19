@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build windows
-// +build windows
 
 package activedirectorydsreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/activedirectorydsreceiver"
 
@@ -15,7 +14,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scrapererror"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
 	"go.uber.org/multierr"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/activedirectorydsreceiver/internal/metadata"
@@ -26,14 +25,14 @@ type activeDirectoryDSScraper struct {
 	w  *watchers
 }
 
-func newActiveDirectoryDSScraper(mbc metadata.MetricsBuilderConfig, params receiver.CreateSettings) *activeDirectoryDSScraper {
+func newActiveDirectoryDSScraper(mbc metadata.MetricsBuilderConfig, params receiver.Settings) *activeDirectoryDSScraper {
 	return &activeDirectoryDSScraper{
 		mb: metadata.NewMetricsBuilder(mbc, params),
 	}
 }
 
 func (a *activeDirectoryDSScraper) start(_ context.Context, _ component.Host) error {
-	watchers, err := getWatchers(defaultWatcherCreater{})
+	watchers, err := getWatchers(defaultWatcherCreator{})
 	if err != nil {
 		return fmt.Errorf("failed to create performance counter watchers: %w", err)
 	}
@@ -107,7 +106,7 @@ func (a *activeDirectoryDSScraper) scrape(_ context.Context) (pmetric.Metrics, e
 	draInboundValuesDNs, dnsErr := a.w.Scrape(draInboundValuesDNs)
 	multiErr = multierr.Append(multiErr, dnsErr)
 	if dnsErr == nil {
-		a.mb.RecordActiveDirectoryDsReplicationValueRateDataPoint(now, draInboundValuesDNs, metadata.AttributeDirectionReceived, metadata.AttributeValueTypeDistingushedNames)
+		a.mb.RecordActiveDirectoryDsReplicationValueRateDataPoint(now, draInboundValuesDNs, metadata.AttributeDirectionReceived, metadata.AttributeValueTypeDistinguishedNames)
 	}
 
 	draInboundValuesTotal, totalErr := a.w.Scrape(draInboundValuesTotal)
@@ -121,7 +120,7 @@ func (a *activeDirectoryDSScraper) scrape(_ context.Context) (pmetric.Metrics, e
 	draOutboundValuesDNs, dnsErr := a.w.Scrape(draOutboundValuesDNs)
 	multiErr = multierr.Append(multiErr, dnsErr)
 	if dnsErr == nil {
-		a.mb.RecordActiveDirectoryDsReplicationValueRateDataPoint(now, draOutboundValuesDNs, metadata.AttributeDirectionSent, metadata.AttributeValueTypeDistingushedNames)
+		a.mb.RecordActiveDirectoryDsReplicationValueRateDataPoint(now, draOutboundValuesDNs, metadata.AttributeDirectionSent, metadata.AttributeValueTypeDistinguishedNames)
 	}
 
 	draOutboundValuesTotal, totalErr := a.w.Scrape(draOutboundValuesTotal)
@@ -137,10 +136,10 @@ func (a *activeDirectoryDSScraper) scrape(_ context.Context) (pmetric.Metrics, e
 		a.mb.RecordActiveDirectoryDsReplicationOperationPendingDataPoint(now, int64(draPendingReplicationOperations))
 	}
 
-	draSyncFailuresSchemaMistmatch, schemaMismatchErr := a.w.Scrape(draSyncFailuresSchemaMismatch)
+	draSyncFailuresSchemaMismatch, schemaMismatchErr := a.w.Scrape(draSyncFailuresSchemaMismatch)
 	multiErr = multierr.Append(multiErr, schemaMismatchErr)
 	if schemaMismatchErr == nil {
-		a.mb.RecordActiveDirectoryDsReplicationSyncRequestCountDataPoint(now, int64(draSyncFailuresSchemaMistmatch), metadata.AttributeSyncResultSchemaMismatch)
+		a.mb.RecordActiveDirectoryDsReplicationSyncRequestCountDataPoint(now, int64(draSyncFailuresSchemaMismatch), metadata.AttributeSyncResultSchemaMismatch)
 	}
 
 	draSyncRequestsSuccessful, requestsSuccessfulErr := a.w.Scrape(draSyncRequestsSuccessful)
@@ -152,7 +151,7 @@ func (a *activeDirectoryDSScraper) scrape(_ context.Context) (pmetric.Metrics, e
 	draSyncRequestsTotal, totalErr := a.w.Scrape(draSyncRequestsMade)
 	multiErr = multierr.Append(multiErr, totalErr)
 	if totalErr == nil && requestsSuccessfulErr == nil && schemaMismatchErr == nil {
-		otherReplicationSyncRequests := draSyncRequestsTotal - draSyncRequestsSuccessful - draSyncFailuresSchemaMistmatch
+		otherReplicationSyncRequests := draSyncRequestsTotal - draSyncRequestsSuccessful - draSyncFailuresSchemaMismatch
 		a.mb.RecordActiveDirectoryDsReplicationSyncRequestCountDataPoint(now, int64(otherReplicationSyncRequests), metadata.AttributeSyncResultOther)
 	}
 
@@ -204,7 +203,7 @@ func (a *activeDirectoryDSScraper) scrape(_ context.Context) (pmetric.Metrics, e
 		a.mb.RecordActiveDirectoryDsSecurityDescriptorPropagationsEventQueuedDataPoint(now, int64(securityPropEvents))
 	}
 
-	securityDescSubops, err := a.w.Scrape(dsSecurityDescripterSubOperations)
+	securityDescSubops, err := a.w.Scrape(dsSecurityDescriptorSubOperations)
 	multiErr = multierr.Append(multiErr, err)
 	if err == nil {
 		a.mb.RecordActiveDirectoryDsSuboperationRateDataPoint(now, securityDescSubops, metadata.AttributeSuboperationTypeSecurityDescriptorPropagationsEvent)

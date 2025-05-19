@@ -8,10 +8,10 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
-	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.opentelemetry.io/collector/config/confighttp"
 	"go.uber.org/zap"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter/internal/clientutil"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/datadog/clientutil"
 )
 
 // Sender submits logs to Datadog intake
@@ -22,12 +22,12 @@ type Sender struct {
 }
 
 // logsV2 is the key in datadog ServerConfiguration
-// It is being used to customize the endpoint for datdog intake based on exporter configuration
+// It is being used to customize the endpoint for Datadog intake based on exporter configuration
 // https://github.com/DataDog/datadog-api-client-go/blob/be7e034424012c7ee559a2153802a45df73232ea/api/datadog/configuration.go#L308
 const logsV2 = "v2.LogsApi.SubmitLog"
 
 // NewSender creates a new Sender
-func NewSender(endpoint string, logger *zap.Logger, s exporterhelper.TimeoutSettings, insecureSkipVerify, verbose bool, apiKey string) *Sender {
+func NewSender(endpoint string, logger *zap.Logger, hcs confighttp.ClientConfig, verbose bool, apiKey string) *Sender {
 	cfg := datadog.NewConfiguration()
 	logger.Info("Logs sender initialized", zap.String("endpoint", endpoint))
 	cfg.OperationServers[logsV2] = datadog.ServerConfigurations{
@@ -35,7 +35,7 @@ func NewSender(endpoint string, logger *zap.Logger, s exporterhelper.TimeoutSett
 			URL: endpoint,
 		},
 	}
-	cfg.HTTPClient = clientutil.NewHTTPClient(s, insecureSkipVerify)
+	cfg.HTTPClient = clientutil.NewHTTPClient(hcs)
 	cfg.AddDefaultHeader("DD-API-KEY", apiKey)
 	apiClient := datadog.NewAPIClient(cfg)
 	return &Sender{

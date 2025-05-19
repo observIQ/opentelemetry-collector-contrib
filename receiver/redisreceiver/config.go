@@ -10,16 +10,16 @@ import (
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/config/configtls"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/redisreceiver/internal/metadata"
 )
 
 type Config struct {
-	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
+	scraperhelper.ControllerConfig `mapstructure:",squash"`
 	// TODO: Use one of the configs from core.
 	// The target endpoint.
-	confignet.NetAddr `mapstructure:",squash"`
+	confignet.AddrConfig `mapstructure:",squash"`
 
 	// TODO allow users to add additional resource key value pairs?
 
@@ -33,7 +33,7 @@ type Config struct {
 	// to a Redis 6.0 instance, or greater, that is using the Redis ACL system.
 	Password configopaque.String `mapstructure:"password"`
 
-	TLS configtls.TLSClientSetting `mapstructure:"tls,omitempty"`
+	TLS configtls.ClientConfig `mapstructure:"tls,omitempty"`
 
 	MetricsBuilderConfig metadata.MetricsBuilderConfig `mapstructure:",squash"`
 }

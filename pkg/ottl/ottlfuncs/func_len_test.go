@@ -284,7 +284,7 @@ func Test_Len(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exprFunc := computeLen[any](&ottl.StandardGetSetter[any]{
-				Getter: func(context context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return tt.value, nil
 				},
 			})
@@ -303,7 +303,7 @@ func dummyMap(size int) map[string]any {
 	return m
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_Len_Error(t *testing.T) {
 	exprFunc := computeLen[any](&ottl.StandardGetSetter[any]{
 		Getter: func(context.Context, any) (any, error) {

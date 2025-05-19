@@ -13,12 +13,15 @@ import (
 
 	"go.opentelemetry.io/collector/client"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/receiver/receiverhelper"
 	"go.uber.org/zap"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/statsdreceiver/internal/protocol"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/statsdreceiver/internal/metadata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/statsdreceiver/internal/parser"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/statsdreceiver/internal/transport"
 )
 
@@ -26,31 +29,44 @@ var _ receiver.Metrics = (*statsdReceiver)(nil)
 
 // statsdReceiver implements the receiver.Metrics for StatsD protocol.
 type statsdReceiver struct {
-	settings receiver.CreateSettings
+	settings receiver.Settings
 	config   *Config
 
 	server       transport.Server
-	reporter     transport.Reporter
-	parser       protocol.Parser
+	reporter     *reporter
+	obsrecv      *receiverhelper.ObsReport
+	parser       parser.Parser
 	nextConsumer consumer.Metrics
 	cancel       context.CancelFunc
 }
 
 // newReceiver creates the StatsD receiver with the given parameters.
 func newReceiver(
-	set receiver.CreateSettings,
+	set receiver.Settings,
 	config Config,
 	nextConsumer consumer.Metrics,
 ) (receiver.Metrics, error) {
-	if nextConsumer == nil {
-		return nil, component.ErrNilNextConsumer
-	}
+	trans := transport.NewTransport(strings.ToLower(string(config.NetAddr.Transport)))
 
 	if config.NetAddr.Endpoint == "" {
-		config.NetAddr.Endpoint = "localhost:8125"
+		if trans == transport.UDS {
+			config.NetAddr.Endpoint = "/var/run/statsd-receiver.sock"
+		} else {
+			config.NetAddr.Endpoint = "localhost:8125"
+		}
 	}
 
 	rep, err := newReporter(set)
+	if err != nil {
+		return nil, err
+	}
+
+	obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
+		LongLivedCtx:           true,
+		ReceiverID:             set.ID,
+		ReceiverCreateSettings: set,
+		Transport:              trans.String(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -59,8 +75,9 @@ func newReceiver(
 		settings:     set,
 		config:       &config,
 		nextConsumer: nextConsumer,
+		obsrecv:      obsrecv,
 		reporter:     rep,
-		parser: &protocol.StatsDParser{
+		parser: &parser.StatsDParser{
 			BuildInfo: set.BuildInfo,
 		},
 	}
@@ -68,15 +85,17 @@ func newReceiver(
 }
 
 func buildTransportServer(config Config) (transport.Server, error) {
-	// TODO: Add TCP/unix socket transport implementations
-	switch strings.ToLower(config.NetAddr.Transport) {
-	case "", "udp":
-		return transport.NewUDPServer(config.NetAddr.Endpoint)
-	case "tcp":
-		return transport.NewTCPServer(config.NetAddr.Endpoint)
+	trans := transport.NewTransport(strings.ToLower(string(config.NetAddr.Transport)))
+	switch trans {
+	case transport.UDP, transport.UDP4, transport.UDP6:
+		return transport.NewUDPServer(trans, config.NetAddr.Endpoint)
+	case transport.TCP, transport.TCP4, transport.TCP6:
+		return transport.NewTCPServer(trans, config.NetAddr.Endpoint)
+	case transport.UDS:
+		return transport.NewUDSServer(trans, config.NetAddr.Endpoint, config.SocketPermissions)
 	}
 
-	return nil, fmt.Errorf("unsupported transport %q", config.NetAddr.Transport)
+	return nil, fmt.Errorf("unsupported transport %q", string(config.NetAddr.Transport))
 }
 
 // Start starts a UDP server that can process StatsD messages.
@@ -93,33 +112,51 @@ func (r *statsdReceiver) Start(ctx context.Context, host component.Host) error {
 		r.config.EnableMetricType,
 		r.config.EnableSimpleTags,
 		r.config.IsMonotonicCounter,
+		r.config.EnableIPOnlyAggregation,
 		r.config.TimerHistogramMapping,
 	)
 	if err != nil {
 		return err
 	}
 	go func() {
-		if err := r.server.ListenAndServe(r.parser, r.nextConsumer, r.reporter, transferChan); err != nil {
+		if err := r.server.ListenAndServe(r.nextConsumer, r.reporter, transferChan); err != nil {
 			if !errors.Is(err, net.ErrClosed) {
-				host.ReportFatalError(err)
+				componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(err))
 			}
 		}
 	}()
 	go func() {
+		var failCnt, successCnt int64
 		for {
 			select {
 			case <-ticker.C:
 				batchMetrics := r.parser.GetMetrics()
 				for _, batch := range batchMetrics {
 					batchCtx := client.NewContext(ctx, batch.Info)
-
-					if err := r.Flush(batchCtx, batch.Metrics, r.nextConsumer); err != nil {
+					numPoints := batch.Metrics.DataPointCount()
+					flushCtx := r.obsrecv.StartMetricsOp(batchCtx)
+					err := r.Flush(flushCtx, batch.Metrics, r.nextConsumer)
+					if err != nil {
 						r.reporter.OnDebugf("Error flushing metrics", zap.Error(err))
 					}
+					r.obsrecv.EndMetricsOp(flushCtx, metadata.Type.String(), numPoints, err)
 				}
 			case metric := <-transferChan:
-				if err := r.parser.Aggregate(metric.Raw, metric.Addr); err != nil {
-					r.reporter.OnDebugf("Error aggregating metric", zap.Error(err))
+				err := r.parser.Aggregate(metric.Raw, metric.Addr)
+				if err != nil {
+					failCnt++
+					if failCnt%100 == 0 {
+						r.reporter.RecordParseFailure()
+						failCnt = 0
+					}
+					r.reporter.OnDebugf("Error aggregating pmetric", zap.Error(err))
+				} else {
+					successCnt++
+					// Record every 100 to reduce overhead
+					if successCnt%100 == 0 {
+						r.reporter.RecordParseSuccess(successCnt)
+						successCnt = 0
+					}
 				}
 			case <-ctx.Done():
 				ticker.Stop()

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build linux || darwin || freebsd || openbsd || solaris
-// +build linux darwin freebsd openbsd solaris
 
 package filesystemscraper // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/filesystemscraper"
 
@@ -14,7 +13,7 @@ import (
 
 const fileSystemStatesLen = 3
 
-func (s *scraper) recordFileSystemUsageMetric(now pcommon.Timestamp, deviceUsages []*deviceUsage) {
+func (s *filesystemsScraper) recordFileSystemUsageMetric(now pcommon.Timestamp, deviceUsages []*deviceUsage) {
 	for _, deviceUsage := range deviceUsages {
 		s.mb.RecordSystemFilesystemUsageDataPoint(
 			now, int64(deviceUsage.usage.Used),
@@ -40,7 +39,7 @@ func (s *scraper) recordFileSystemUsageMetric(now pcommon.Timestamp, deviceUsage
 
 const systemSpecificMetricsLen = 1
 
-func (s *scraper) recordSystemSpecificMetrics(now pcommon.Timestamp, deviceUsages []*deviceUsage) {
+func (s *filesystemsScraper) recordSystemSpecificMetrics(now pcommon.Timestamp, deviceUsages []*deviceUsage) {
 	for _, deviceUsage := range deviceUsages {
 		s.mb.RecordSystemFilesystemInodesUsageDataPoint(
 			now, int64(deviceUsage.usage.InodesUsed), deviceUsage.partition.Device,

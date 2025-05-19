@@ -32,7 +32,7 @@ type zipkinExporter struct {
 	url            string
 	client         *http.Client
 	serializer     zipkinreporter.SpanSerializer
-	clientSettings *confighttp.HTTPClientSettings
+	clientSettings *confighttp.ClientConfig
 	settings       component.TelemetrySettings
 }
 
@@ -40,7 +40,7 @@ func createZipkinExporter(cfg *Config, settings component.TelemetrySettings) (*z
 	ze := &zipkinExporter{
 		defaultServiceName: cfg.DefaultServiceName,
 		url:                cfg.Endpoint,
-		clientSettings:     &cfg.HTTPClientSettings,
+		clientSettings:     &cfg.ClientConfig,
 		client:             nil,
 		settings:           settings,
 	}
@@ -58,8 +58,8 @@ func createZipkinExporter(cfg *Config, settings component.TelemetrySettings) (*z
 }
 
 // start creates the http client
-func (ze *zipkinExporter) start(_ context.Context, host component.Host) (err error) {
-	ze.client, err = ze.clientSettings.ToClient(host, ze.settings)
+func (ze *zipkinExporter) start(ctx context.Context, host component.Host) (err error) {
+	ze.client, err = ze.clientSettings.ToClient(ctx, host, ze.settings)
 	return
 }
 
@@ -74,7 +74,7 @@ func (ze *zipkinExporter) pushTraces(ctx context.Context, td ptrace.Traces) erro
 		return consumererror.NewPermanent(fmt.Errorf("failed to push trace data via Zipkin exporter: %w", err))
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", ze.url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ze.url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to push trace data via Zipkin exporter: %w", err)
 	}

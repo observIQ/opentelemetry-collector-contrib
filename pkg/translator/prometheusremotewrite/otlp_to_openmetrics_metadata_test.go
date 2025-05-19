@@ -93,6 +93,50 @@ func TestOtelMetricTypeToPromMetricType(t *testing.T) {
 			},
 			want: prompb.MetricMetadata_SUMMARY,
 		},
+		{
+			name: "unknown from metadata",
+			metric: func() pmetric.Metric {
+				metric := pmetric.NewMetric()
+				metric.SetName("test_sum")
+				metric.Metadata().PutStr(prometheustranslator.MetricMetadataTypeKey, "unknown")
+
+				dp := metric.SetEmptyGauge().DataPoints().AppendEmpty()
+				dp.SetDoubleValue(1)
+
+				return metric
+			},
+			want: prompb.MetricMetadata_UNKNOWN,
+		},
+		{
+			name: "info from metadata",
+			metric: func() pmetric.Metric {
+				metric := pmetric.NewMetric()
+				metric.SetName("test_sum")
+				metric.Metadata().PutStr(prometheustranslator.MetricMetadataTypeKey, "info")
+				metric.SetEmptySum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+				metric.SetEmptySum().SetIsMonotonic(false)
+				dp := metric.Sum().DataPoints().AppendEmpty()
+				dp.SetDoubleValue(1)
+
+				return metric
+			},
+			want: prompb.MetricMetadata_INFO,
+		},
+		{
+			name: "stateset from metadata",
+			metric: func() pmetric.Metric {
+				metric := pmetric.NewMetric()
+				metric.SetName("test_sum")
+				metric.Metadata().PutStr(prometheustranslator.MetricMetadataTypeKey, "stateset")
+				metric.SetEmptySum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+				metric.SetEmptySum().SetIsMonotonic(false)
+				dp := metric.Sum().DataPoints().AppendEmpty()
+				dp.SetDoubleValue(1)
+
+				return metric
+			},
+			want: prompb.MetricMetadata_STATESET,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -123,6 +167,7 @@ func TestOtelMetricsToMetadata(t *testing.T) {
 						pcommon.NewMap(),
 						1, ts,
 					), "", false),
+					Unit: "bytes_per_second",
 					Help: "gauge description",
 				},
 				{
@@ -132,6 +177,7 @@ func TestOtelMetricsToMetadata(t *testing.T) {
 						pcommon.NewMap(),
 						1, ts,
 					), "", false),
+					Unit: "per_second",
 					Help: "gauge description",
 				},
 				{
@@ -141,6 +187,7 @@ func TestOtelMetricsToMetadata(t *testing.T) {
 						pcommon.NewMap(),
 						1, ts,
 					), "", false),
+					Unit: "seconds",
 					Help: "sum description",
 				},
 				{
@@ -150,6 +197,7 @@ func TestOtelMetricsToMetadata(t *testing.T) {
 						pcommon.NewMap(),
 						1, ts,
 					), "", false),
+					Unit: "connections",
 					Help: "sum description",
 				},
 				{
@@ -159,6 +207,7 @@ func TestOtelMetricsToMetadata(t *testing.T) {
 						pcommon.NewMap(),
 						1, ts,
 					), "", false),
+					Unit: "",
 					Help: "histogram description",
 				},
 				{
@@ -168,6 +217,7 @@ func TestOtelMetricsToMetadata(t *testing.T) {
 						pcommon.NewMap(),
 						1, ts,
 					), "", false),
+					Unit: "",
 					Help: "summary description",
 				},
 			},
@@ -179,10 +229,10 @@ func TestOtelMetricsToMetadata(t *testing.T) {
 
 			for i := 0; i < len(metaData); i++ {
 				assert.Equal(t, tt.want[i].Type, metaData[i].Type)
+				assert.Equal(t, tt.want[i].Unit, metaData[i].Unit)
 				assert.Equal(t, tt.want[i].MetricFamilyName, metaData[i].MetricFamilyName)
 				assert.Equal(t, tt.want[i].Help, metaData[i].Help)
 			}
-
 		})
 	}
 }
@@ -191,17 +241,18 @@ func GenerateMetricsAllTypesNoDataPointsHelp() pmetric.Metrics {
 	md := testdata.GenerateMetricsOneEmptyInstrumentationLibrary()
 	ilm0 := md.ResourceMetrics().At(0).ScopeMetrics().At(0)
 	ms := ilm0.Metrics()
-	initMetric(ms.AppendEmpty(), testdata.TestGaugeDoubleMetricName, pmetric.MetricTypeGauge, "gauge description")
-	initMetric(ms.AppendEmpty(), testdata.TestGaugeIntMetricName, pmetric.MetricTypeGauge, "gauge description")
-	initMetric(ms.AppendEmpty(), testdata.TestSumDoubleMetricName, pmetric.MetricTypeSum, "sum description")
-	initMetric(ms.AppendEmpty(), testdata.TestSumIntMetricName, pmetric.MetricTypeSum, "sum description")
-	initMetric(ms.AppendEmpty(), testdata.TestDoubleHistogramMetricName, pmetric.MetricTypeHistogram, "histogram description")
-	initMetric(ms.AppendEmpty(), testdata.TestDoubleSummaryMetricName, pmetric.MetricTypeSummary, "summary description")
+	initMetric(ms.AppendEmpty(), testdata.TestGaugeDoubleMetricName, pmetric.MetricTypeGauge, "By/s", "gauge description")
+	initMetric(ms.AppendEmpty(), testdata.TestGaugeIntMetricName, pmetric.MetricTypeGauge, "{objects}/s", "gauge description")
+	initMetric(ms.AppendEmpty(), testdata.TestSumDoubleMetricName, pmetric.MetricTypeSum, "s", "sum description")
+	initMetric(ms.AppendEmpty(), testdata.TestSumIntMetricName, pmetric.MetricTypeSum, "connections", "sum description")
+	initMetric(ms.AppendEmpty(), testdata.TestDoubleHistogramMetricName, pmetric.MetricTypeHistogram, "1", "histogram description")
+	initMetric(ms.AppendEmpty(), testdata.TestDoubleSummaryMetricName, pmetric.MetricTypeSummary, "", "summary description")
 	return md
 }
 
-func initMetric(m pmetric.Metric, name string, ty pmetric.MetricType, desc string) {
+func initMetric(m pmetric.Metric, name string, ty pmetric.MetricType, unit string, desc string) {
 	m.SetName(name)
+	m.SetUnit(unit)
 	m.SetDescription(desc)
 	//exhaustive:enforce
 	switch ty {

@@ -36,6 +36,7 @@ type MetricsConverter struct {
 	datapointValidator   *datapointValidator
 	translator           *signalfx.FromTranslator
 	dropHistogramBuckets bool
+	processHistograms    bool
 }
 
 // NewMetricsConverter creates a MetricsConverter from the passed in logger and
@@ -47,7 +48,9 @@ func NewMetricsConverter(
 	excludes []dpfilters.MetricFilter,
 	includes []dpfilters.MetricFilter,
 	nonAlphanumericDimChars string,
-	dropHistogramBuckets bool) (*MetricsConverter, error) {
+	dropHistogramBuckets bool,
+	processHistograms bool,
+) (*MetricsConverter, error) {
 	fs, err := dpfilters.NewFilterSet(excludes, includes)
 	if err != nil {
 		return nil, err
@@ -59,11 +62,19 @@ func NewMetricsConverter(
 		datapointValidator:   newDatapointValidator(logger, nonAlphanumericDimChars),
 		translator:           &signalfx.FromTranslator{},
 		dropHistogramBuckets: dropHistogramBuckets,
+		processHistograms:    processHistograms,
 	}, nil
 }
 
-// MetricsToSignalFxV2 converts the passed in MetricsData to SFx datapoints,
-// returning those datapoints and the number of time series that had to be
+func (c *MetricsConverter) Start() {
+	if c.metricTranslator != nil {
+		c.metricTranslator.Start()
+	}
+}
+
+// MetricsToSignalFxV2 converts the passed in MetricsData to SFx datapoints
+// and if processHistograms is set, histogram metrics are not converted to SFx format.
+// It returns those datapoints and the number of time series that had to be
 // dropped because of errors or warnings.
 func (c *MetricsConverter) MetricsToSignalFxV2(md pmetric.Metrics) []*sfxpb.DataPoint {
 	var sfxDataPoints []*sfxpb.DataPoint
@@ -77,7 +88,7 @@ func (c *MetricsConverter) MetricsToSignalFxV2(md pmetric.Metrics) []*sfxpb.Data
 			var initialDps []*sfxpb.DataPoint
 			for k := 0; k < ilm.Metrics().Len(); k++ {
 				currentMetric := ilm.Metrics().At(k)
-				dps := c.translator.FromMetric(currentMetric, extraDimensions, c.dropHistogramBuckets)
+				dps := c.translator.FromMetric(currentMetric, extraDimensions, c.dropHistogramBuckets, c.processHistograms)
 				initialDps = append(initialDps, dps...)
 			}
 
@@ -133,18 +144,17 @@ func resourceToDimensions(res pcommon.Resource) []*sfxpb.Dimension {
 		})
 	}
 
-	res.Attributes().Range(func(k string, val pcommon.Value) bool {
+	for k, val := range res.Attributes().All() {
 		// Never send the SignalFX token
 		if k == splunk.SFxAccessTokenLabel {
-			return true
+			continue
 		}
 
 		dims = append(dims, &sfxpb.Dimension{
 			Key:   k,
 			Value: val.AsString(),
 		})
-		return true
-	})
+	}
 
 	return dims
 }
@@ -155,6 +165,12 @@ func (c *MetricsConverter) ConvertDimension(dim string) string {
 		res = c.metricTranslator.translateDimension(dim)
 	}
 	return filterKeyChars(res, c.datapointValidator.nonAlphanumericDimChars)
+}
+
+func (c *MetricsConverter) Shutdown() {
+	if c.metricTranslator != nil {
+		c.metricTranslator.Shutdown()
+	}
 }
 
 // Values obtained from https://dev.splunk.com/observability/docs/datamodel/ingest#Criteria-for-metric-and-dimension-names-and-values
@@ -237,7 +253,7 @@ func (dpv *datapointValidator) isValidMetricName(name string) bool {
 
 func (dpv *datapointValidator) isValidNumberOfDimension(dp *sfxpb.DataPoint) bool {
 	if len(dp.Dimensions) > maxNumberOfDimensions {
-		dpv.logger.Debug("dropping datapoint",
+		dpv.logger.Warn("dropping datapoint",
 			zap.String("reason", invalidNumberOfDimensions),
 			zap.Stringer("datapoint", dp),
 			zap.Int("number_of_dimensions", len(dp.Dimensions)),

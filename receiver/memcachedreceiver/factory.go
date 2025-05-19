@@ -11,7 +11,8 @@ import (
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/memcachedreceiver/internal/metadata"
 )
@@ -31,13 +32,13 @@ func NewFactory() receiver.Factory {
 }
 
 func createDefaultConfig() component.Config {
-	cfg := scraperhelper.NewDefaultScraperControllerSettings(metadata.Type)
+	cfg := scraperhelper.NewDefaultControllerConfig()
 	cfg.CollectionInterval = defaultCollectionInterval
 	cfg.Timeout = defaultTimeout
 
 	return &Config{
-		ScraperControllerSettings: cfg,
-		NetAddr: confignet.NetAddr{
+		ControllerConfig: cfg,
+		AddrConfig: confignet.AddrConfig{
 			Endpoint: defaultEndpoint,
 		},
 		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
@@ -46,7 +47,7 @@ func createDefaultConfig() component.Config {
 
 func createMetricsReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	rConf component.Config,
 	consumer consumer.Metrics,
 ) (receiver.Metrics, error) {
@@ -54,13 +55,13 @@ func createMetricsReceiver(
 
 	ms := newMemcachedScraper(params, cfg)
 
-	scraper, err := scraperhelper.NewScraper(metadata.Type, ms.scrape)
+	scraper, err := scraper.NewMetrics(ms.scrape)
 	if err != nil {
 		return nil, err
 	}
 
-	return scraperhelper.NewScraperControllerReceiver(
-		&cfg.ScraperControllerSettings, params, consumer,
-		scraperhelper.AddScraper(scraper),
+	return scraperhelper.NewMetricsController(
+		&cfg.ControllerConfig, params, consumer,
+		scraperhelper.AddScraper(metadata.Type, scraper),
 	)
 }

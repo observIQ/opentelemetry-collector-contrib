@@ -29,10 +29,10 @@ main () {
     # is only available through the API. To cut down on API calls to GitHub,
     # we use the latest reviews to determine which users to filter out.
     JSON=$(gh pr view "${PR}" --json "files,author,latestReviews" | tr -dc '[:print:]' | sed -E 's/\\[a-z]//g')
-    AUTHOR=$(printf "${JSON}"| jq -r '.author.login')
-    FILES=$(printf "${JSON}"| jq -r '.files[].path')
-    REVIEW_LOGINS=$(printf "${JSON}"| jq -r '.latestReviews[].author.login')
-    COMPONENTS=$(bash "${CUR_DIRECTORY}/get-components.sh")
+    AUTHOR=$(echo -n "${JSON}"| jq -r '.author.login')
+    FILES=$(echo -n "${JSON}"| jq -r '.files[].path')
+    REVIEW_LOGINS=$(echo -n "${JSON}"| jq -r '.latestReviews[].author.login')
+    COMPONENTS=$(bash "${CUR_DIRECTORY}/get-components.sh" | tac) # Reversed so we visit subdirectories first
     REVIEWERS=""
     LABELS=""
     declare -A PROCESSED_COMPONENTS
@@ -59,14 +59,14 @@ main () {
         # won't be checked against the remaining components in the components
         # list. This provides a meaningful speedup in practice.
         for FILE in ${FILES}; do
-            MATCH=$(echo "${FILE}" | grep -E "^${COMPONENT}" || true)
+            MATCH=$(echo -n "${FILE}" | grep -E "^${COMPONENT}" || true)
 
             if [[ -z "${MATCH}" ]]; then
                 continue
             fi
 
             # If we match a file with a component we don't need to process the file again.
-            FILES=$(printf "${FILES}" | grep -v "${FILE}")
+            FILES=$(echo -n "${FILES}" | grep -v "${FILE}")
 
             if [[ -v PROCESSED_COMPONENTS["${COMPONENT}"] ]]; then
                 continue
@@ -87,23 +87,26 @@ main () {
                 if [[ -n "${REVIEWERS}" ]]; then
                     REVIEWERS+=","
                 fi
-                REVIEWERS+=$(echo "${OWNER}" | sed -E 's/@(.+)/"\1"/')
+                REVIEWERS+=$(echo -n "${OWNER}" | sed -E 's/@(.+)/"\1"/')
             done
 
-            # Convert the CODEOWNERS entry to a label
-            COMPONENT_NAME=$(echo "${COMPONENT}" | sed -E 's%^(.+)/(.+)\1%\1/\2%')
+            LABEL_NAME="$(awk -v path="${COMPONENT}" '$1 == path {print $2}' .github/component_labels.txt)"
 
-            if (( "${#COMPONENT_NAME}" > 50 )); then
-                echo "'${COMPONENT_NAME}' exceeds GitHub's 50-character limit on labels, skipping adding label"
+            if (( "${#LABEL_NAME}" > 50 )); then
+                echo "'${LABEL_NAME}' exceeds GitHub's 50-character limit on labels, skipping adding label"
                 continue
             fi
 
             if [[ -n "${LABELS}" ]]; then
                 LABELS+=","
             fi
-            LABELS+="${COMPONENT_NAME}"
+            LABELS+="${LABEL_NAME}"
         done
     done
+
+    if [[ $LABELS =~ "receiver/sqlserver" ]]; then
+      LABELS+=",Run Windows"
+    fi
 
     if [[ -n "${LABELS}" ]]; then
         echo "Adding labels: ${LABELS}"

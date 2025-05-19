@@ -28,9 +28,9 @@ func createDefaultConfig() component.Config {
 	return &cfg
 }
 
-func createExtension(_ context.Context, params extension.CreateSettings, cfg component.Config) (extension.Extension, error) {
+func createExtension(ctx context.Context, params extension.Settings, cfg component.Config) (extension.Extension, error) {
 	sdCfg := cfg.(*Config)
-	fetcher, err := newTaskFetcherFromConfig(*sdCfg, params.Logger)
+	fetcher, err := newTaskFetcherFromConfig(ctx, *sdCfg, params.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("init fetcher failed: %w", err)
 	}
@@ -38,13 +38,13 @@ func createExtension(_ context.Context, params extension.CreateSettings, cfg com
 }
 
 // fetcher is mock in unit test or AWS API client
-func createExtensionWithFetcher(params extension.CreateSettings, sdCfg *Config, fetcher *taskFetcher) (extension.Extension, error) {
+func createExtensionWithFetcher(params extension.Settings, sdCfg *Config, fetcher *taskFetcher) (extension.Extension, error) {
 	sd, err := newDiscovery(*sdCfg, serviceDiscoveryOptions{Logger: params.Logger, Fetcher: fetcher})
 	if err != nil {
 		return nil, err
 	}
 	return &ecsObserver{
-		logger: params.Logger,
-		sd:     sd,
+		telemetrySettings: params.TelemetrySettings,
+		sd:                sd,
 	}, nil
 }

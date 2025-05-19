@@ -6,7 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type      = component.MustNewType("opamp")
+	ScopeName = "github.com/open-telemetry/opentelemetry-collector-contrib/extension/opampextension"
+)
+
 const (
-	Type               = "opamp"
-	ExtensionStability = component.StabilityLevelDevelopment
+	ExtensionStability = component.StabilityLevelAlpha
 )

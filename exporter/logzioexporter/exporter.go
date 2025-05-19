@@ -11,21 +11,23 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strconv"
 	"time"
 
 	"github.com/hashicorp/go-hclog"
-	"github.com/jaegertracing/jaeger/model"
-	"github.com/jaegertracing/jaeger/pkg/cache"
+	"github.com/jaegertracing/jaeger-idl/model/v1"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/logzioexporter/internal/cache"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/jaeger"
 )
 
@@ -44,7 +46,7 @@ type logzioExporter struct {
 	serviceCache cache.Cache
 }
 
-func newLogzioExporter(cfg *Config, params exporter.CreateSettings) (*logzioExporter, error) {
+func newLogzioExporter(cfg *Config, params exporter.Settings) (*logzioExporter, error) {
 	logger := hclog2ZapLogger{
 		Zap:  params.Logger,
 		name: loggerName,
@@ -65,53 +67,54 @@ func newLogzioExporter(cfg *Config, params exporter.CreateSettings) (*logzioExpo
 	}, nil
 }
 
-func newLogzioTracesExporter(config *Config, set exporter.CreateSettings) (exporter.Traces, error) {
+func newLogzioTracesExporter(config *Config, set exporter.Settings) (exporter.Traces, error) {
 	exporter, err := newLogzioExporter(config, set)
 	if err != nil {
 		return nil, err
 	}
-	exporter.config.HTTPClientSettings.Endpoint, err = generateEndpoint(config)
+	exporter.config.Endpoint, err = generateEndpoint(config)
 	if err != nil {
 		return nil, err
 	}
 	config.checkAndWarnDeprecatedOptions(exporter.logger)
-	return exporterhelper.NewTracesExporter(
+	return exporterhelper.NewTraces(
 		context.TODO(),
 		set,
 		config,
 		exporter.pushTraceData,
 		exporterhelper.WithStart(exporter.start),
 		// disable since we rely on http.Client timeout logic.
-		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}),
+		exporterhelper.WithTimeout(exporterhelper.TimeoutConfig{Timeout: 0}),
 		exporterhelper.WithQueue(config.QueueSettings),
-		exporterhelper.WithRetry(config.RetrySettings),
+		exporterhelper.WithRetry(config.BackOffConfig),
 	)
 }
-func newLogzioLogsExporter(config *Config, set exporter.CreateSettings) (exporter.Logs, error) {
+
+func newLogzioLogsExporter(config *Config, set exporter.Settings) (exporter.Logs, error) {
 	exporter, err := newLogzioExporter(config, set)
 	if err != nil {
 		return nil, err
 	}
-	exporter.config.HTTPClientSettings.Endpoint, err = generateEndpoint(config)
+	exporter.config.Endpoint, err = generateEndpoint(config)
 	if err != nil {
 		return nil, err
 	}
 	config.checkAndWarnDeprecatedOptions(exporter.logger)
-	return exporterhelper.NewLogsExporter(
+	return exporterhelper.NewLogs(
 		context.TODO(),
 		set,
 		config,
 		exporter.pushLogData,
 		exporterhelper.WithStart(exporter.start),
 		// disable since we rely on http.Client timeout logic.
-		exporterhelper.WithTimeout(exporterhelper.TimeoutSettings{Timeout: 0}),
+		exporterhelper.WithTimeout(exporterhelper.TimeoutConfig{Timeout: 0}),
 		exporterhelper.WithQueue(config.QueueSettings),
-		exporterhelper.WithRetry(config.RetrySettings),
+		exporterhelper.WithRetry(config.BackOffConfig),
 	)
 }
 
-func (exporter *logzioExporter) start(_ context.Context, host component.Host) error {
-	client, err := exporter.config.HTTPClientSettings.ToClient(host, exporter.settings)
+func (exporter *logzioExporter) start(ctx context.Context, host component.Host) error {
+	client, err := exporter.config.ToClient(ctx, host, exporter.settings)
 	if err != nil {
 		return err
 	}
@@ -127,33 +130,60 @@ func (exporter *logzioExporter) pushLogData(ctx context.Context, ld plog.Logs) e
 		scopeLogs := resourceLogs.At(i).ScopeLogs()
 		for j := 0; j < scopeLogs.Len(); j++ {
 			logRecords := scopeLogs.At(j).LogRecords()
+			scope := scopeLogs.At(j).Scope()
 			for k := 0; k < logRecords.Len(); k++ {
 				log := logRecords.At(k)
-				jsonLog := convertLogRecordToJSON(log, resource)
-				logzioLog, err := json.Marshal(jsonLog)
+				details := mergeMapEntries(resource.Attributes(), scope.Attributes(), log.Attributes())
+				details.PutStr(`scopeName`, scope.Name())
+				jsonLog, err := json.Marshal(convertLogRecordToJSON(log, details))
 				if err != nil {
 					return err
 				}
-				_, err = dataBuffer.Write(append(logzioLog, '\n'))
+				_, err = dataBuffer.Write(append(jsonLog, '\n'))
 				if err != nil {
 					return err
 				}
 			}
 		}
 	}
-	err := exporter.export(ctx, exporter.config.HTTPClientSettings.Endpoint, dataBuffer.Bytes())
+	err := exporter.export(ctx, exporter.config.Endpoint, dataBuffer.Bytes())
 	// reset the data buffer after each export to prevent duplicated data
 	dataBuffer.Reset()
 	return err
 }
 
+func mergeMapEntries(maps ...pcommon.Map) pcommon.Map {
+	res := map[string]any{}
+	for _, m := range maps {
+		for key, val := range m.AsRaw() {
+			// Check if the key was already added
+			if resMapValue, keyExists := res[key]; keyExists {
+				rt := reflect.TypeOf(resMapValue)
+				switch rt.Kind() {
+				case reflect.Slice:
+					res[key] = append(resMapValue.([]any), val)
+				default:
+					// Create a new slice and append values if the key exists:
+					valslice := []any{}
+					res[key] = append(valslice, resMapValue, val)
+				}
+			} else {
+				res[key] = val
+			}
+		}
+	}
+	pcommonRes := pcommon.NewMap()
+	err := pcommonRes.FromRaw(res)
+	if err != nil {
+		return pcommon.Map{}
+	}
+	return pcommonRes
+}
+
 func (exporter *logzioExporter) pushTraceData(ctx context.Context, traces ptrace.Traces) error {
 	// a buffer to store logzio span and services bytes
 	var dataBuffer bytes.Buffer
-	batches, err := jaeger.ProtoFromTraces(traces)
-	if err != nil {
-		return err
-	}
+	batches := jaeger.ProtoFromTraces(traces)
 	for _, batch := range batches {
 		for _, span := range batch.Spans {
 			span.Process = batch.Process
@@ -163,7 +193,7 @@ func (exporter *logzioExporter) pushTraceData(ctx context.Context, traces ptrace
 			if transformErr != nil {
 				return transformErr
 			}
-			_, err = dataBuffer.Write(append(logzioSpan, '\n'))
+			_, err := dataBuffer.Write(append(logzioSpan, '\n'))
 			if err != nil {
 				return err
 			}
@@ -188,7 +218,7 @@ func (exporter *logzioExporter) pushTraceData(ctx context.Context, traces ptrace
 			}
 		}
 	}
-	err = exporter.export(ctx, exporter.config.HTTPClientSettings.Endpoint, dataBuffer.Bytes())
+	err := exporter.export(ctx, exporter.config.Endpoint, dataBuffer.Bytes())
 	// reset the data buffer after each export to prevent duplicated data
 	dataBuffer.Reset()
 	return err

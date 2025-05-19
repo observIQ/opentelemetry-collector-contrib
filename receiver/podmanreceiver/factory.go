@@ -4,13 +4,11 @@
 package podmanreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/podmanreceiver"
 
 import (
-	"context"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/podmanreceiver/internal/metadata"
 )
@@ -22,37 +20,19 @@ const (
 func NewFactory() receiver.Factory {
 	return receiver.NewFactory(
 		metadata.Type,
-		createDefaultReceiverConfig,
+		createDefaultConfig,
 		receiver.WithMetrics(createMetricsReceiver, metadata.MetricsStability))
 }
 
-func createDefaultConfig() *Config {
-	cfg := scraperhelper.NewDefaultScraperControllerSettings(metadata.Type)
+func createDefaultConfig() component.Config {
+	cfg := scraperhelper.NewDefaultControllerConfig()
 	cfg.CollectionInterval = 10 * time.Second
 	cfg.Timeout = 5 * time.Second
 
 	return &Config{
-		ScraperControllerSettings: cfg,
-		Endpoint:                  "unix:///run/podman/podman.sock",
-		APIVersion:                defaultAPIVersion,
+		ControllerConfig:     cfg,
+		Endpoint:             "unix:///run/podman/podman.sock",
+		APIVersion:           defaultAPIVersion,
+		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
 	}
-}
-
-func createDefaultReceiverConfig() component.Config {
-	return createDefaultConfig()
-}
-
-func createMetricsReceiver(
-	ctx context.Context,
-	params receiver.CreateSettings,
-	config component.Config,
-	consumer consumer.Metrics,
-) (receiver.Metrics, error) {
-	podmanConfig := config.(*Config)
-	dsr, err := newMetricsReceiver(ctx, params, podmanConfig, consumer, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return dsr, nil
 }

@@ -10,13 +10,13 @@ import (
 	"sync"
 	"time"
 
-	jaegerproto "github.com/jaegertracing/jaeger/proto-gen/api_v2"
+	jaegerproto "github.com/jaegertracing/jaeger-idl/proto-gen/api_v2"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configgrpc"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/exporter/exportertest"
@@ -48,7 +48,7 @@ func NewJaegerGRPCDataSender(host string, port int) testbed.TraceDataSender {
 }
 
 func (je *jaegerGRPCDataSender) Start() error {
-	params := exportertest.NewNopCreateSettings()
+	params := exportertest.NewNopSettings(exportertest.NopType)
 	params.Logger = zap.L()
 
 	exp, err := je.newTracesExporter(params)
@@ -74,11 +74,11 @@ func (je *jaegerGRPCDataSender) ProtocolName() string {
 
 // Config defines configuration for Jaeger gRPC exporter.
 type jaegerConfig struct {
-	exporterhelper.TimeoutSettings `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
-	exporterhelper.QueueSettings   `mapstructure:"sending_queue"`
-	exporterhelper.RetrySettings   `mapstructure:"retry_on_failure"`
+	TimeoutSettings           exporterhelper.TimeoutConfig    `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
+	QueueSettings             exporterhelper.QueueBatchConfig `mapstructure:"sending_queue"`
+	configretry.BackOffConfig `mapstructure:"retry_on_failure"`
 
-	configgrpc.GRPCClientSettings `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
+	configgrpc.ClientConfig `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
 }
 
 var _ component.Config = (*jaegerConfig)(nil)
@@ -94,10 +94,10 @@ func (cfg *jaegerConfig) Validate() error {
 // newTracesExporter returns a new Jaeger gRPC exporter.
 // The exporter name is the name to be used in the observability of the exporter.
 // The collectorEndpoint should be of the form "hostname:14250" (a gRPC target).
-func (je *jaegerGRPCDataSender) newTracesExporter(set exporter.CreateSettings) (exporter.Traces, error) {
+func (je *jaegerGRPCDataSender) newTracesExporter(set exporter.Settings) (exporter.Traces, error) {
 	cfg := jaegerConfig{}
 	cfg.Endpoint = je.GetEndpoint().String()
-	cfg.TLSSetting = configtls.TLSClientSetting{
+	cfg.TLSSetting = configtls.ClientConfig{
 		Insecure: true,
 	}
 
@@ -108,10 +108,10 @@ func (je *jaegerGRPCDataSender) newTracesExporter(set exporter.CreateSettings) (
 		waitForReady:              cfg.WaitForReady,
 		connStateReporterInterval: time.Second,
 		stopCh:                    make(chan struct{}),
-		clientSettings:            &cfg.GRPCClientSettings,
+		clientSettings:            &cfg.ClientConfig,
 	}
 
-	return exporterhelper.NewTracesExporter(
+	return exporterhelper.NewTraces(
 		context.TODO(), set, cfg, s.pushTraces,
 		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
 		exporterhelper.WithStart(s.start),
@@ -134,7 +134,7 @@ type protoGRPCSender struct {
 	stopCh         chan struct{}
 	stopped        bool
 	stopLock       sync.Mutex
-	clientSettings *configgrpc.GRPCClientSettings
+	clientSettings *configgrpc.ClientConfig
 }
 
 type stateReporter interface {
@@ -145,21 +145,16 @@ func (s *protoGRPCSender) pushTraces(
 	ctx context.Context,
 	td ptrace.Traces,
 ) error {
-
-	batches, err := jaeger.ProtoFromTraces(td)
-	if err != nil {
-		return consumererror.NewPermanent(fmt.Errorf("failed to push trace data via Jaeger exporter: %w", err))
-	}
+	batches := jaeger.ProtoFromTraces(td)
 
 	if s.metadata.Len() > 0 {
 		ctx = metadata.NewOutgoingContext(ctx, s.metadata)
 	}
 
 	for _, batch := range batches {
-		_, err = s.client.PostSpans(
+		_, err := s.client.PostSpans(
 			ctx,
 			&jaegerproto.PostSpansRequest{Batch: *batch}, grpc.WaitForReady(s.waitForReady))
-
 		if err != nil {
 			s.settings.Logger.Debug("failed to push trace data to Jaeger", zap.Error(err))
 			return fmt.Errorf("failed to push trace data via Jaeger exporter: %w", err)
@@ -179,7 +174,7 @@ func (s *protoGRPCSender) shutdown(context.Context) error {
 
 func (s *protoGRPCSender) start(ctx context.Context, host component.Host) error {
 	if s.clientSettings == nil {
-		return fmt.Errorf("client settings not found")
+		return errors.New("client settings not found")
 	}
 	conn, err := s.clientSettings.ToClientConn(ctx, host, s.settings)
 	if err != nil {

@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/confmap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/timeutils"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/entry"
@@ -201,7 +203,7 @@ func TestTimeParser(t *testing.T) {
 		{
 			name:           "oracle",
 			sample:         "2019-10-15T10:42:01.900436-10:00",
-			expected:       time.Date(2019, time.October, 15, 10, 42, 01, 900436*1000, hst),
+			expected:       time.Date(2019, time.October, 15, 10, 42, 0o1, 900436*1000, hst),
 			gotimeLayout:   "2006-01-02T15:04:05.999999-07:00",
 			strptimeLayout: "%Y-%m-%dT%H:%M:%S.%f%j",
 		},
@@ -237,7 +239,7 @@ func TestTimeParser(t *testing.T) {
 		{
 			name:           "puppet",
 			sample:         "Aug  4 03:26:02",
-			expected:       time.Date(timeutils.Now().Year(), time.August, 4, 3, 26, 02, 0, time.Local),
+			expected:       time.Date(timeutils.Now().Year(), time.August, 4, 3, 26, 0o2, 0, time.Local),
 			gotimeLayout:   "Jan _2 15:04:05",
 			strptimeLayout: "%b %e %H:%M:%S",
 		},
@@ -545,7 +547,7 @@ func runLossyTimeParseTest(timeParser *TimeParser, ent *entry.Entry, buildErr bo
 			require.True(t, expected.Equal(ent.Timestamp))
 		} else {
 			diff := time.Duration(math.Abs(float64(expected.Sub(ent.Timestamp))))
-			require.True(t, diff <= maxLoss)
+			require.LessOrEqual(t, diff, maxLoss)
 		}
 	}
 }
@@ -569,8 +571,21 @@ func TestSetInvalidLocation(t *testing.T) {
 	tp := NewTimeParser()
 	tp.Location = "not_a_location"
 	err := tp.setLocation()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to load location "+"not_a_location")
+	require.ErrorContains(t, err, "failed to load location "+"not_a_location")
+}
+
+func TestUnmarshal(t *testing.T) {
+	conf := confmap.NewFromStringMap(map[string]any{
+		"location": "America/Shiprock",
+	})
+	tp := TimeParser{
+		Layout: "1/2/2006 15:04:05",
+	}
+
+	require.NoError(t, tp.Unmarshal(conf))
+	assert.Equal(t, "America/Shiprock", tp.Location)
+	assert.Equal(t, "strptime", tp.LayoutType)
+	assert.Equal(t, "1/2/2006 15:04:05", tp.Layout)
 }
 
 func TestUnmarshalTimeConfig(t *testing.T) {

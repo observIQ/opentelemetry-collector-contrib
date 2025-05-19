@@ -1,5 +1,9 @@
 resourceLogs:
-  - resource: {}
+  - resource:
+      attributes:
+        - key: k8s.namespace.name
+          value:
+            stringValue: default
     scopeLogs:
       - scope: {}
         logRecords:
@@ -29,7 +33,7 @@ resourceLogs:
                               stringValue: test
                           - key: message
                             value:
-                              stringValue: test event
+                              stringValue: test event of type warning
                           - key: source
                             value:
                               kvlistValue: {}
@@ -112,7 +116,7 @@ resourceLogs:
                               stringValue: Warning
                           - key: reason
                             value:
-                              stringValue: Test event of type warning
+                              stringValue: TestEvent
                           - key: kind
                             value:
                               stringValue: Event

@@ -37,12 +37,12 @@ exporters:
       initial_interval: 5s
       max_interval: 30s
       max_elapsed_time: 300s
+    username: default
+    password: default
 extensions:
   health_check:
   pprof:
   zpages:
-  memory_ballast:
-    size_mib: 1000
 
 service:
   extensions: [ pprof, zpages, health_check ]

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build windows
-// +build windows
 
 package windowsperfcountersreceiver
 
@@ -14,7 +13,7 @@ import (
 	"go.opentelemetry.io/collector/consumer/consumertest"
 )
 
-func TestCreateMetricsReceiver(t *testing.T) {
+func TestCreateMetrics(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 	cfg.(*Config).PerfCounters = []ObjectConfig{
@@ -32,7 +31,7 @@ func TestCreateMetricsReceiver(t *testing.T) {
 		},
 	}
 
-	mReceiver, err := factory.CreateMetricsReceiver(context.Background(), creationParams, cfg, consumertest.NewNop())
+	mReceiver, err := factory.CreateMetrics(context.Background(), creationParams, cfg, consumertest.NewNop())
 
 	assert.NoError(t, err)
 	assert.NotNil(t, mReceiver)

@@ -5,6 +5,7 @@ package mongodbreceiver // import "github.com/open-telemetry/opentelemetry-colle
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
@@ -12,10 +13,15 @@ import (
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbreceiver/internal/metadata"
 )
+
+const defaultMongoDBPort = 27017
+
+var defaultEndpoint = "localhost:" + strconv.Itoa(defaultMongoDBPort)
 
 // NewFactory creates a factory for mongodb receiver.
 func NewFactory() receiver.Factory {
@@ -27,36 +33,37 @@ func NewFactory() receiver.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
-		Timeout:                   time.Minute,
-		Hosts: []confignet.NetAddr{
+		ControllerConfig: scraperhelper.NewDefaultControllerConfig(),
+		Timeout:          time.Minute,
+		Hosts: []confignet.TCPAddrConfig{
 			{
-				Endpoint: "localhost:27017",
+				Endpoint: defaultEndpoint,
 			},
 		},
 		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
-		TLSClientSetting:     configtls.TLSClientSetting{},
+		ClientConfig:         configtls.ClientConfig{},
 	}
 }
 
 func createMetricsReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	rConf component.Config,
 	consumer consumer.Metrics,
 ) (receiver.Metrics, error) {
 	cfg := rConf.(*Config)
 	ms := newMongodbScraper(params, cfg)
 
-	scraper, err := scraperhelper.NewScraper(metadata.Type, ms.scrape,
-		scraperhelper.WithStart(ms.start),
-		scraperhelper.WithShutdown(ms.shutdown))
+	s, err := scraper.NewMetrics(
+		ms.scrape,
+		scraper.WithStart(ms.start),
+		scraper.WithShutdown(ms.shutdown))
 	if err != nil {
 		return nil, err
 	}
 
-	return scraperhelper.NewScraperControllerReceiver(
-		&cfg.ScraperControllerSettings, params, consumer,
-		scraperhelper.AddScraper(scraper),
+	return scraperhelper.NewMetricsController(
+		&cfg.ControllerConfig, params, consumer,
+		scraperhelper.AddScraper(metadata.Type, s),
 	)
 }

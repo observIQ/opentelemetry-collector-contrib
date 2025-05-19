@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	conventions "go.opentelemetry.io/otel/semconv/v1.6.1"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/sharedcomponent"
@@ -35,26 +35,38 @@ func createDefaultConfig() component.Config {
 	return &Config{
 		ResourceAttributes: resourceAttributes{
 			observer.PodType: map[string]string{
-				conventions.AttributeK8SPodName:       "`name`",
-				conventions.AttributeK8SPodUID:        "`uid`",
-				conventions.AttributeK8SNamespaceName: "`namespace`",
+				string(conventions.K8SPodNameKey):       "`name`",
+				string(conventions.K8SPodUIDKey):        "`uid`",
+				string(conventions.K8SNamespaceNameKey): "`namespace`",
 			},
 			observer.K8sServiceType: map[string]string{
-				conventions.AttributeK8SNamespaceName: "`namespace`",
+				string(conventions.K8SNamespaceNameKey): "`namespace`",
+			},
+			observer.K8sIngressType: map[string]string{
+				string(conventions.K8SNamespaceNameKey): "`namespace`",
 			},
 			observer.PortType: map[string]string{
-				conventions.AttributeK8SPodName:       "`pod.name`",
-				conventions.AttributeK8SPodUID:        "`pod.uid`",
-				conventions.AttributeK8SNamespaceName: "`pod.namespace`",
+				string(conventions.K8SPodNameKey):       "`pod.name`",
+				string(conventions.K8SPodUIDKey):        "`pod.uid`",
+				string(conventions.K8SNamespaceNameKey): "`pod.namespace`",
+			},
+			observer.PodContainerType: map[string]string{
+				string(conventions.K8SPodNameKey):         "`pod.name`",
+				string(conventions.K8SPodUIDKey):          "`pod.uid`",
+				string(conventions.K8SNamespaceNameKey):   "`pod.namespace`",
+				string(conventions.K8SContainerNameKey):   "`container_name`",
+				string(conventions.ContainerIDKey):        "`container_id`",
+				string(conventions.ContainerImageNameKey): "`container_image`",
 			},
 			observer.ContainerType: map[string]string{
-				conventions.AttributeContainerName:      "`name`",
-				conventions.AttributeContainerImageName: "`image`",
+				string(conventions.ContainerNameKey):      "`name`",
+				string(conventions.ContainerImageNameKey): "`image`",
 			},
 			observer.K8sNodeType: map[string]string{
-				conventions.AttributeK8SNodeName: "`name`",
-				conventions.AttributeK8SNodeUID:  "`uid`",
+				string(conventions.K8SNodeNameKey): "`name`",
+				string(conventions.K8SNodeUIDKey):  "`uid`",
 			},
+			observer.KafkaTopicType: map[string]string{},
 		},
 		receiverTemplates: map[string]receiverTemplate{},
 	}
@@ -62,69 +74,39 @@ func createDefaultConfig() component.Config {
 
 func createLogsReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	cfg component.Config,
 	consumer consumer.Logs,
 ) (receiver.Logs, error) {
-	var err error
-	var recv receiver.Logs
-	rCfg := cfg.(*Config)
 	r := receivers.GetOrAdd(cfg, func() component.Component {
-		recv, err = newLogsReceiverCreator(params, rCfg, consumer)
-		return recv
+		return newReceiverCreator(params, cfg.(*Config))
 	})
-	rcvr := r.Component.(*receiverCreator)
-	if rcvr.nextLogsConsumer == nil {
-		rcvr.nextLogsConsumer = consumer
-	}
-	if err != nil {
-		return nil, err
-	}
+	r.Component.(*receiverCreator).nextLogsConsumer = consumer
 	return r, nil
 }
 
 func createMetricsReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	cfg component.Config,
 	consumer consumer.Metrics,
 ) (receiver.Metrics, error) {
-	var err error
-	var recv receiver.Logs
-	rCfg := cfg.(*Config)
 	r := receivers.GetOrAdd(cfg, func() component.Component {
-		recv, err = newMetricsReceiverCreator(params, rCfg, consumer)
-		return recv
+		return newReceiverCreator(params, cfg.(*Config))
 	})
-	rcvr := r.Component.(*receiverCreator)
-	if rcvr.nextMetricsConsumer == nil {
-		rcvr.nextMetricsConsumer = consumer
-	}
-	if err != nil {
-		return nil, err
-	}
+	r.Component.(*receiverCreator).nextMetricsConsumer = consumer
 	return r, nil
 }
 
 func createTracesReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	cfg component.Config,
 	consumer consumer.Traces,
 ) (receiver.Traces, error) {
-	var err error
-	var recv receiver.Logs
-	rCfg := cfg.(*Config)
 	r := receivers.GetOrAdd(cfg, func() component.Component {
-		recv, err = newTracesReceiverCreator(params, rCfg, consumer)
-		return recv
+		return newReceiverCreator(params, cfg.(*Config))
 	})
-	rcvr := r.Component.(*receiverCreator)
-	if rcvr.nextTracesConsumer == nil {
-		rcvr.nextTracesConsumer = consumer
-	}
-	if err != nil {
-		return nil, err
-	}
+	r.Component.(*receiverCreator).nextTracesConsumer = consumer
 	return r, nil
 }

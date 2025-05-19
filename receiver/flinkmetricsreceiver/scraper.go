@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scrapererror"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/flinkmetricsreceiver/internal/metadata"
@@ -34,7 +34,7 @@ type flinkmetricsScraper struct {
 	mb       *metadata.MetricsBuilder
 }
 
-func newflinkScraper(config *Config, settings receiver.CreateSettings) *flinkmetricsScraper {
+func newflinkScraper(config *Config, settings receiver.Settings) *flinkmetricsScraper {
 	return &flinkmetricsScraper{
 		settings: settings.TelemetrySettings,
 		cfg:      config,
@@ -42,8 +42,8 @@ func newflinkScraper(config *Config, settings receiver.CreateSettings) *flinkmet
 	}
 }
 
-func (s *flinkmetricsScraper) start(_ context.Context, host component.Host) error {
-	httpClient, err := newClient(s.cfg, host, s.settings, s.settings.Logger)
+func (s *flinkmetricsScraper) start(ctx context.Context, host component.Host) error {
+	httpClient, err := newClient(ctx, s.cfg, host, s.settings, s.settings.Logger)
 	if err != nil {
 		return fmt.Errorf("create client: %w", err)
 	}

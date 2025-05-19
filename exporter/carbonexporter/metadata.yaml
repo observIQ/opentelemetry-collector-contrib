@@ -3,7 +3,12 @@ type: carbon
 status:
   class: exporter
   stability:
-    beta: [metrics]
-  distributions: [contrib, observiq, sumo]
+    unmaintained: [metrics]
+  distributions: [contrib]
   codeowners:
-    active: [aboguszewski-sumo]
+    active: []
+    emeritus: [aboguszewski-sumo]
+    seeking_new: true
+
+tests:
+  expect_consumer_error: true

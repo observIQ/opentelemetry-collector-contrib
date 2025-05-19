@@ -9,7 +9,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
+
+	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
 
@@ -32,8 +33,10 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					MongodbatlasDiskPartitionIopsMax:                      MetricConfig{Enabled: true},
 					MongodbatlasDiskPartitionLatencyAverage:               MetricConfig{Enabled: true},
 					MongodbatlasDiskPartitionLatencyMax:                   MetricConfig{Enabled: true},
+					MongodbatlasDiskPartitionQueueDepth:                   MetricConfig{Enabled: true},
 					MongodbatlasDiskPartitionSpaceAverage:                 MetricConfig{Enabled: true},
 					MongodbatlasDiskPartitionSpaceMax:                     MetricConfig{Enabled: true},
+					MongodbatlasDiskPartitionThroughput:                   MetricConfig{Enabled: true},
 					MongodbatlasDiskPartitionUsageAverage:                 MetricConfig{Enabled: true},
 					MongodbatlasDiskPartitionUsageMax:                     MetricConfig{Enabled: true},
 					MongodbatlasDiskPartitionUtilizationAverage:           MetricConfig{Enabled: true},
@@ -41,6 +44,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					MongodbatlasProcessAsserts:                            MetricConfig{Enabled: true},
 					MongodbatlasProcessBackgroundFlush:                    MetricConfig{Enabled: true},
 					MongodbatlasProcessCacheIo:                            MetricConfig{Enabled: true},
+					MongodbatlasProcessCacheRatio:                         MetricConfig{Enabled: true},
 					MongodbatlasProcessCacheSize:                          MetricConfig{Enabled: true},
 					MongodbatlasProcessConnections:                        MetricConfig{Enabled: true},
 					MongodbatlasProcessCPUChildrenNormalizedUsageAverage:  MetricConfig{Enabled: true},
@@ -116,8 +120,10 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					MongodbatlasDiskPartitionIopsMax:                      MetricConfig{Enabled: false},
 					MongodbatlasDiskPartitionLatencyAverage:               MetricConfig{Enabled: false},
 					MongodbatlasDiskPartitionLatencyMax:                   MetricConfig{Enabled: false},
+					MongodbatlasDiskPartitionQueueDepth:                   MetricConfig{Enabled: false},
 					MongodbatlasDiskPartitionSpaceAverage:                 MetricConfig{Enabled: false},
 					MongodbatlasDiskPartitionSpaceMax:                     MetricConfig{Enabled: false},
+					MongodbatlasDiskPartitionThroughput:                   MetricConfig{Enabled: false},
 					MongodbatlasDiskPartitionUsageAverage:                 MetricConfig{Enabled: false},
 					MongodbatlasDiskPartitionUsageMax:                     MetricConfig{Enabled: false},
 					MongodbatlasDiskPartitionUtilizationAverage:           MetricConfig{Enabled: false},
@@ -125,6 +131,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					MongodbatlasProcessAsserts:                            MetricConfig{Enabled: false},
 					MongodbatlasProcessBackgroundFlush:                    MetricConfig{Enabled: false},
 					MongodbatlasProcessCacheIo:                            MetricConfig{Enabled: false},
+					MongodbatlasProcessCacheRatio:                         MetricConfig{Enabled: false},
 					MongodbatlasProcessCacheSize:                          MetricConfig{Enabled: false},
 					MongodbatlasProcessConnections:                        MetricConfig{Enabled: false},
 					MongodbatlasProcessCPUChildrenNormalizedUsageAverage:  MetricConfig{Enabled: false},
@@ -194,9 +201,8 @@ func TestMetricsBuilderConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadMetricsBuilderConfig(t, tt.name)
-			if diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(MetricConfig{}, ResourceAttributeConfig{})); diff != "" {
-				t.Errorf("Config mismatch (-expected +actual):\n%s", diff)
-			}
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(MetricConfig{}, ResourceAttributeConfig{}))
+			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}
 }
@@ -207,7 +213,7 @@ func loadMetricsBuilderConfig(t *testing.T, name string) MetricsBuilderConfig {
 	sub, err := cm.Sub(name)
 	require.NoError(t, err)
 	cfg := DefaultMetricsBuilderConfig()
-	require.NoError(t, component.UnmarshalConfig(sub, &cfg))
+	require.NoError(t, sub.Unmarshal(&cfg, confmap.WithIgnoreUnused()))
 	return cfg
 }
 
@@ -260,9 +266,8 @@ func TestResourceAttributesConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadResourceAttributesConfig(t, tt.name)
-			if diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(ResourceAttributeConfig{})); diff != "" {
-				t.Errorf("Config mismatch (-expected +actual):\n%s", diff)
-			}
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(ResourceAttributeConfig{}))
+			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}
 }
@@ -275,6 +280,6 @@ func loadResourceAttributesConfig(t *testing.T, name string) ResourceAttributesC
 	sub, err = sub.Sub("resource_attributes")
 	require.NoError(t, err)
 	cfg := DefaultResourceAttributesConfig()
-	require.NoError(t, component.UnmarshalConfig(sub, &cfg))
+	require.NoError(t, sub.Unmarshal(&cfg))
 	return cfg
 }

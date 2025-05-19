@@ -67,7 +67,7 @@ func (tbi *traceBulkIndexer) submit(ctx context.Context, td ptrace.Traces) {
 		if err != nil {
 			tbi.appendPermanentError(err)
 		} else {
-			ItemFailureHandler := func(ctx context.Context, item opensearchutil.BulkIndexerItem, resp opensearchutil.BulkIndexerResponseItem, itemErr error) {
+			ItemFailureHandler := func(_ context.Context, _ opensearchutil.BulkIndexerItem, resp opensearchutil.BulkIndexerResponseItem, itemErr error) {
 				// Setup error handler. The handler handles the per item response status based on the
 				// selective ACKing in the bulk response.
 				tbi.processItemFailure(resp, itemErr, makeTrace(resource, resourceSchemaURL, scope, scopeSchemaURL, span))
@@ -120,15 +120,14 @@ func responseAsError(item opensearchutil.BulkIndexerResponseItem) error {
 
 func attributesToMapString(attributes pcommon.Map) map[string]string {
 	m := make(map[string]string, attributes.Len())
-	attributes.Range(func(k string, v pcommon.Value) bool {
+	for k, v := range attributes.All() {
 		m[k] = v.AsString()
-		return true
-	})
+	}
 	return m
 }
 
 func shouldRetryEvent(status int) bool {
-	var retryOnStatus = []int{500, 502, 503, 504, 429}
+	retryOnStatus := []int{500, 502, 503, 504, 429}
 	for _, retryable := range retryOnStatus {
 		if status == retryable {
 			return true

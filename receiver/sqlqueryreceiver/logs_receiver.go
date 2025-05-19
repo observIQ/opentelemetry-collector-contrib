@@ -6,28 +6,29 @@ package sqlqueryreceiver // import "github.com/open-telemetry/opentelemetry-coll
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/extension/experimental/storage"
+	"go.opentelemetry.io/collector/extension/xextension/storage"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/receiverhelper"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/sqlquery"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/adapter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sqlqueryreceiver/internal/metadata"
 )
 
 type logsReceiver struct {
 	config           *Config
-	settings         receiver.CreateSettings
-	createConnection dbProviderFunc
-	createClient     clientProviderFunc
+	settings         receiver.Settings
+	createConnection sqlquery.DbProviderFunc
+	createClient     sqlquery.ClientProviderFunc
 	queryReceivers   []*logsQueryReceiver
 	nextConsumer     consumer.Logs
 
@@ -42,12 +43,11 @@ type logsReceiver struct {
 
 func newLogsReceiver(
 	config *Config,
-	settings receiver.CreateSettings,
-	sqlOpenerFunc sqlOpenerFunc,
-	createClient clientProviderFunc,
+	settings receiver.Settings,
+	sqlOpenerFunc sqlquery.SQLOpenerFunc,
+	createClient sqlquery.ClientProviderFunc,
 	nextConsumer consumer.Logs,
 ) (*logsReceiver, error) {
-
 	obsr, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
 		ReceiverID:             settings.ID,
 		ReceiverCreateSettings: settings,
@@ -115,6 +115,7 @@ func (receiver *logsReceiver) createQueryReceivers() error {
 			receiver.createConnection,
 			receiver.createClient,
 			receiver.settings.Logger,
+			receiver.config.Telemetry,
 			receiver.storageClient,
 		)
 		receiver.queryReceivers = append(receiver.queryReceivers, queryReceiver)
@@ -159,7 +160,7 @@ func (receiver *logsReceiver) collect() {
 	if logRecordCount > 0 {
 		ctx := receiver.obsrecv.StartLogsOp(context.Background())
 		err := receiver.nextConsumer.ConsumeLogs(context.Background(), allLogs)
-		receiver.obsrecv.EndLogsOp(ctx, metadata.Type, logRecordCount, err)
+		receiver.obsrecv.EndLogsOp(ctx, metadata.Type.String(), logRecordCount, err)
 		if err != nil {
 			receiver.settings.Logger.Error("failed to send logs: %w", zap.Error(err))
 		}
@@ -172,21 +173,21 @@ func (receiver *logsReceiver) Shutdown(ctx context.Context) error {
 		return nil
 	}
 
+	var errs []error
 	receiver.settings.Logger.Debug("stopping...")
 	receiver.stopCollecting()
 	for _, queryReceiver := range receiver.queryReceivers {
-		queryReceiver.shutdown(ctx)
+		errs = append(errs, queryReceiver.shutdown(ctx))
 	}
 
-	var errors error
 	if receiver.storageClient != nil {
-		errors = multierr.Append(errors, receiver.storageClient.Close(ctx))
+		errs = append(errs, receiver.storageClient.Close(ctx))
 	}
 
 	receiver.isStarted = false
 	receiver.settings.Logger.Debug("stopped.")
 
-	return errors
+	return errors.Join(errs...)
 }
 
 func (receiver *logsReceiver) stopCollecting() {
@@ -198,13 +199,14 @@ func (receiver *logsReceiver) stopCollecting() {
 
 type logsQueryReceiver struct {
 	id           string
-	query        Query
-	createDb     dbProviderFunc
-	createClient clientProviderFunc
+	query        sqlquery.Query
+	createDb     sqlquery.DbProviderFunc
+	createClient sqlquery.ClientProviderFunc
 	logger       *zap.Logger
+	telemetry    sqlquery.TelemetryConfig
 
 	db            *sql.DB
-	client        dbClient
+	client        sqlquery.DbClient
 	trackingValue string
 	// TODO: Extract persistence into its own component
 	storageClient           storage.Client
@@ -213,10 +215,11 @@ type logsQueryReceiver struct {
 
 func newLogsQueryReceiver(
 	id string,
-	query Query,
-	dbProviderFunc dbProviderFunc,
-	clientProviderFunc clientProviderFunc,
+	query sqlquery.Query,
+	dbProviderFunc sqlquery.DbProviderFunc,
+	clientProviderFunc sqlquery.ClientProviderFunc,
 	logger *zap.Logger,
+	telemetry sqlquery.TelemetryConfig,
 	storageClient storage.Client,
 ) *logsQueryReceiver {
 	queryReceiver := &logsQueryReceiver{
@@ -225,6 +228,7 @@ func newLogsQueryReceiver(
 		createDb:      dbProviderFunc,
 		createClient:  clientProviderFunc,
 		logger:        logger,
+		telemetry:     telemetry,
 		storageClient: storageClient,
 	}
 	queryReceiver.trackingValue = queryReceiver.query.TrackingStartValue
@@ -242,7 +246,7 @@ func (queryReceiver *logsQueryReceiver) start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to open db connection: %w", err)
 	}
-	queryReceiver.client = queryReceiver.createClient(dbWrapper{queryReceiver.db}, queryReceiver.query.SQL, queryReceiver.logger)
+	queryReceiver.client = queryReceiver.createClient(sqlquery.DbWrapper{Db: queryReceiver.db}, queryReceiver.query.SQL, queryReceiver.logger, queryReceiver.telemetry)
 
 	queryReceiver.trackingValue = queryReceiver.retrieveTrackingValue(ctx)
 
@@ -263,40 +267,41 @@ func (queryReceiver *logsQueryReceiver) retrieveTrackingValue(ctx context.Contex
 	}
 
 	return string(storedTrackingValueBytes)
-
 }
 
 func (queryReceiver *logsQueryReceiver) collect(ctx context.Context) (plog.Logs, error) {
 	logs := plog.NewLogs()
 
-	var rows []stringMap
+	var rows []sqlquery.StringMap
 	var err error
 	observedAt := pcommon.NewTimestampFromTime(time.Now())
 	if queryReceiver.query.TrackingColumn != "" {
-		rows, err = queryReceiver.client.queryRows(ctx, queryReceiver.trackingValue)
+		rows, err = queryReceiver.client.QueryRows(ctx, queryReceiver.trackingValue)
 	} else {
-		rows, err = queryReceiver.client.queryRows(ctx)
+		rows, err = queryReceiver.client.QueryRows(ctx)
 	}
 	if err != nil {
 		return logs, fmt.Errorf("error getting rows: %w", err)
 	}
 
-	var errs error
-	scopeLogs := logs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords()
+	var errs []error
+	scope := logs.ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty()
+	scope.Scope().SetName(metadata.ScopeName)
+	scopeLogs := scope.LogRecords()
 	for logsConfigIndex, logsConfig := range queryReceiver.query.Logs {
 		for _, row := range rows {
 			logRecord := scopeLogs.AppendEmpty()
-			rowToLog(row, logsConfig, logRecord)
+			errs = append(errs, rowToLog(row, logsConfig, logRecord))
 			logRecord.SetObservedTimestamp(observedAt)
 			if logsConfigIndex == 0 {
-				errs = multierr.Append(errs, queryReceiver.storeTrackingValue(ctx, row))
+				errs = append(errs, queryReceiver.storeTrackingValue(ctx, row))
 			}
 		}
 	}
-	return logs, nil
+	return logs, errors.Join(errs...)
 }
 
-func (queryReceiver *logsQueryReceiver) storeTrackingValue(ctx context.Context, row stringMap) error {
+func (queryReceiver *logsQueryReceiver) storeTrackingValue(ctx context.Context, row sqlquery.StringMap) error {
 	if queryReceiver.query.TrackingColumn == "" {
 		return nil
 	}
@@ -310,9 +315,30 @@ func (queryReceiver *logsQueryReceiver) storeTrackingValue(ctx context.Context, 
 	return nil
 }
 
-func rowToLog(row stringMap, config LogsCfg, logRecord plog.LogRecord) {
-	logRecord.Body().SetStr(row[config.BodyColumn])
+func rowToLog(row sqlquery.StringMap, config sqlquery.LogsCfg, logRecord plog.LogRecord) error {
+	var errs []error
+	value, found := row[config.BodyColumn]
+	if !found {
+		errs = append(errs, fmt.Errorf("rowToLog: body_column '%s' not found in result set", config.BodyColumn))
+	} else {
+		logRecord.Body().SetStr(value)
+	}
+	attrs := logRecord.Attributes()
+
+	for _, columnName := range config.AttributeColumns {
+		if attrVal, found := row[columnName]; found {
+			attrs.PutStr(columnName, attrVal)
+		} else {
+			errs = append(errs, fmt.Errorf("rowToLog: attribute_column '%s' not found in result set", columnName))
+		}
+	}
+	return errors.Join(errs...)
 }
 
-func (queryReceiver *logsQueryReceiver) shutdown(_ context.Context) {
+func (queryReceiver *logsQueryReceiver) shutdown(_ context.Context) error {
+	if queryReceiver.db == nil {
+		return nil
+	}
+
+	return queryReceiver.db.Close()
 }

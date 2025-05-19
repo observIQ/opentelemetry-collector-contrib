@@ -8,7 +8,7 @@ import (
 	"net"
 	"strings"
 
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 	"go.uber.org/multierr"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sshcheckreceiver/internal/configssh"
@@ -22,13 +22,12 @@ var (
 	errMissingUsername           = errors.New(`"username" not specified in config`)
 	errMissingPasswordAndKeyFile = errors.New(`either "password" or "key_file" is required`)
 
-	errConfigNotSSHCheck  = errors.New("config was not a SSH check receiver config")
-	errWindowsUnsupported = errors.New(metadata.Type + " is unsupported on Windows.")
+	errConfigNotSSHCheck = errors.New("config was not a SSH check receiver config")
 )
 
 type Config struct {
-	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
-	configssh.SSHClientSettings             `mapstructure:",squash"`
+	scraperhelper.ControllerConfig `mapstructure:",squash"`
+	configssh.SSHClientSettings    `mapstructure:",squash"`
 
 	CheckSFTP            bool                          `mapstructure:"check_sftp"`
 	MetricsBuilderConfig metadata.MetricsBuilderConfig `mapstructure:",squash"`
@@ -40,19 +39,19 @@ func (c Config) SFTPEnabled() bool {
 }
 
 func (c Config) Validate() (err error) {
-	if c.SSHClientSettings.Endpoint == "" {
+	if c.Endpoint == "" {
 		err = multierr.Append(err, errMissingEndpoint)
-	} else if strings.Contains(c.SSHClientSettings.Endpoint, " ") {
+	} else if strings.Contains(c.Endpoint, " ") {
 		err = multierr.Append(err, errInvalidEndpoint)
-	} else if _, _, splitErr := net.SplitHostPort(c.SSHClientSettings.Endpoint); splitErr != nil {
+	} else if _, _, splitErr := net.SplitHostPort(c.Endpoint); splitErr != nil {
 		err = multierr.Append(splitErr, errInvalidEndpoint)
 	}
 
-	if c.SSHClientSettings.Username == "" {
+	if c.Username == "" {
 		err = multierr.Append(err, errMissingUsername)
 	}
 
-	if c.SSHClientSettings.Password == "" && c.KeyFile == "" {
+	if c.Password == "" && c.KeyFile == "" {
 		err = multierr.Append(err, errMissingPasswordAndKeyFile)
 	}
 

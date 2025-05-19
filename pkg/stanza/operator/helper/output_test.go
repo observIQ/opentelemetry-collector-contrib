@@ -7,16 +7,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/testutil"
 )
 
 func TestOutputConfigMissingBase(t *testing.T) {
 	config := OutputConfig{}
-	_, err := config.Build(testutil.Logger(t))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing required `type` field.")
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := config.Build(set)
+	require.ErrorContains(t, err, "missing required `type` field.")
 }
 
 func TestOutputConfigBuildValid(t *testing.T) {
@@ -26,53 +27,61 @@ func TestOutputConfigBuildValid(t *testing.T) {
 			OperatorType: "test-type",
 		},
 	}
-	_, err := config.Build(testutil.Logger(t))
+	set := componenttest.NewNopTelemetrySettings()
+	_, err := config.Build(set)
 	require.NoError(t, err)
 }
 
 func TestOutputOperatorCanProcess(t *testing.T) {
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	output := OutputOperator{
 		BasicOperator: BasicOperator{
-			OperatorID:    "test-id",
-			OperatorType:  "test-type",
-			SugaredLogger: testutil.Logger(t),
+			OperatorID:   "test-id",
+			OperatorType: "test-type",
+			set:          set,
 		},
 	}
 	require.True(t, output.CanProcess())
 }
 
 func TestOutputOperatorCanOutput(t *testing.T) {
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	output := OutputOperator{
 		BasicOperator: BasicOperator{
-			OperatorID:    "test-id",
-			OperatorType:  "test-type",
-			SugaredLogger: testutil.Logger(t),
+			OperatorID:   "test-id",
+			OperatorType: "test-type",
+			set:          set,
 		},
 	}
 	require.False(t, output.CanOutput())
 }
 
 func TestOutputOperatorOutputs(t *testing.T) {
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	output := OutputOperator{
 		BasicOperator: BasicOperator{
-			OperatorID:    "test-id",
-			OperatorType:  "test-type",
-			SugaredLogger: testutil.Logger(t),
+			OperatorID:   "test-id",
+			OperatorType: "test-type",
+			set:          set,
 		},
 	}
 	require.Equal(t, []operator.Operator{}, output.Outputs())
 }
 
 func TestOutputOperatorSetOutputs(t *testing.T) {
+	set := componenttest.NewNopTelemetrySettings()
+	set.Logger = zaptest.NewLogger(t)
 	output := OutputOperator{
 		BasicOperator: BasicOperator{
-			OperatorID:    "test-id",
-			OperatorType:  "test-type",
-			SugaredLogger: testutil.Logger(t),
+			OperatorID:   "test-id",
+			OperatorType: "test-type",
+			set:          set,
 		},
 	}
 
 	err := output.SetOutputs([]operator.Operator{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "Operator can not output")
+	require.ErrorContains(t, err, "Operator can not output")
 }

@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awskinesisexporter/internal/batch"
@@ -33,9 +35,9 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "default"),
 			expected: &Config{
-				QueueSettings:   exporterhelper.NewDefaultQueueSettings(),
-				RetrySettings:   exporterhelper.NewDefaultRetrySettings(),
-				TimeoutSettings: exporterhelper.NewDefaultTimeoutSettings(),
+				QueueSettings:   exporterhelper.NewDefaultQueueConfig(),
+				BackOffConfig:   configretry.NewDefaultBackOffConfig(),
+				TimeoutSettings: exporterhelper.NewDefaultTimeoutConfig(),
 				Encoding: Encoding{
 					Name:        "otlp",
 					Compression: "none",
@@ -50,7 +52,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, ""),
 			expected: &Config{
-				RetrySettings: exporterhelper.RetrySettings{
+				BackOffConfig: configretry.BackOffConfig{
 					Enabled:             false,
 					MaxInterval:         30 * time.Second,
 					InitialInterval:     5 * time.Second,
@@ -58,8 +60,8 @@ func TestLoadConfig(t *testing.T) {
 					RandomizationFactor: backoff.DefaultRandomizationFactor,
 					Multiplier:          backoff.DefaultMultiplier,
 				},
-				TimeoutSettings: exporterhelper.NewDefaultTimeoutSettings(),
-				QueueSettings:   exporterhelper.NewDefaultQueueSettings(),
+				TimeoutSettings: exporterhelper.NewDefaultTimeoutConfig(),
+				QueueSettings:   exporterhelper.NewDefaultQueueConfig(),
 				Encoding: Encoding{
 					Name:        "otlp-proto",
 					Compression: "none",
@@ -83,9 +85,9 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
@@ -94,4 +96,20 @@ func TestLoadConfig(t *testing.T) {
 func TestConfigCheck(t *testing.T) {
 	cfg := (NewFactory()).CreateDefaultConfig()
 	assert.NoError(t, componenttest.CheckConfigStruct(cfg))
+}
+
+func TestValidate(t *testing.T) {
+	cfg := &Config{
+		QueueSettings: exporterhelper.QueueBatchConfig{
+			Enabled:      true,
+			NumConsumers: -1,
+		},
+	}
+	err := cfg.Validate()
+	assert.ErrorContains(t, err, "queue settings has invalid configuration",
+		"Validate() error = %v, wantErr %v", err, "queue settings has invalid configuration")
+
+	cfg.QueueSettings.Enabled = false
+	err = cfg.Validate()
+	assert.NoError(t, err, "Validate() error = %v, wantNoErr", err)
 }

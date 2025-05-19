@@ -13,8 +13,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/logicmonitorexporter/internal/metadata"
@@ -30,7 +32,7 @@ func TestConfigValidation(t *testing.T) {
 		{
 			name: "empty endpoint",
 			cfg: &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
+				ClientConfig: confighttp.ClientConfig{
 					Endpoint: "",
 				},
 			},
@@ -40,7 +42,7 @@ func TestConfigValidation(t *testing.T) {
 		{
 			name: "missing http scheme",
 			cfg: &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
+				ClientConfig: confighttp.ClientConfig{
 					Endpoint: "test.com/dummy",
 				},
 			},
@@ -50,7 +52,7 @@ func TestConfigValidation(t *testing.T) {
 		{
 			name: "invalid endpoint format",
 			cfg: &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
+				ClientConfig: confighttp.ClientConfig{
 					Endpoint: "invalid.com@#$%",
 				},
 			},
@@ -60,7 +62,7 @@ func TestConfigValidation(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
+				ClientConfig: confighttp.ClientConfig{
 					Endpoint: "http://validurl.com/rest",
 				},
 			},
@@ -101,9 +103,9 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "apitoken"),
 			expected: &Config{
-				RetrySettings: exporterhelper.NewDefaultRetrySettings(),
-				QueueSettings: exporterhelper.NewDefaultQueueSettings(),
-				HTTPClientSettings: confighttp.HTTPClientSettings{
+				BackOffConfig: configretry.NewDefaultBackOffConfig(),
+				QueueSettings: exporterhelper.NewDefaultQueueConfig(),
+				ClientConfig: confighttp.ClientConfig{
 					Endpoint: "https://company.logicmonitor.com/rest",
 				},
 				APIToken: APIToken{
@@ -115,9 +117,9 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "bearertoken"),
 			expected: &Config{
-				RetrySettings: exporterhelper.NewDefaultRetrySettings(),
-				QueueSettings: exporterhelper.NewDefaultQueueSettings(),
-				HTTPClientSettings: confighttp.HTTPClientSettings{
+				BackOffConfig: configretry.NewDefaultBackOffConfig(),
+				QueueSettings: exporterhelper.NewDefaultQueueConfig(),
+				ClientConfig: confighttp.ClientConfig{
 					Endpoint: "https://company.logicmonitor.com/rest",
 					Headers: map[string]configopaque.String{
 						"Authorization": "Bearer <token>",
@@ -128,9 +130,9 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "resource-mapping-op"),
 			expected: &Config{
-				RetrySettings: exporterhelper.NewDefaultRetrySettings(),
-				QueueSettings: exporterhelper.NewDefaultQueueSettings(),
-				HTTPClientSettings: confighttp.HTTPClientSettings{
+				BackOffConfig: configretry.NewDefaultBackOffConfig(),
+				QueueSettings: exporterhelper.NewDefaultQueueConfig(),
+				ClientConfig: confighttp.ClientConfig{
 					Endpoint: "https://company.logicmonitor.com/rest",
 					Headers: map[string]configopaque.String{
 						"Authorization": "Bearer <token>",
@@ -150,9 +152,9 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
@@ -172,7 +174,7 @@ func TestUnmarshal(t *testing.T) {
 					"resource_mapping_op": "invalid_op",
 				},
 			}),
-			err: "1 error(s) decoding:\n\n* error decoding 'logs.resource_mapping_op': unsupported mapping operation \"invalid_op\"",
+			err: "'logs.resource_mapping_op': unsupported mapping operation \"invalid_op\"",
 		},
 	}
 
@@ -180,9 +182,9 @@ func TestUnmarshal(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := f.CreateDefaultConfig().(*Config)
-			err := component.UnmarshalConfig(tt.configMap, cfg)
+			err := tt.configMap.Unmarshal(cfg)
 			if err != nil || tt.err != "" {
-				assert.EqualError(t, err, tt.err)
+				assert.ErrorContains(t, err, tt.err)
 			} else {
 				assert.Equal(t, tt.cfg, cfg)
 			}

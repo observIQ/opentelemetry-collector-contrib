@@ -13,30 +13,34 @@ import (
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/splunkenterprisereceiver/internal/metadata"
 )
 
 func TestFactoryCreate(t *testing.T) {
 	factory := NewFactory()
-	require.EqualValues(t, "splunkenterprise", factory.Type())
+	require.Equal(t, metadata.Type, factory.Type())
 }
 
 func TestDefaultConfig(t *testing.T) {
-	cfg := confighttp.NewDefaultHTTPClientSettings()
+	cfg := confighttp.NewDefaultClientConfig()
 	cfg.Headers = map[string]configopaque.String{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
+	cfg.Timeout = 60 * time.Second
 
 	expectedConf := &Config{
-		HTTPClientSettings: cfg,
-		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+		IdxEndpoint: cfg,
+		SHEndpoint:  cfg,
+		CMEndpoint:  cfg,
+		ControllerConfig: scraperhelper.ControllerConfig{
 			CollectionInterval: 10 * time.Minute,
 			InitialDelay:       1 * time.Second,
 			Timeout:            60 * time.Second,
 		},
 		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
+		VersionInfo:          false,
 	}
 
 	testConf := createDefaultConfig().(*Config)
@@ -44,7 +48,7 @@ func TestDefaultConfig(t *testing.T) {
 	require.Equal(t, expectedConf, testConf)
 }
 
-func TestCreateMetricsReceiver(t *testing.T) {
+func TestCreateMetrics(t *testing.T) {
 	tests := []struct {
 		desc string
 		run  func(t *testing.T)
@@ -55,32 +59,18 @@ func TestCreateMetricsReceiver(t *testing.T) {
 				t.Parallel()
 
 				cfg := createDefaultConfig().(*Config)
+				cfg.CMEndpoint.Endpoint = "https://123.12.12.12:80"
+				cfg.IdxEndpoint.Endpoint = "https://123.12.12.12:80"
+				cfg.SHEndpoint.Endpoint = "https://123.12.12.12:80"
 
 				_, err := createMetricsReceiver(
 					context.Background(),
-					receivertest.NewNopCreateSettings(),
+					receivertest.NewNopSettings(metadata.Type),
 					cfg,
 					consumertest.NewNop(),
 				)
 
 				require.NoError(t, err, "failed to create metrics receiver with valid inputs")
-			},
-		},
-		{
-			desc: "Missing consumer",
-			run: func(t *testing.T) {
-				t.Parallel()
-
-				cfg := createDefaultConfig().(*Config)
-
-				_, err := createMetricsReceiver(
-					context.Background(),
-					receivertest.NewNopCreateSettings(),
-					cfg,
-					nil,
-				)
-
-				require.Error(t, err, "created metrics receiver without consumer")
 			},
 		},
 	}

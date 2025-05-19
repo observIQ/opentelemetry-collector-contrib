@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"testing"
 	"time"
 
-	"github.com/shirou/gopsutil/v3/process"
+	"github.com/shirou/gopsutil/v4/process"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/provider/fileprovider"
@@ -26,6 +27,7 @@ type inProcessCollector struct {
 	stopped    bool
 	configFile string
 	wg         sync.WaitGroup
+	t          *testing.T
 }
 
 // NewInProcessCollector creates a new inProcessCollector using the supplied component factories.
@@ -35,18 +37,19 @@ func NewInProcessCollector(factories otelcol.Factories) OtelcolRunner {
 	}
 }
 
-func (ipp *inProcessCollector) PrepareConfig(configStr string) (configCleanup func(), err error) {
+func (ipp *inProcessCollector) PrepareConfig(t *testing.T, configStr string) (configCleanup func(), err error) {
 	configCleanup = func() {
 		// NoOp
 	}
 	ipp.configStr = configStr
+	ipp.t = t
 	return configCleanup, err
 }
 
 func (ipp *inProcessCollector) Start(_ StartParams) error {
 	var err error
 
-	confFile, err := os.CreateTemp(os.TempDir(), "conf-")
+	confFile, err := os.CreateTemp(ipp.t.TempDir(), "conf-")
 	if err != nil {
 		return err
 	}
@@ -57,22 +60,15 @@ func (ipp *inProcessCollector) Start(_ StartParams) error {
 	}
 	ipp.configFile = confFile.Name()
 
-	fmp := fileprovider.New()
-	configProvider, err := otelcol.NewConfigProvider(
-		otelcol.ConfigProviderSettings{
-			ResolverSettings: confmap.ResolverSettings{
-				URIs:      []string{ipp.configFile},
-				Providers: map[string]confmap.Provider{fmp.Scheme(): fmp},
-			},
-		})
-	if err != nil {
-		return err
-	}
-
 	settings := otelcol.CollectorSettings{
-		BuildInfo:             component.NewDefaultBuildInfo(),
-		Factories:             func() (otelcol.Factories, error) { return ipp.factories, nil },
-		ConfigProvider:        configProvider,
+		BuildInfo: component.NewDefaultBuildInfo(),
+		Factories: func() (otelcol.Factories, error) { return ipp.factories, nil },
+		ConfigProviderSettings: otelcol.ConfigProviderSettings{
+			ResolverSettings: confmap.ResolverSettings{
+				URIs:              []string{ipp.configFile},
+				ProviderFactories: []confmap.ProviderFactory{fileprovider.NewFactory()},
+			},
+		},
 		SkipSettingGRPCLogger: true,
 	}
 
@@ -123,10 +119,12 @@ func (ipp *inProcessCollector) GetProcessMon() *process.Process {
 
 func (ipp *inProcessCollector) GetTotalConsumption() *ResourceConsumption {
 	return &ResourceConsumption{
-		CPUPercentAvg: 0,
-		CPUPercentMax: 0,
-		RAMMiBAvg:     0,
-		RAMMiBMax:     0,
+		CPUPercentAvg:   0,
+		CPUPercentMax:   0,
+		CPUPercentLimit: 0,
+		RAMMiBAvg:       0,
+		RAMMiBMax:       0,
+		RAMMiBLimit:     0,
 	}
 }
 

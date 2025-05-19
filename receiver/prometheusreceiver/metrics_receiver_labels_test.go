@@ -6,11 +6,13 @@ package prometheusreceiver
 import (
 	"testing"
 
-	promcfg "github.com/prometheus/prometheus/config"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
 )
 
 const targetExternalLabels = `
@@ -29,22 +31,23 @@ func TestExternalLabels(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, nil, func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		cfg.GlobalConfig.ExternalLabels = labels.FromStrings("key", "value")
 	})
 }
 
 func verifyExternalLabels(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
 	verifyNumValidScrapeResults(t, td, rms)
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	wantAttributes := td.attributes
 	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
 	ts1 := metrics1.At(0).Gauge().DataPoints().At(0).Timestamp()
-	doCompare(t, "scrape-externalLabels", wantAttributes, rms[0], []testExpectation{
-		assertMetricPresent("go_threads",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+	doCompare(t, "scrape-externalLabels", wantAttributes, rms[0], []metricExpectation{
+		{
+			"go_threads",
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -53,7 +56,9 @@ func verifyExternalLabels(t *testing.T, td *testData, rms []pmetric.ResourceMetr
 						compareAttributes(map[string]string{"key": "value"}),
 					},
 				},
-			}),
+			},
+			nil,
+		},
 	})
 }
 
@@ -66,16 +71,17 @@ test_gauge0{label1="value1",label2="value2"} 10
 func verifyLabelLimitTarget1(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
 	// each sample in the scraped metrics is within the configured label_limit, scrape should be successful
 	verifyNumValidScrapeResults(t, td, rms)
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	want := td.attributes
 	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
 	ts1 := metrics1.At(0).Gauge().DataPoints().At(0).Timestamp()
 
-	doCompare(t, "scrape-labelLimit", want, rms[0], []testExpectation{
-		assertMetricPresent("test_gauge0",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+	doCompare(t, "scrape-labelLimit", want, rms[0], []metricExpectation{
+		{
+			"test_gauge0",
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -85,7 +91,8 @@ func verifyLabelLimitTarget1(t *testing.T, td *testData, rms []pmetric.ResourceM
 					},
 				},
 			},
-		),
+			nil,
+		},
 	})
 }
 
@@ -121,7 +128,7 @@ func TestLabelLimitConfig(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, nil, func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		// set label limit in scrape_config
 		for _, scrapeCfg := range cfg.ScrapeConfigs {
 			scrapeCfg.LabelLimit = 5
@@ -158,16 +165,17 @@ test_summary0_count{label1="value1",label2="value2"} 1000
 
 func verifyLabelConfigTarget1(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
 	verifyNumValidScrapeResults(t, td, rms)
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	want := td.attributes
 	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
 	ts1 := getTS(metrics1)
 
-	e1 := []testExpectation{
-		assertMetricPresent("test_counter0",
-			compareMetricType(pmetric.MetricTypeSum),
-			compareMetricUnit(""),
+	e1 := []metricExpectation{
+		{
+			"test_counter0",
+			pmetric.MetricTypeSum,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -177,10 +185,13 @@ func verifyLabelConfigTarget1(t *testing.T, td *testData, rms []pmetric.Resource
 						compareAttributes(map[string]string{"label1": "value1", "label2": "value2"}),
 					},
 				},
-			}),
-		assertMetricPresent("test_gauge0",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+			},
+			nil,
+		},
+		{
+			"test_gauge0",
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -189,10 +200,13 @@ func verifyLabelConfigTarget1(t *testing.T, td *testData, rms []pmetric.Resource
 						compareAttributes(map[string]string{"label1": "value1", "label2": "value2"}),
 					},
 				},
-			}),
-		assertMetricPresent("test_histogram0",
-			compareMetricType(pmetric.MetricTypeHistogram),
-			compareMetricUnit(""),
+			},
+			nil,
+		},
+		{
+			"test_histogram0",
+			pmetric.MetricTypeHistogram,
+			"",
 			[]dataPointExpectation{
 				{
 					histogramPointComparator: []histogramPointComparator{
@@ -202,10 +216,13 @@ func verifyLabelConfigTarget1(t *testing.T, td *testData, rms []pmetric.Resource
 						compareHistogramAttributes(map[string]string{"label1": "value1", "label2": "value2"}),
 					},
 				},
-			}),
-		assertMetricPresent("test_summary0",
-			compareMetricType(pmetric.MetricTypeSummary),
-			compareMetricUnit(""),
+			},
+			nil,
+		},
+		{
+			"test_summary0",
+			pmetric.MetricTypeSummary,
+			"",
 			[]dataPointExpectation{
 				{
 					summaryPointComparator: []summaryPointComparator{
@@ -215,7 +232,9 @@ func verifyLabelConfigTarget1(t *testing.T, td *testData, rms []pmetric.Resource
 						compareSummaryAttributes(map[string]string{"label1": "value1", "label2": "value2"}),
 					},
 				},
-			}),
+			},
+			nil,
+		},
 	}
 	doCompare(t, "scrape-label-config-test", want, rms[0], e1)
 }
@@ -231,6 +250,10 @@ test_counter0{label1="value1",label2="value2"} 1
 `
 
 func TestLabelNameLimitConfig(t *testing.T) {
+	scheme := model.NameValidationScheme
+	model.NameValidationScheme = model.UTF8Validation
+	defer func() { model.NameValidationScheme = scheme }()
+
 	targets := []*testData{
 		{
 			name: "target1",
@@ -248,7 +271,7 @@ func TestLabelNameLimitConfig(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, nil, func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		// set label limit in scrape_config
 		for _, scrapeCfg := range cfg.ScrapeConfigs {
 			scrapeCfg.LabelNameLengthLimit = 20
@@ -284,7 +307,7 @@ func TestLabelValueLimitConfig(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, nil, func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		// set label name limit in scrape_config
 		for _, scrapeCfg := range cfg.ScrapeConfigs {
 			scrapeCfg.LabelValueLengthLimit = 25
@@ -321,16 +344,17 @@ test_summary0_count{id="1",testLabel=""} 1000
 `
 
 func verifyEmptyLabelValuesTarget1(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	want := td.attributes
 	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
 	ts1 := getTS(metrics1)
 
-	e1 := []testExpectation{
-		assertMetricPresent("test_gauge0",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+	e1 := []metricExpectation{
+		{
+			"test_gauge0",
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -339,10 +363,13 @@ func verifyEmptyLabelValuesTarget1(t *testing.T, td *testData, rms []pmetric.Res
 						compareAttributes(map[string]string{"id": "1"}),
 					},
 				},
-			}),
-		assertMetricPresent("test_counter0",
-			compareMetricType(pmetric.MetricTypeSum),
-			compareMetricUnit(""),
+			},
+			nil,
+		},
+		{
+			"test_counter0",
+			pmetric.MetricTypeSum,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -351,10 +378,13 @@ func verifyEmptyLabelValuesTarget1(t *testing.T, td *testData, rms []pmetric.Res
 						compareAttributes(map[string]string{"id": "1"}),
 					},
 				},
-			}),
-		assertMetricPresent("test_histogram0",
-			compareMetricType(pmetric.MetricTypeHistogram),
-			compareMetricUnit(""),
+			},
+			nil,
+		},
+		{
+			"test_histogram0",
+			pmetric.MetricTypeHistogram,
+			"",
 			[]dataPointExpectation{
 				{
 					histogramPointComparator: []histogramPointComparator{
@@ -364,10 +394,13 @@ func verifyEmptyLabelValuesTarget1(t *testing.T, td *testData, rms []pmetric.Res
 						compareHistogramAttributes(map[string]string{"id": "1"}),
 					},
 				},
-			}),
-		assertMetricPresent("test_summary0",
-			compareMetricType(pmetric.MetricTypeSummary),
-			compareMetricUnit(""),
+			},
+			nil,
+		},
+		{
+			"test_summary0",
+			pmetric.MetricTypeSummary,
+			"",
 			[]dataPointExpectation{
 				{
 					summaryPointComparator: []summaryPointComparator{
@@ -377,7 +410,9 @@ func verifyEmptyLabelValuesTarget1(t *testing.T, td *testData, rms []pmetric.Res
 						compareSummaryAttributes(map[string]string{"id": "1"}),
 					},
 				},
-			}),
+			},
+			nil,
+		},
 	}
 	doCompare(t, "scrape-empty-label-values-1", want, rms[0], e1)
 }
@@ -396,16 +431,17 @@ test_counter0{id="2",testLabel="foobar"} 110
 `
 
 func verifyEmptyLabelValuesTarget2(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	want := td.attributes
 	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
 	ts1 := getTS(metrics1)
 
-	e1 := []testExpectation{
-		assertMetricPresent("test_gauge0",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+	e1 := []metricExpectation{
+		{
+			"test_gauge0",
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -421,10 +457,13 @@ func verifyEmptyLabelValuesTarget2(t *testing.T, td *testData, rms []pmetric.Res
 						compareAttributes(map[string]string{"id": "2", "testLabel": "foobar"}),
 					},
 				},
-			}),
-		assertMetricPresent("test_counter0",
-			compareMetricType(pmetric.MetricTypeSum),
-			compareMetricUnit(""),
+			},
+			nil,
+		},
+		{
+			"test_counter0",
+			pmetric.MetricTypeSum,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -440,7 +479,9 @@ func verifyEmptyLabelValuesTarget2(t *testing.T, td *testData, rms []pmetric.Res
 						compareAttributes(map[string]string{"id": "2", "testLabel": "foobar"}),
 					},
 				},
-			}),
+			},
+			nil,
+		},
 	}
 	doCompare(t, "scrape-empty-label-values-2", want, rms[0], e1)
 }
@@ -473,15 +514,16 @@ test_gauge0{instance="hostname:8080",job="honor_labels_test",testLabel="value1"}
 
 func verifyHonorLabelsFalse(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
 	want := td.attributes
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
 	ts1 := metrics1.At(0).Gauge().DataPoints().At(0).Timestamp()
 
-	doCompare(t, "honor_labels_false", want, rms[0], []testExpectation{
-		assertMetricPresent("test_gauge0",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+	doCompare(t, "honor_labels_false", want, rms[0], []metricExpectation{
+		{
+			"test_gauge0",
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -491,7 +533,9 @@ func verifyHonorLabelsFalse(t *testing.T, td *testData, rms []pmetric.ResourceMe
 						compareAttributes(map[string]string{"exported_job": "honor_labels_test", "exported_instance": "hostname:8080", "testLabel": "value1"}),
 					},
 				},
-			}),
+			},
+			nil,
+		},
 	})
 }
 
@@ -507,17 +551,17 @@ test_counter0 100
 `
 
 func verifyEmptyLabelsTarget1(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	want := td.attributes
 	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
 	ts1 := getTS(metrics1)
 
-	e1 := []testExpectation{
-		assertMetricPresent(
+	e1 := []metricExpectation{
+		{
 			"test_gauge0",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -527,11 +571,12 @@ func verifyEmptyLabelsTarget1(t *testing.T, td *testData, rms []pmetric.Resource
 					},
 				},
 			},
-		),
-		assertMetricPresent(
+			nil,
+		},
+		{
 			"test_counter0",
-			compareMetricType(pmetric.MetricTypeSum),
-			compareMetricUnit(""),
+			pmetric.MetricTypeSum,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -541,7 +586,8 @@ func verifyEmptyLabelsTarget1(t *testing.T, td *testData, rms []pmetric.Resource
 					},
 				},
 			},
-		),
+			nil,
+		},
 	}
 	doCompare(t, "scrape-empty-labels-1", want, rms[0], e1)
 }
@@ -574,22 +620,51 @@ func TestHonorLabelsFalseConfig(t *testing.T) {
 }
 
 func verifyHonorLabelsTrue(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	// job and instance label values should be honored from honorLabelsTarget
-	expectedAttributes := td.attributes
-	expectedAttributes.PutStr("service.name", "honor_labels_test")
-	expectedAttributes.PutStr("service.instance.id", "hostname:8080")
-	expectedAttributes.PutStr("net.host.port", "8080")
-	expectedAttributes.PutStr("net.host.name", "hostname")
+	expectedResourceAttributes := pcommon.NewMap()
+	td.attributes.CopyTo(expectedResourceAttributes)
+	expectedResourceAttributes.PutStr("service.name", "honor_labels_test")
+	expectedResourceAttributes.PutStr("service.instance.id", "hostname:8080")
+	expectedResourceAttributes.PutStr("server.port", "8080")
+	expectedResourceAttributes.PutStr("server.address", "hostname")
 
-	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
+	expectedScrapeConfigAttributes := td.attributes
+
+	// get the resource created for the scraped metric
+	var resourceMetric pmetric.ResourceMetrics
+	var scrapeConfigResourceMetrics pmetric.ResourceMetrics
+	gotScrapeConfigMetrics, gotResourceMetrics := false, false
+	for _, rm := range rms {
+		serviceInstance, ok := rm.Resource().Attributes().Get(string(semconv.ServiceInstanceIDKey))
+		require.True(t, ok)
+		if serviceInstance.AsString() == "hostname:8080" {
+			resourceMetric = rm
+			gotResourceMetrics = true
+		} else {
+			scrapeConfigResourceMetrics = rm
+			gotScrapeConfigMetrics = true
+		}
+		if gotResourceMetrics && gotScrapeConfigMetrics {
+			break
+		}
+	}
+
+	metrics1 := resourceMetric.ScopeMetrics().At(0).Metrics()
 	ts1 := metrics1.At(0).Gauge().DataPoints().At(0).Timestamp()
 
-	doCompare(t, "honor_labels_true", expectedAttributes, rms[0], []testExpectation{
-		assertMetricPresent("test_gauge0",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+	// check the scrape metrics of the resource created from the scrape config
+	doCompare(t, "honor_labels_true", expectedScrapeConfigAttributes, scrapeConfigResourceMetrics, nil)
+
+	// assert that the gauge metric has been retrieved correctly. This resource only contains the gauge and no scrape metrics,
+	// so we directly check the gauge metric without the scrape metrics
+	assertExpectedAttributes(t, expectedResourceAttributes, resourceMetric)
+	assertExpectedMetrics(t, []metricExpectation{
+		{
+			"test_gauge0",
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -598,8 +673,10 @@ func verifyHonorLabelsTrue(t *testing.T, td *testData, rms []pmetric.ResourceMet
 						compareAttributes(map[string]string{"testLabel": "value1"}),
 					},
 				},
-			}),
-	})
+			},
+			nil,
+		},
+	}, resourceMetric, false, true)
 }
 
 func TestHonorLabelsTrueConfig(t *testing.T) {
@@ -613,7 +690,7 @@ func TestHonorLabelsTrueConfig(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, nil, func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		// set label name limit in scrape_config
 		for _, scrapeCfg := range cfg.ScrapeConfigs {
 			scrapeCfg.HonorLabels = true
@@ -639,7 +716,7 @@ func TestRelabelJobInstance(t *testing.T) {
 		},
 	}
 
-	testComponent(t, targets, nil, func(cfg *promcfg.Config) {
+	testComponent(t, targets, nil, func(cfg *PromConfig) {
 		for _, scrapeConfig := range cfg.ScrapeConfigs {
 			scrapeConfig.MetricRelabelConfigs = []*relabel.Config{
 				{
@@ -663,20 +740,27 @@ func TestRelabelJobInstance(t *testing.T) {
 
 func verifyRelabelJobInstance(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
 	verifyNumValidScrapeResults(t, td, rms)
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	wantAttributes := td.attributes
 	wantAttributes.PutStr("service.name", "not-target1")
 	wantAttributes.PutStr("service.instance.id", "relabeled-instance")
-	wantAttributes.PutStr("net.host.port", "")
-	wantAttributes.PutStr("net.host.name", "relabeled-instance")
+	wantAttributes.PutStr("server.port", "")
+	wantAttributes.PutStr("server.address", "relabeled-instance")
 
 	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
 	ts1 := metrics1.At(0).Gauge().DataPoints().At(0).Timestamp()
-	doCompare(t, "relabel-job-instance", wantAttributes, rms[0], []testExpectation{
-		assertMetricPresent("jvm_memory_bytes_used",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+
+	// directly assert the expected attributes and the expected metrics,
+	// as the scrape metrics which are checked within the doCompare function
+	// are not included in this resourceMetric, which only contains the relabeled
+	// metrics
+	assertExpectedAttributes(t, wantAttributes, rms[0])
+	assertExpectedMetrics(t, []metricExpectation{
+		{
+			"jvm_memory_bytes_used",
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -685,8 +769,10 @@ func verifyRelabelJobInstance(t *testing.T, td *testData, rms []pmetric.Resource
 						compareAttributes(map[string]string{"area": "heap"}),
 					},
 				},
-			}),
-	})
+			},
+			nil,
+		},
+	}, rms[0], false, true)
 }
 
 const targetResourceAttsInTargetInfo = `
@@ -714,7 +800,7 @@ func TestTargetInfoResourceAttributes(t *testing.T) {
 
 func verifyTargetInfoResourceAttributes(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
 	verifyNumValidScrapeResults(t, td, rms)
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	wantAttributes := td.attributes
 	wantAttributes.PutStr("foo", "bar")
@@ -722,10 +808,11 @@ func verifyTargetInfoResourceAttributes(t *testing.T, td *testData, rms []pmetri
 
 	metrics1 := rms[0].ScopeMetrics().At(0).Metrics()
 	ts1 := metrics1.At(0).Gauge().DataPoints().At(0).Timestamp()
-	doCompare(t, "relabel-job-instance", wantAttributes, rms[0], []testExpectation{
-		assertMetricPresent("jvm_memory_bytes_used",
-			compareMetricType(pmetric.MetricTypeGauge),
-			compareMetricUnit(""),
+	doCompare(t, "relabel-job-instance", wantAttributes, rms[0], []metricExpectation{
+		{
+			"jvm_memory_bytes_used",
+			pmetric.MetricTypeGauge,
+			"",
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
@@ -734,7 +821,9 @@ func verifyTargetInfoResourceAttributes(t *testing.T, td *testData, rms []pmetri
 						compareAttributes(map[string]string{"area": "heap"}),
 					},
 				},
-			}),
+			},
+			nil,
+		},
 	})
 }
 
@@ -764,22 +853,22 @@ func TestScopeInfoScopeAttributes(t *testing.T) {
 
 func verifyMultipleScopes(t *testing.T, td *testData, rms []pmetric.ResourceMetrics) {
 	verifyNumValidScrapeResults(t, td, rms)
-	require.Greater(t, len(rms), 0, "At least one resource metric should be present")
+	require.NotEmpty(t, rms, "At least one resource metric should be present")
 
 	sms := rms[0].ScopeMetrics()
-	require.Equal(t, sms.Len(), 3, "Three scope metrics should be present")
+	require.Equal(t, 3, sms.Len(), "Three scope metrics should be present")
 	sms.Sort(func(a, b pmetric.ScopeMetrics) bool {
 		return a.Scope().Name() < b.Scope().Name()
 	})
-	require.Equal(t, sms.At(0).Scope().Name(), "fake.scope.name")
-	require.Equal(t, sms.At(0).Scope().Version(), "v0.1.0")
-	require.Equal(t, sms.At(0).Scope().Attributes().Len(), 0)
-	require.Equal(t, sms.At(1).Scope().Name(), "otelcol/prometheusreceiver")
-	require.Equal(t, sms.At(1).Scope().Attributes().Len(), 0)
-	require.Equal(t, sms.At(2).Scope().Name(), "scope.with.attributes")
-	require.Equal(t, sms.At(2).Scope().Version(), "v1.5.0")
-	require.Equal(t, sms.At(2).Scope().Attributes().Len(), 1)
+	require.Equal(t, "fake.scope.name", sms.At(0).Scope().Name())
+	require.Equal(t, "v0.1.0", sms.At(0).Scope().Version())
+	require.Equal(t, 0, sms.At(0).Scope().Attributes().Len())
+	require.Equal(t, "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/prometheusreceiver", sms.At(1).Scope().Name())
+	require.Equal(t, 0, sms.At(1).Scope().Attributes().Len())
+	require.Equal(t, "scope.with.attributes", sms.At(2).Scope().Name())
+	require.Equal(t, "v1.5.0", sms.At(2).Scope().Version())
+	require.Equal(t, 1, sms.At(2).Scope().Attributes().Len())
 	scopeAttrVal, found := sms.At(2).Scope().Attributes().Get("animal")
 	require.True(t, found)
-	require.Equal(t, scopeAttrVal.Str(), "bear")
+	require.Equal(t, "bear", scopeAttrVal.Str())
 }

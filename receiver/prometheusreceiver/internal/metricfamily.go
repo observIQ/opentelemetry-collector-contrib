@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/prometheus/prometheus/model/exemplar"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/scrape"
@@ -19,11 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/prometheus"
-)
-
-const (
-	traceIDKey = "trace_id"
-	spanIDKey  = "span_id"
 )
 
 type metricFamily struct {
@@ -40,17 +36,22 @@ type metricFamily struct {
 // a couple data complexValue (buckets and count/sum), a group of a metric family always share a same set of tags. for
 // simple types like counter and gauge, each data point is a group of itself
 type metricGroup struct {
-	mtype        pmetric.MetricType
-	ts           int64
-	ls           labels.Labels
-	count        float64
-	hasCount     bool
-	sum          float64
-	hasSum       bool
-	created      float64
-	value        float64
-	complexValue []*dataPoint
-	exemplars    pmetric.ExemplarSlice
+	mtype    pmetric.MetricType
+	ts       int64
+	ls       labels.Labels
+	count    float64
+	hasCount bool
+	sum      float64
+	hasSum   bool
+	// This corresponds to the `_created` sample found from the metric parsing.
+	// - https://github.com/prometheus/OpenMetrics/blob/main/specification/OpenMetrics.md#timestamps
+	// - https://github.com/prometheus/OpenMetrics/blob/main/specification/OpenMetrics.md#counter-1
+	createdSeconds float64
+	value          float64
+	hValue         *histogram.Histogram
+	fhValue        *histogram.FloatHistogram
+	complexValue   []*dataPoint
+	exemplars      pmetric.ExemplarSlice
 }
 
 func newMetricFamily(metricName string, mc scrape.MetricMetadataStore, logger *zap.Logger) *metricFamily {
@@ -145,15 +146,127 @@ func (mg *metricGroup) toDistributionPoint(dest pmetric.HistogramDataPointSlice)
 
 	// The timestamp MUST be in retrieved from milliseconds and converted to nanoseconds.
 	tsNanos := timestampFromMs(mg.ts)
-	if mg.created != 0 {
-		point.SetStartTimestamp(timestampFromFloat64(mg.created))
-	} else {
+	if mg.createdSeconds != 0 {
+		point.SetStartTimestamp(timestampFromFloat64(mg.createdSeconds))
+	} else if !removeStartTimeAdjustment.IsEnabled() {
 		// metrics_adjuster adjusts the startTimestamp to the initial scrape timestamp
 		point.SetStartTimestamp(tsNanos)
 	}
 	point.SetTimestamp(tsNanos)
 	populateAttributes(pmetric.MetricTypeHistogram, mg.ls, point.Attributes())
 	mg.setExemplars(point.Exemplars())
+}
+
+// toExponentialHistogramDataPoints is based on
+// https://opentelemetry.io/docs/specs/otel/compatibility/prometheus_and_openmetrics/#exponential-histograms
+func (mg *metricGroup) toExponentialHistogramDataPoints(dest pmetric.ExponentialHistogramDataPointSlice) {
+	if !mg.hasCount {
+		return
+	}
+	point := dest.AppendEmpty()
+	point.SetTimestamp(timestampFromMs(mg.ts))
+
+	// We do not set Min or Max as native histograms don't have that information.
+	switch {
+	case mg.fhValue != nil:
+		fh := mg.fhValue
+
+		if value.IsStaleNaN(fh.Sum) {
+			point.SetFlags(pmetric.DefaultDataPointFlags.WithNoRecordedValue(true))
+			// The count and sum are initialized to 0, so we don't need to set them.
+		} else {
+			point.SetScale(fh.Schema)
+			// Input is a float native histogram. This conversion will lose
+			// precision,but we don't actually expect float histograms in scrape,
+			// since these are typically the result of operations on integer
+			// native histograms in the database.
+			point.SetCount(uint64(fh.Count))
+			point.SetSum(fh.Sum)
+			point.SetZeroThreshold(fh.ZeroThreshold)
+			point.SetZeroCount(uint64(fh.ZeroCount))
+
+			if len(fh.PositiveSpans) > 0 {
+				point.Positive().SetOffset(fh.PositiveSpans[0].Offset - 1) // -1 because OTEL offset are for the lower bound, not the upper bound
+				convertAbsoluteBuckets(fh.PositiveSpans, fh.PositiveBuckets, point.Positive().BucketCounts())
+			}
+			if len(fh.NegativeSpans) > 0 {
+				point.Negative().SetOffset(fh.NegativeSpans[0].Offset - 1) // -1 because OTEL offset are for the lower bound, not the upper bound
+				convertAbsoluteBuckets(fh.NegativeSpans, fh.NegativeBuckets, point.Negative().BucketCounts())
+			}
+		}
+
+	case mg.hValue != nil:
+		h := mg.hValue
+
+		if value.IsStaleNaN(h.Sum) {
+			point.SetFlags(pmetric.DefaultDataPointFlags.WithNoRecordedValue(true))
+			// The count and sum are initialized to 0, so we don't need to set them.
+		} else {
+			point.SetScale(h.Schema)
+			point.SetCount(h.Count)
+			point.SetSum(h.Sum)
+			point.SetZeroThreshold(h.ZeroThreshold)
+			point.SetZeroCount(h.ZeroCount)
+
+			if len(h.PositiveSpans) > 0 {
+				point.Positive().SetOffset(h.PositiveSpans[0].Offset - 1) // -1 because OTEL offset are for the lower bound, not the upper bound
+				convertDeltaBuckets(h.PositiveSpans, h.PositiveBuckets, point.Positive().BucketCounts())
+			}
+			if len(h.NegativeSpans) > 0 {
+				point.Negative().SetOffset(h.NegativeSpans[0].Offset - 1) // -1 because OTEL offset are for the lower bound, not the upper bound
+				convertDeltaBuckets(h.NegativeSpans, h.NegativeBuckets, point.Negative().BucketCounts())
+			}
+		}
+
+	default:
+		// This should never happen.
+		return
+	}
+
+	tsNanos := timestampFromMs(mg.ts)
+	if mg.createdSeconds != 0 {
+		point.SetStartTimestamp(timestampFromFloat64(mg.createdSeconds))
+	} else if !removeStartTimeAdjustment.IsEnabled() {
+		// metrics_adjuster adjusts the startTimestamp to the initial scrape timestamp
+		point.SetStartTimestamp(tsNanos)
+	}
+	point.SetTimestamp(tsNanos)
+	populateAttributes(pmetric.MetricTypeHistogram, mg.ls, point.Attributes())
+	mg.setExemplars(point.Exemplars())
+}
+
+func convertDeltaBuckets(spans []histogram.Span, deltas []int64, buckets pcommon.UInt64Slice) {
+	buckets.EnsureCapacity(len(deltas))
+	bucketIdx := 0
+	bucketCount := int64(0)
+	for spanIdx, span := range spans {
+		if spanIdx > 0 {
+			for i := int32(0); i < span.Offset; i++ {
+				buckets.Append(uint64(0))
+			}
+		}
+		for i := uint32(0); i < span.Length; i++ {
+			bucketCount += deltas[bucketIdx]
+			bucketIdx++
+			buckets.Append(uint64(bucketCount))
+		}
+	}
+}
+
+func convertAbsoluteBuckets(spans []histogram.Span, counts []float64, buckets pcommon.UInt64Slice) {
+	buckets.EnsureCapacity(len(counts))
+	bucketIdx := 0
+	for spanIdx, span := range spans {
+		if spanIdx > 0 {
+			for i := int32(0); i < span.Offset; i++ {
+				buckets.Append(uint64(0))
+			}
+		}
+		for i := uint32(0); i < span.Length; i++ {
+			buckets.Append(uint64(counts[bucketIdx]))
+			bucketIdx++
+		}
+	}
 }
 
 func (mg *metricGroup) setExemplars(exemplars pmetric.ExemplarSlice) {
@@ -205,9 +318,9 @@ func (mg *metricGroup) toSummaryPoint(dest pmetric.SummaryDataPointSlice) {
 	// The timestamp MUST be in retrieved from milliseconds and converted to nanoseconds.
 	tsNanos := timestampFromMs(mg.ts)
 	point.SetTimestamp(tsNanos)
-	if mg.created != 0 {
-		point.SetStartTimestamp(timestampFromFloat64(mg.created))
-	} else {
+	if mg.createdSeconds != 0 {
+		point.SetStartTimestamp(timestampFromFloat64(mg.createdSeconds))
+	} else if !removeStartTimeAdjustment.IsEnabled() {
 		// metrics_adjuster adjusts the startTimestamp to the initial scrape timestamp
 		point.SetStartTimestamp(tsNanos)
 	}
@@ -219,9 +332,9 @@ func (mg *metricGroup) toNumberDataPoint(dest pmetric.NumberDataPointSlice) {
 	point := dest.AppendEmpty()
 	// gauge/undefined types have no start time.
 	if mg.mtype == pmetric.MetricTypeSum {
-		if mg.created != 0 {
-			point.SetStartTimestamp(timestampFromFloat64(mg.created))
-		} else {
+		if mg.createdSeconds != 0 {
+			point.SetStartTimestamp(timestampFromFloat64(mg.createdSeconds))
+		} else if !removeStartTimeAdjustment.IsEnabled() {
 			// metrics_adjuster adjusts the startTimestamp to the initial scrape timestamp
 			point.SetStartTimestamp(tsNanos)
 		}
@@ -240,19 +353,19 @@ func populateAttributes(mType pmetric.MetricType, ls labels.Labels, dest pcommon
 	dest.EnsureCapacity(ls.Len())
 	names := getSortedNotUsefulLabels(mType)
 	j := 0
-	for i := range ls {
-		for j < len(names) && names[j] < ls[i].Name {
+	ls.Range(func(l labels.Label) {
+		for j < len(names) && names[j] < l.Name {
 			j++
 		}
-		if j < len(names) && ls[i].Name == names[j] {
-			continue
+		if j < len(names) && l.Name == names[j] {
+			return
 		}
-		if ls[i].Value == "" {
+		if l.Value == "" {
 			// empty label values should be omitted
-			continue
+			return
 		}
-		dest.PutStr(ls[i].Name, ls[i].Value)
-	}
+		dest.PutStr(l.Name, l.Value)
+	})
 }
 
 func (mf *metricFamily) loadMetricGroupOrCreate(groupKey uint64, ls labels.Labels, ts int64) *metricGroup {
@@ -287,8 +400,8 @@ func (mf *metricFamily) addSeries(seriesRef uint64, metricName string, ls labels
 			mg.ts = t
 			mg.count = v
 			mg.hasCount = true
-		case strings.HasSuffix(metricName, metricSuffixCreated):
-			mg.created = v
+		case metricName == mf.metadata.Metric+metricSuffixCreated:
+			mg.createdSeconds = v
 		default:
 			boundary, err := getBoundary(mf.mtype, ls)
 			if err != nil {
@@ -296,18 +409,61 @@ func (mf *metricFamily) addSeries(seriesRef uint64, metricName string, ls labels
 			}
 			mg.complexValue = append(mg.complexValue, &dataPoint{value: v, boundary: boundary})
 		}
+	case pmetric.MetricTypeExponentialHistogram:
+		if metricName == mf.metadata.Metric+metricSuffixCreated {
+			mg.createdSeconds = v
+		}
 	case pmetric.MetricTypeSum:
-		if strings.HasSuffix(metricName, metricSuffixCreated) {
-			mg.created = v
+		if metricName == mf.metadata.Metric+metricSuffixCreated {
+			mg.createdSeconds = v
 		} else {
 			mg.value = v
 		}
-	case pmetric.MetricTypeEmpty, pmetric.MetricTypeGauge, pmetric.MetricTypeExponentialHistogram:
+	case pmetric.MetricTypeEmpty, pmetric.MetricTypeGauge:
 		fallthrough
 	default:
 		mg.value = v
 	}
 
+	return nil
+}
+
+// addCreationTimestamp updates the metric group cache with the created timestamp for the group.
+// The parser gets the created time in ms however and we must convert it to seconds here.
+// - https://github.com/prometheus/prometheus/blob/2bf6f4c9dcbb1ad2e8fef70c6a48d8fc44a7f57c/model/textparse/interface.go#L77-L80
+func (mf *metricFamily) addCreationTimestamp(seriesRef uint64, ls labels.Labels, atMs, ctMs int64) {
+	mg := mf.loadMetricGroupOrCreate(seriesRef, ls, atMs)
+	mg.createdSeconds = float64(ctMs) / 1000.0
+}
+
+func (mf *metricFamily) addExponentialHistogramSeries(seriesRef uint64, metricName string, ls labels.Labels, t int64, h *histogram.Histogram, fh *histogram.FloatHistogram) error {
+	mg := mf.loadMetricGroupOrCreate(seriesRef, ls, t)
+	if mg.ts != t {
+		return fmt.Errorf("inconsistent timestamps on metric points for metric %v", metricName)
+	}
+	if mg.mtype != pmetric.MetricTypeExponentialHistogram {
+		return fmt.Errorf("metric type mismatch for exponential histogram metric %v type %s", metricName, mg.mtype.String())
+	}
+	switch {
+	case fh != nil:
+		if mg.hValue != nil {
+			return fmt.Errorf("exponential histogram %v already has float counts", metricName)
+		}
+		mg.count = fh.Count
+		mg.sum = fh.Sum
+		mg.hasCount = true
+		mg.hasSum = true
+		mg.fhValue = fh
+	case h != nil:
+		if mg.fhValue != nil {
+			return fmt.Errorf("exponential histogram %v already has integer counts", metricName)
+		}
+		mg.count = float64(h.Count)
+		mg.sum = h.Sum
+		mg.hasCount = true
+		mg.hasSum = true
+		mg.hValue = h
+	}
 	return nil
 }
 
@@ -321,6 +477,7 @@ func (mf *metricFamily) appendMetric(metrics pmetric.MetricSlice, trimSuffixes b
 	metric.SetName(name)
 	metric.SetDescription(mf.metadata.Help)
 	metric.SetUnit(prometheus.UnitWordToUCUM(mf.metadata.Unit))
+	metric.Metadata().PutStr(prometheus.MetricMetadataTypeKey, string(mf.metadata.Type))
 
 	var pointCount int
 
@@ -352,7 +509,16 @@ func (mf *metricFamily) appendMetric(metrics pmetric.MetricSlice, trimSuffixes b
 		}
 		pointCount = sdpL.Len()
 
-	case pmetric.MetricTypeEmpty, pmetric.MetricTypeGauge, pmetric.MetricTypeExponentialHistogram:
+	case pmetric.MetricTypeExponentialHistogram:
+		histogram := metric.SetEmptyExponentialHistogram()
+		histogram.SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+		hdpL := histogram.DataPoints()
+		for _, mg := range mf.groupOrders {
+			mg.toExponentialHistogramDataPoints(hdpL)
+		}
+		pointCount = hdpL.Len()
+
+	case pmetric.MetricTypeEmpty, pmetric.MetricTypeGauge:
 		fallthrough
 	default: // Everything else should be set to a Gauge.
 		gauge := metric.SetEmptyGauge()
@@ -382,10 +548,10 @@ func (mf *metricFamily) addExemplar(seriesRef uint64, e exemplar.Exemplar) {
 func convertExemplar(pe exemplar.Exemplar, e pmetric.Exemplar) {
 	e.SetTimestamp(timestampFromMs(pe.Ts))
 	e.SetDoubleValue(pe.Value)
-	e.FilteredAttributes().EnsureCapacity(len(pe.Labels))
-	for _, lb := range pe.Labels {
+	e.FilteredAttributes().EnsureCapacity(pe.Labels.Len())
+	pe.Labels.Range(func(lb labels.Label) {
 		switch strings.ToLower(lb.Name) {
-		case traceIDKey:
+		case prometheus.ExemplarTraceIDKey:
 			var tid [16]byte
 			err := decodeAndCopyToLowerBytes(tid[:], []byte(lb.Value))
 			if err == nil {
@@ -393,7 +559,7 @@ func convertExemplar(pe exemplar.Exemplar, e pmetric.Exemplar) {
 			} else {
 				e.FilteredAttributes().PutStr(lb.Name, lb.Value)
 			}
-		case spanIDKey:
+		case prometheus.ExemplarSpanIDKey:
 			var sid [8]byte
 			err := decodeAndCopyToLowerBytes(sid[:], []byte(lb.Value))
 			if err == nil {
@@ -404,7 +570,7 @@ func convertExemplar(pe exemplar.Exemplar, e pmetric.Exemplar) {
 		default:
 			e.FilteredAttributes().PutStr(lb.Name, lb.Value)
 		}
-	}
+	})
 }
 
 /*

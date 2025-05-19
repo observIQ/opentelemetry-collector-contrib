@@ -5,7 +5,7 @@ package filterottl // import "github.com/open-telemetry/opentelemetry-collector-
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
@@ -13,14 +13,19 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottldatapoint"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottllog"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlmetric"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlprofile"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlresource"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlscope"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlspan"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlspanevent"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/ottlfuncs"
 )
 
 func StandardSpanFuncs() map[string]ottl.Factory[ottlspan.TransformContext] {
-	return ottlfuncs.StandardConverters[ottlspan.TransformContext]()
+	m := ottlfuncs.StandardConverters[ottlspan.TransformContext]()
+	isRootSpanFactory := ottlfuncs.NewIsRootSpanFactory()
+	m[isRootSpanFactory.Name()] = isRootSpanFactory
+	return m
 }
 
 func StandardSpanEventFuncs() map[string]ottl.Factory[ottlspanevent.TransformContext] {
@@ -40,8 +45,16 @@ func StandardDataPointFuncs() map[string]ottl.Factory[ottldatapoint.TransformCon
 	return ottlfuncs.StandardConverters[ottldatapoint.TransformContext]()
 }
 
+func StandardScopeFuncs() map[string]ottl.Factory[ottlscope.TransformContext] {
+	return ottlfuncs.StandardConverters[ottlscope.TransformContext]()
+}
+
 func StandardLogFuncs() map[string]ottl.Factory[ottllog.TransformContext] {
 	return ottlfuncs.StandardConverters[ottllog.TransformContext]()
+}
+
+func StandardProfileFuncs() map[string]ottl.Factory[ottlprofile.TransformContext] {
+	return ottlfuncs.StandardConverters[ottlprofile.TransformContext]()
 }
 
 func StandardResourceFuncs() map[string]ottl.Factory[ottlresource.TransformContext] {
@@ -61,14 +74,14 @@ func createHasAttributeOnDatapointFunction(_ ottl.FunctionContext, oArgs ottl.Ar
 	args, ok := oArgs.(*hasAttributeOnDatapointArguments)
 
 	if !ok {
-		return nil, fmt.Errorf("hasAttributeOnDatapointFactory args must be of type *hasAttributeOnDatapointArguments")
+		return nil, errors.New("hasAttributeOnDatapointFactory args must be of type *hasAttributeOnDatapointArguments")
 	}
 
 	return hasAttributeOnDatapoint(args.Key, args.ExpectedVal)
 }
 
 func hasAttributeOnDatapoint(key string, expectedVal string) (ottl.ExprFunc[ottlmetric.TransformContext], error) {
-	return func(ctx context.Context, tCtx ottlmetric.TransformContext) (any, error) {
+	return func(_ context.Context, tCtx ottlmetric.TransformContext) (any, error) {
 		return checkDataPoints(tCtx, key, &expectedVal)
 	}, nil
 }
@@ -85,14 +98,14 @@ func createHasAttributeKeyOnDatapointFunction(_ ottl.FunctionContext, oArgs ottl
 	args, ok := oArgs.(*hasAttributeKeyOnDatapointArguments)
 
 	if !ok {
-		return nil, fmt.Errorf("hasAttributeKeyOnDatapointFactory args must be of type *hasAttributeOnDatapointArguments")
+		return nil, errors.New("hasAttributeKeyOnDatapointFactory args must be of type *hasAttributeOnDatapointArguments")
 	}
 
 	return hasAttributeKeyOnDatapoint(args.Key)
 }
 
 func hasAttributeKeyOnDatapoint(key string) (ottl.ExprFunc[ottlmetric.TransformContext], error) {
-	return func(ctx context.Context, tCtx ottlmetric.TransformContext) (any, error) {
+	return func(_ context.Context, tCtx ottlmetric.TransformContext) (any, error) {
 		return checkDataPoints(tCtx, key, nil)
 	}, nil
 }
@@ -112,7 +125,7 @@ func checkDataPoints(tCtx ottlmetric.TransformContext, key string, expectedVal *
 	case pmetric.MetricTypeSummary:
 		return checkSummaryDataPointSlice(metric.Summary().DataPoints(), key, expectedVal), nil
 	}
-	return nil, fmt.Errorf("unknown metric type")
+	return nil, errors.New("unknown metric type")
 }
 
 func checkNumberDataPointSlice(dps pmetric.NumberDataPointSlice, key string, expectedVal *string) bool {

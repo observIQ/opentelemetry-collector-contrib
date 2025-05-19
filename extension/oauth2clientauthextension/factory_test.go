@@ -6,6 +6,7 @@ package oauth2clientauthextension
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/component/componenttest"
@@ -14,7 +15,9 @@ import (
 
 func TestCreateDefaultConfig(t *testing.T) {
 	// prepare and test
-	expected := &Config{}
+	expected := &Config{
+		ExpiryBuffer: 5 * time.Minute,
+	}
 
 	// test
 	cfg := createDefaultConfig()
@@ -24,7 +27,7 @@ func TestCreateDefaultConfig(t *testing.T) {
 	assert.NoError(t, componenttest.CheckConfigStruct(cfg))
 }
 
-func TestCreateExtension(t *testing.T) {
+func TestCreate(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 
 	tests := []struct {
@@ -43,15 +46,6 @@ func TestCreateExtension(t *testing.T) {
 			},
 			shouldError: false,
 		},
-		{
-			name: "invalid_client_settings_should_error",
-			settings: &Config{
-				ClientID: "testclientid",
-				TokenURL: "https://example.com/v1/token",
-				Scopes:   []string{"resource.read"},
-			},
-			shouldError: true,
-		},
 	}
 
 	for _, testcase := range tests {
@@ -60,12 +54,12 @@ func TestCreateExtension(t *testing.T) {
 			cfg.ClientSecret = testcase.settings.ClientSecret
 			cfg.TokenURL = testcase.settings.TokenURL
 			cfg.Scopes = testcase.settings.Scopes
-			ext, err := createExtension(context.Background(), extensiontest.NewNopCreateSettings(), cfg)
+			ext, err := createExtension(context.Background(), extensiontest.NewNopSettings(extensiontest.NopType), cfg)
 			if testcase.shouldError {
 				assert.Error(t, err)
 				assert.Nil(t, ext)
 			} else {
-				assert.Nil(t, err)
+				assert.NoError(t, err)
 				assert.NotNil(t, ext)
 			}
 		})

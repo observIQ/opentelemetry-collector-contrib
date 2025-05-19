@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -16,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	conventions "go.opentelemetry.io/otel/semconv/v1.18.0"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/traceutil"
 )
@@ -265,7 +266,6 @@ func TestSpanEventToSentryEvent(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
 		t.Run(test.testName, func(t *testing.T) {
 			sentryEvent, err := sentryEventFromError(test.errorMessage, test.errorType, test.sampleSentrySpan)
 			if sentryEvent != nil {
@@ -370,7 +370,7 @@ func TestGenerateSpanDescriptors(t *testing.T) {
 			testName: "http-client",
 			name:     "/api/users/{user_id}",
 			attrs: map[string]any{
-				conventions.AttributeHTTPMethod: "GET",
+				string(conventions.HTTPMethodKey): http.MethodGet,
 			},
 			spanKind:    ptrace.SpanKindClient,
 			op:          "http.client",
@@ -380,7 +380,7 @@ func TestGenerateSpanDescriptors(t *testing.T) {
 			testName: "http-server",
 			name:     "/api/users/{user_id}",
 			attrs: map[string]any{
-				conventions.AttributeHTTPMethod: "POST",
+				string(conventions.HTTPMethodKey): http.MethodPost,
 			},
 			spanKind:    ptrace.SpanKindServer,
 			op:          "http.server",
@@ -390,7 +390,7 @@ func TestGenerateSpanDescriptors(t *testing.T) {
 			testName: "db-call-without-statement",
 			name:     "SET mykey 'Val'",
 			attrs: map[string]any{
-				conventions.AttributeDBSystem: "redis",
+				string(conventions.DBSystemKey): "redis",
 			},
 			spanKind:    ptrace.SpanKindClient,
 			op:          "db",
@@ -400,8 +400,8 @@ func TestGenerateSpanDescriptors(t *testing.T) {
 			testName: "db-call-with-statement",
 			name:     "mysql call",
 			attrs: map[string]any{
-				conventions.AttributeDBSystem:    "sqlite",
-				conventions.AttributeDBStatement: "SELECT * FROM table",
+				string(conventions.DBSystemKey):    "sqlite",
+				string(conventions.DBStatementKey): "SELECT * FROM table",
 			},
 			spanKind:    ptrace.SpanKindClient,
 			op:          "db",
@@ -411,7 +411,7 @@ func TestGenerateSpanDescriptors(t *testing.T) {
 			testName: "rpc",
 			name:     "grpc.test.EchoService/Echo",
 			attrs: map[string]any{
-				conventions.AttributeRPCService: "EchoService",
+				string(conventions.RPCServiceKey): "EchoService",
 			},
 			spanKind:    ptrace.SpanKindClient,
 			op:          "rpc",
@@ -461,13 +461,13 @@ func TestGenerateTagsFromAttributes(t *testing.T) {
 	tags := generateTagsFromAttributes(attrs)
 
 	stringVal := tags["string-key"]
-	assert.Equal(t, stringVal, "string-value")
+	assert.Equal(t, "string-value", stringVal)
 	boolVal := tags["bool-key"]
-	assert.Equal(t, boolVal, "true")
+	assert.Equal(t, "true", boolVal)
 	doubleVal := tags["double-key"]
-	assert.Equal(t, doubleVal, "123.123")
+	assert.Equal(t, "123.123", doubleVal)
 	intVal := tags["int-key"]
-	assert.Equal(t, intVal, "321")
+	assert.Equal(t, "321", intVal)
 }
 
 type SpanStatusCase struct {
@@ -600,7 +600,7 @@ func TestClassifyOrphanSpans(t *testing.T) {
 			transactionMap: generateEmptyTransactionMap(rootSpan1),
 			spans:          generateOrphanSpansFromSpans(childChildSpan1, childSpan1, childSpan2),
 			assertion: func(t *testing.T, orphanSpans []*sentry.Span) {
-				assert.Len(t, orphanSpans, 0)
+				assert.Empty(t, orphanSpans)
 			},
 		},
 		{
@@ -628,7 +628,7 @@ func TestClassifyOrphanSpans(t *testing.T) {
 			transactionMap: generateEmptyTransactionMap(rootSpan1, rootSpan2),
 			spans:          generateOrphanSpansFromSpans(childChildSpan1, childSpan1, root2childSpan, childSpan2),
 			assertion: func(t *testing.T, orphanSpans []*sentry.Span) {
-				assert.Len(t, orphanSpans, 0)
+				assert.Empty(t, orphanSpans)
 			},
 		},
 	}
@@ -724,7 +724,7 @@ func TestPushTraceData(t *testing.T) {
 			}
 
 			err := s.pushTraceData(context.Background(), test.td)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			assert.Equal(t, test.called, transport.called)
 		})
 	}

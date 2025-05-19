@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tinylib/msgp/msgp"
 	"go.opentelemetry.io/collector/consumer/consumertest"
@@ -23,6 +24,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/plogtest"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/fluentforwardreceiver/internal/metadata"
 )
 
 func setupServer(t *testing.T) (func() net.Conn, *consumertest.LogsSink, *observer.ObservedLogs, context.CancelFunc) {
@@ -32,7 +34,7 @@ func setupServer(t *testing.T) (func() net.Conn, *consumertest.LogsSink, *observ
 	logCore, logObserver := observer.New(zap.DebugLevel)
 	logger := zap.New(logCore)
 
-	set := receivertest.NewNopCreateSettings()
+	set := receivertest.NewNopSettings(metadata.Type)
 	set.Logger = logger
 
 	conf := &Config{
@@ -45,13 +47,13 @@ func setupServer(t *testing.T) (func() net.Conn, *consumertest.LogsSink, *observ
 
 	connect := func() net.Conn {
 		conn, err := net.Dial("tcp", receiver.(*fluentReceiver).listener.Addr().String())
-		require.Nil(t, err)
+		require.NoError(t, err)
 		return conn
 	}
 
 	go func() {
 		<-ctx.Done()
-		require.NoError(t, receiver.Shutdown(ctx))
+		assert.NoError(t, receiver.Shutdown(ctx))
 	}()
 
 	return connect, next, logObserver, cancel
@@ -335,16 +337,17 @@ func TestUnixEndpoint(t *testing.T) {
 		ListenAddress: "unix://" + filepath.Join(tmpdir, "fluent.sock"),
 	}
 
-	receiver, err := newFluentReceiver(receivertest.NewNopCreateSettings(), conf, next)
+	receiver, err := newFluentReceiver(receivertest.NewNopSettings(metadata.Type), conf, next)
 	require.NoError(t, err)
 	require.NoError(t, receiver.Start(ctx, nil))
+	defer func() { require.NoError(t, receiver.Shutdown(ctx)) }()
 
 	conn, err := net.Dial("unix", receiver.(*fluentReceiver).listener.Addr().String())
 	require.NoError(t, err)
 
 	n, err := conn.Write(parseHexDump("testdata/message-event"))
 	require.NoError(t, err)
-	require.Greater(t, n, 0)
+	require.Positive(t, n)
 
 	var converted []plog.Logs
 	require.Eventually(t, func() bool {
@@ -380,10 +383,10 @@ func TestHighVolume(t *testing.T) {
 			for j := 0; j < totalMessagesPerRoutine; j++ {
 				eventBytes := makeSampleEvent(fmt.Sprintf("tag-%d-%d", num, j))
 				n, err := conn.Write(eventBytes)
-				require.NoError(t, err)
-				require.Equal(t, len(eventBytes), n)
+				assert.NoError(t, err)
+				assert.Equal(t, len(eventBytes), n)
 			}
-			require.NoError(t, conn.Close())
+			assert.NoError(t, conn.Close())
 			wg.Done()
 		}(i)
 	}

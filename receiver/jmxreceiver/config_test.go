@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/metadata"
@@ -49,7 +50,7 @@ func TestLoadConfig(t *testing.T) {
 						"x-header-1": "value1",
 						"x-header-2": "value2",
 					},
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 5 * time.Second,
 					},
 				},
@@ -77,7 +78,7 @@ func TestLoadConfig(t *testing.T) {
 				CollectionInterval: 10 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "0.0.0.0:0",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 5 * time.Second,
 					},
 				},
@@ -92,7 +93,7 @@ func TestLoadConfig(t *testing.T) {
 				CollectionInterval: 10 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "0.0.0.0:0",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 5 * time.Second,
 					},
 				},
@@ -108,7 +109,7 @@ func TestLoadConfig(t *testing.T) {
 				CollectionInterval: -100 * time.Millisecond,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "0.0.0.0:0",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 5 * time.Second,
 					},
 				},
@@ -124,7 +125,7 @@ func TestLoadConfig(t *testing.T) {
 				CollectionInterval: 10 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "0.0.0.0:0",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: -100 * time.Millisecond,
 					},
 				},
@@ -142,7 +143,7 @@ func TestLoadConfig(t *testing.T) {
 				CollectionInterval: 10 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "0.0.0.0:0",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 5 * time.Second,
 					},
 				},
@@ -158,7 +159,7 @@ func TestLoadConfig(t *testing.T) {
 				CollectionInterval: 10 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "0.0.0.0:0",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 5 * time.Second,
 					},
 				},
@@ -175,7 +176,7 @@ func TestLoadConfig(t *testing.T) {
 				CollectionInterval: 10 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "0.0.0.0:0",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 5 * time.Second,
 					},
 				},
@@ -191,7 +192,7 @@ func TestLoadConfig(t *testing.T) {
 				CollectionInterval: 10 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "0.0.0.0:0",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 5 * time.Second,
 					},
 				},
@@ -211,14 +212,14 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
 			if tt.expectedErr != "" {
 				assert.ErrorContains(t, cfg.(*Config).Validate(), tt.expectedErr)
 				assert.Equal(t, tt.expected, cfg)
 				return
 			}
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
@@ -237,7 +238,7 @@ func TestCustomMetricsGathererConfig(t *testing.T) {
 
 	sub, err := cm.Sub(component.NewIDWithName(metadata.Type, "invalidtargetsystem").String())
 	require.NoError(t, err)
-	require.NoError(t, component.UnmarshalConfig(sub, cfg))
+	require.NoError(t, sub.Unmarshal(cfg))
 
 	conf := cfg.(*Config)
 
@@ -317,7 +318,7 @@ func TestClassPathParse(t *testing.T) {
 
 func TestWithInvalidConfig(t *testing.T) {
 	f := NewFactory()
-	assert.Equal(t, component.Type("jmx"), f.Type())
+	assert.Equal(t, metadata.Type, f.Type())
 
 	cfg := f.CreateDefaultConfig().(*Config)
 	require.NotNil(t, cfg)

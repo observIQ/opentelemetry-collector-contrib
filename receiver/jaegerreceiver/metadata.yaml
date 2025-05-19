@@ -4,15 +4,11 @@ status:
   class: receiver
   stability:
     beta: [traces]
-  distributions:
-  - core
-  - contrib
-  - aws
-  - grafana
-  - observiq
-  - redhat
-  - splunk
-  - sumo
-  - liatrio
+  distributions: [core, contrib, k8s]
   codeowners:
     active: [yurishkuro]
+
+tests:
+  config:
+    protocols:
+      grpc:

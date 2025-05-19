@@ -19,10 +19,13 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/goldendataset"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterconfig"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor/internal/metadata"
 )
 
-const filteredMetric = "p0_metric_1"
-const filteredAttrKey = "pt-label-key-1"
+const (
+	filteredMetric  = "p0_metric_1"
+	filteredAttrKey = "pt-label-key-1"
+)
 
 var filteredAttrVal = pcommon.NewValueStr("pt-label-val-1")
 
@@ -41,7 +44,7 @@ func testMatchError(t *testing.T, mdType pmetric.MetricType, mvType pmetric.Numb
 		err := proc.ConsumeMetrics(context.Background(), testData("", 1, mdType, mvType))
 		assert.Error(t, err)
 		// assert that metrics not be filtered as a result
-		assert.Len(t, next.AllMetrics(), 0)
+		assert.Empty(t, next.AllMetrics())
 	})
 }
 
@@ -104,12 +107,11 @@ func testFilter(t *testing.T, mdType pmetric.MetricType, mvType pmetric.NumberDa
 }
 
 func assertFiltered(t *testing.T, lm pcommon.Map) {
-	lm.Range(func(k string, v pcommon.Value) bool {
+	for k, v := range lm.All() {
 		if k == filteredAttrKey {
 			require.NotEqual(t, v.AsRaw(), filteredAttrVal.AsRaw())
 		}
-		return true
-	})
+	}
 }
 
 func filterMetrics(t *testing.T, include []string, exclude []string, mds []pmetric.Metrics) []pmetric.Metrics {
@@ -126,9 +128,9 @@ func testProcessor(t *testing.T, include []string, exclude []string) (processor.
 	cfg := exprConfig(factory, include, exclude)
 	ctx := context.Background()
 	next := &consumertest.MetricsSink{}
-	proc, err := factory.CreateMetricsProcessor(
+	proc, err := factory.CreateMetrics(
 		ctx,
-		processortest.NewNopCreateSettings(),
+		processortest.NewNopSettings(metadata.Type),
 		cfg,
 		next,
 	)

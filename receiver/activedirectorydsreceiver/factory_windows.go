@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build windows
-// +build windows
 
 package activedirectorydsreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/activedirectorydsreceiver"
 
@@ -13,7 +12,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/activedirectorydsreceiver/internal/metadata"
 )
@@ -22,7 +22,7 @@ var errConfigNotActiveDirectory = fmt.Errorf("config is not valid for the '%s' r
 
 func createMetricsReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	rConf component.Config,
 	consumer consumer.Metrics,
 ) (receiver.Metrics, error) {
@@ -32,21 +32,19 @@ func createMetricsReceiver(
 	}
 
 	adds := newActiveDirectoryDSScraper(c.MetricsBuilderConfig, params)
-	scraper, err := scraperhelper.NewScraper(
-		metadata.Type,
+	s, err := scraper.NewMetrics(
 		adds.scrape,
-		scraperhelper.WithStart(adds.start),
-		scraperhelper.WithShutdown(adds.shutdown),
+		scraper.WithStart(adds.start),
+		scraper.WithShutdown(adds.shutdown),
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
-	return scraperhelper.NewScraperControllerReceiver(
-		&c.ScraperControllerSettings,
+	return scraperhelper.NewMetricsController(
+		&c.ControllerConfig,
 		params,
 		consumer,
-		scraperhelper.AddScraper(scraper),
+		scraperhelper.AddScraper(metadata.Type, s),
 	)
 }

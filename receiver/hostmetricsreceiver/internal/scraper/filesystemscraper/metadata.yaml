@@ -1,6 +1,12 @@
-type: hostmetricsreceiver/filesystem
+type: filesystem
 
-parent: hostmetrics
+status:
+  class: scraper
+  stability:
+    beta: [metrics]
+  distributions: [core, contrib, k8s]
+  codeowners:
+    active: [dmitryax, braydonk]
 
 sem_conv_version: 1.9.0
 
@@ -50,7 +56,7 @@ metrics:
   system.filesystem.utilization:
     enabled: false
     description: Fraction of filesystem bytes used.
-    unit: 1
+    unit: "1"
     gauge:
       value_type: double
     attributes: [device, mode, mountpoint, type]

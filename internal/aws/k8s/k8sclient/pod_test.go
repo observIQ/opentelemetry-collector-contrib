@@ -7,7 +7,6 @@ import (
 	"log"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
@@ -180,7 +179,7 @@ func TestPodClient_NamespaceToRunningPodNum(t *testing.T) {
 		"default":     7,
 	}
 	resultMap := client.NamespaceToRunningPodNum()
-	log.Printf("NamespaceToRunningPodNum (len=%v): %v", len(resultMap), awsutil.Prettify(resultMap))
+	log.Printf("NamespaceToRunningPodNum (len=%v): %v", len(resultMap), resultMap)
 	assert.Equal(t, expectedMap, resultMap)
 	client.shutdown()
 	assert.True(t, client.stopped)
@@ -189,5 +188,5 @@ func TestPodClient_NamespaceToRunningPodNum(t *testing.T) {
 func TestTransformFuncPod(t *testing.T) {
 	info, err := transformFuncPod(nil)
 	assert.Nil(t, info)
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 }

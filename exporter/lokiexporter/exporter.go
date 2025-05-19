@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,13 +16,13 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
-	"go.opencensus.io/stats"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/lokiexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/loki"
 )
 
@@ -35,15 +36,23 @@ type lokiExporter struct {
 	settings component.TelemetrySettings
 	client   *http.Client
 	wg       sync.WaitGroup
+
+	telemetryBuilder *metadata.TelemetryBuilder
 }
 
-func newExporter(config *Config, settings component.TelemetrySettings) *lokiExporter {
+func newExporter(config *Config, settings component.TelemetrySettings) (*lokiExporter, error) {
 	settings.Logger.Info("using the new Loki exporter")
 
-	return &lokiExporter{
-		config:   config,
-		settings: settings,
+	builder, err := metadata.NewTelemetryBuilder(settings)
+	if err != nil {
+		return nil, err
 	}
+
+	return &lokiExporter{
+		config:           config,
+		settings:         settings,
+		telemetryBuilder: builder,
+	}, nil
 }
 
 func (l *lokiExporter) pushLogData(ctx context.Context, ld plog.Logs) error {
@@ -53,7 +62,7 @@ func (l *lokiExporter) pushLogData(ctx context.Context, ld plog.Logs) error {
 	for tenant, request := range requests {
 		err := l.sendPushRequest(ctx, tenant, request, ld)
 		if isErrMissingLabels(err) {
-			stats.Record(ctx, lokiExporterFailedToSendLogRecordsDueToMissingLabels.M(int64(ld.LogRecordCount())))
+			l.telemetryBuilder.LokiexporterSendFailedDueToMissingLabels.Add(ctx, int64(ld.LogRecordCount()))
 		}
 
 		errs = multierr.Append(errs, err)
@@ -66,7 +75,7 @@ func (l *lokiExporter) sendPushRequest(ctx context.Context, tenant string, reque
 	pushReq := request.PushRequest
 	report := request.Report
 	if len(pushReq.Streams) == 0 {
-		return consumererror.NewPermanent(fmt.Errorf("failed to transform logs into Loki log streams"))
+		return consumererror.NewPermanent(errors.New("failed to transform logs into Loki log streams"))
 	}
 	if len(report.Errors) > 0 {
 		l.settings.Logger.Info(
@@ -81,12 +90,12 @@ func (l *lokiExporter) sendPushRequest(ctx context.Context, tenant string, reque
 		return consumererror.NewPermanent(err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", l.config.HTTPClientSettings.Endpoint, bytes.NewReader(buf))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, l.config.Endpoint, bytes.NewReader(buf))
 	if err != nil {
 		return consumererror.NewPermanent(err)
 	}
 
-	for k, v := range l.config.HTTPClientSettings.Headers {
+	for k, v := range l.config.Headers {
 		req.Header.Set(k, string(v))
 	}
 	req.Header.Set("Content-Type", "application/x-protobuf")
@@ -134,8 +143,8 @@ func encode(pb proto.Message) ([]byte, error) {
 	return buf, nil
 }
 
-func (l *lokiExporter) start(_ context.Context, host component.Host) (err error) {
-	client, err := l.config.HTTPClientSettings.ToClient(host, l.settings)
+func (l *lokiExporter) start(ctx context.Context, host component.Host) (err error) {
+	client, err := l.config.ToClient(ctx, host, l.settings)
 	if err != nil {
 		return err
 	}

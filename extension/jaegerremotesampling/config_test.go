@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/jaegerremotesampling/internal/metadata"
 )
@@ -29,13 +30,13 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewID(metadata.Type),
 			expected: &Config{
-				HTTPServerSettings: &confighttp.HTTPServerSettings{Endpoint: ":5778"},
-				GRPCServerSettings: &configgrpc.GRPCServerSettings{NetAddr: confignet.NetAddr{
-					Endpoint:  ":14250",
-					Transport: "tcp",
+				HTTPServerConfig: &confighttp.ServerConfig{Endpoint: "localhost:5778"},
+				GRPCServerConfig: &configgrpc.ServerConfig{NetAddr: confignet.AddrConfig{
+					Endpoint:  "localhost:14250",
+					Transport: confignet.TransportTypeTCP,
 				}},
 				Source: Source{
-					Remote: &configgrpc.GRPCClientSettings{
+					Remote: &configgrpc.ClientConfig{
 						Endpoint: "jaeger-collector:14250",
 					},
 				},
@@ -44,10 +45,10 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "1"),
 			expected: &Config{
-				HTTPServerSettings: &confighttp.HTTPServerSettings{Endpoint: ":5778"},
-				GRPCServerSettings: &configgrpc.GRPCServerSettings{NetAddr: confignet.NetAddr{
-					Endpoint:  ":14250",
-					Transport: "tcp",
+				HTTPServerConfig: &confighttp.ServerConfig{Endpoint: "localhost:5778"},
+				GRPCServerConfig: &configgrpc.ServerConfig{NetAddr: confignet.AddrConfig{
+					Endpoint:  "localhost:14250",
+					Transport: confignet.TransportTypeTCP,
 				}},
 				Source: Source{
 					ReloadInterval: time.Second,
@@ -64,15 +65,14 @@ func TestLoadConfig(t *testing.T) {
 			cfg := factory.CreateDefaultConfig()
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
-			assert.NoError(t, component.ValidateConfig(cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
 }
 
 func TestValidate(t *testing.T) {
-
 	testCases := []struct {
 		desc     string
 		cfg      Config
@@ -86,16 +86,16 @@ func TestValidate(t *testing.T) {
 		{
 			desc: "no sources",
 			cfg: Config{
-				GRPCServerSettings: &configgrpc.GRPCServerSettings{},
+				GRPCServerConfig: &configgrpc.ServerConfig{},
 			},
 			expected: errNoSources,
 		},
 		{
 			desc: "too many sources",
 			cfg: Config{
-				GRPCServerSettings: &configgrpc.GRPCServerSettings{},
+				GRPCServerConfig: &configgrpc.ServerConfig{},
 				Source: Source{
-					Remote: &configgrpc.GRPCClientSettings{},
+					Remote: &configgrpc.ClientConfig{},
 					File:   "/tmp/some-file",
 				},
 			},

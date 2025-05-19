@@ -21,15 +21,18 @@ import (
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumertest"
-	"go.opentelemetry.io/collector/obsreport/obsreporttest"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/proxy"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/udppoller"
 )
 
@@ -39,28 +42,6 @@ const (
 	mockRegion           = "us-west-2"
 )
 
-func TestConsumerCantBeNil(t *testing.T) {
-	addr, err := net.ResolveUDPAddr(udppoller.Transport, "localhost:0")
-	assert.NoError(t, err, "should resolve UDP address")
-
-	sock, err := net.ListenUDP(udppoller.Transport, addr)
-	assert.NoError(t, err, "should be able to listen")
-	defer sock.Close()
-	address := sock.LocalAddr().String()
-
-	_, err = newReceiver(
-		&Config{
-			NetAddr: confignet.NetAddr{
-				Endpoint:  address,
-				Transport: udppoller.Transport,
-			},
-		},
-		nil,
-		receivertest.NewNopCreateSettings(),
-	)
-	assert.True(t, errors.Is(err, component.ErrNilNextConsumer), "consumer is nil should be detected")
-}
-
 func TestProxyCreationFailed(t *testing.T) {
 	addr, err := findAvailableUDPAddress()
 	assert.NoError(t, err, "there should be address available")
@@ -68,18 +49,18 @@ func TestProxyCreationFailed(t *testing.T) {
 	sink := new(consumertest.TracesSink)
 	_, err = newReceiver(
 		&Config{
-			NetAddr: confignet.NetAddr{
+			AddrConfig: confignet.AddrConfig{
 				Endpoint:  addr,
 				Transport: udppoller.Transport,
 			},
 			ProxyServer: &proxy.Config{
-				TCPAddr: confignet.TCPAddr{
+				TCPAddrConfig: confignet.TCPAddrConfig{
 					Endpoint: "invalidEndpoint",
 				},
 			},
 		},
 		sink,
-		receivertest.NewNopCreateSettings(),
+		receivertest.NewNopSettings(metadata.Type),
 	)
 	assert.Error(t, err, "receiver creation should fail due to failure to create TCP proxy")
 }
@@ -88,13 +69,13 @@ func TestPollerCreationFailed(t *testing.T) {
 	sink := new(consumertest.TracesSink)
 	_, err := newReceiver(
 		&Config{
-			NetAddr: confignet.NetAddr{
+			AddrConfig: confignet.AddrConfig{
 				Endpoint:  "dontCare",
-				Transport: "tcp",
+				Transport: confignet.TransportTypeTCP,
 			},
 		},
 		sink,
-		receivertest.NewNopCreateSettings(),
+		receivertest.NewNopSettings(metadata.Type),
 	)
 	assert.Error(t, err, "receiver creation should fail due to failure to create UCP poller")
 }
@@ -107,25 +88,24 @@ func TestSegmentsPassedToConsumer(t *testing.T) {
 	}
 	t.Skip("Flaky Test - See https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/10596")
 
-	receiverID := component.NewID("TestSegmentsPassedToConsumer")
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
-	assert.NoError(t, err, "SetupTelemetry should succeed")
+	receiverID := component.MustNewID("TestSegmentsPassedToConsumer")
+	tt := componenttest.NewTelemetry()
 	defer func() {
 		assert.NoError(t, tt.Shutdown(context.Background()))
 	}()
 
 	t.Setenv(defaultRegionEnvName, mockRegion)
 
-	addr, rcvr, _ := createAndOptionallyStartReceiver(t, nil, true, receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()})
+	addr, rcvr, _ := createAndOptionallyStartReceiver(t, nil, true, receiver.Settings{ID: receiverID, TelemetrySettings: tt.NewTelemetrySettings(), BuildInfo: component.NewDefaultBuildInfo()})
 	defer func() {
 		assert.NoError(t, rcvr.Shutdown(context.Background()))
 	}()
 
 	content, err := os.ReadFile(filepath.Join("../../internal/aws/xray", "testdata", "ddbSample.txt"))
-	assert.NoError(t, err, "can not read raw segment")
+	assert.NoError(t, err, "cannot read raw segment")
 
 	err = writePacket(t, addr, segmentHeader+string(content))
-	assert.NoError(t, err, "can not write packet in the happy case")
+	assert.NoError(t, err, "cannot write packet in the happy case")
 
 	sink := rcvr.(*xrayReceiver).consumer.(*consumertest.TracesSink)
 
@@ -134,26 +114,25 @@ func TestSegmentsPassedToConsumer(t *testing.T) {
 		return len(got) == 1
 	}, 10*time.Second, 5*time.Millisecond, "consumer should eventually get the X-Ray span")
 
-	assert.NoError(t, tt.CheckReceiverTraces(udppoller.Transport, 18, 0))
+	assertReceiverTraces(t, tt, receiverID, 18, 0)
 }
 
 func TestTranslatorErrorsOut(t *testing.T) {
-	receiverID := component.NewID("TestTranslatorErrorsOut")
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
-	assert.NoError(t, err, "SetupTelemetry should succeed")
+	receiverID := component.MustNewID("TestTranslatorErrorsOut")
+	tt := componenttest.NewTelemetry()
 	defer func() {
 		assert.NoError(t, tt.Shutdown(context.Background()))
 	}()
 
 	t.Setenv(defaultRegionEnvName, mockRegion)
 
-	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, nil, true, receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()})
+	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, nil, true, receiver.Settings{ID: receiverID, TelemetrySettings: tt.NewTelemetrySettings(), BuildInfo: component.NewDefaultBuildInfo()})
 	defer func() {
 		assert.NoError(t, rcvr.Shutdown(context.Background()))
 	}()
 
-	err = writePacket(t, addr, segmentHeader+"invalidSegment")
-	assert.NoError(t, err, "can not write packet in the "+receiverID.String()+" case")
+	err := writePacket(t, addr, segmentHeader+"invalidSegment")
+	assert.NoError(t, err, "cannot write packet in the "+receiverID.String()+" case")
 
 	assert.Eventuallyf(t, func() bool {
 		logs := recordedLogs.All()
@@ -161,29 +140,28 @@ func TestTranslatorErrorsOut(t *testing.T) {
 			"X-Ray segment to OT traces conversion failed")
 	}, 10*time.Second, 5*time.Millisecond, "poller should log warning because consumer errored out")
 
-	assert.NoError(t, tt.CheckReceiverTraces(udppoller.Transport, 1, 1))
+	assertReceiverTraces(t, tt, receiverID, 1, 1)
 }
 
 func TestSegmentsConsumerErrorsOut(t *testing.T) {
-	receiverID := component.NewID("TestSegmentsConsumerErrorsOut")
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
-	assert.NoError(t, err, "SetupTelemetry should succeed")
+	receiverID := component.MustNewID("TestSegmentsConsumerErrorsOut")
+	tt := componenttest.NewTelemetry()
 	defer func() {
 		assert.NoError(t, tt.Shutdown(context.Background()))
 	}()
 
 	t.Setenv(defaultRegionEnvName, mockRegion)
 
-	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, consumertest.NewErr(errors.New("can't consume traces")), true, receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()})
+	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, consumertest.NewErr(errors.New("can't consume traces")), true, receiver.Settings{ID: receiverID, TelemetrySettings: tt.NewTelemetrySettings(), BuildInfo: component.NewDefaultBuildInfo()})
 	defer func() {
 		assert.NoError(t, rcvr.Shutdown(context.Background()))
 	}()
 
 	content, err := os.ReadFile(filepath.Join("../../internal/aws/xray", "testdata", "serverSample.txt"))
-	assert.NoError(t, err, "can not read raw segment")
+	assert.NoError(t, err, "cannot read raw segment")
 
 	err = writePacket(t, addr, segmentHeader+string(content))
-	assert.NoError(t, err, "can not write packet")
+	assert.NoError(t, err, "cannot write packet")
 
 	assert.Eventuallyf(t, func() bool {
 		logs := recordedLogs.All()
@@ -191,61 +169,58 @@ func TestSegmentsConsumerErrorsOut(t *testing.T) {
 			"Trace consumer errored out")
 	}, 10*time.Second, 5*time.Millisecond, "poller should log warning because consumer errored out")
 
-	assert.NoError(t, tt.CheckReceiverTraces(udppoller.Transport, 1, 1))
+	assertReceiverTraces(t, tt, receiverID, 1, 1)
 }
 
 func TestPollerCloseError(t *testing.T) {
-	receiverID := component.NewID("TestPollerCloseError")
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
-	assert.NoError(t, err, "SetupTelemetry should succeed")
+	receiverID := component.MustNewID("TestPollerCloseError")
+	tt := componenttest.NewTelemetry()
 	defer func() {
 		assert.NoError(t, tt.Shutdown(context.Background()))
 	}()
 
 	t.Setenv(defaultRegionEnvName, mockRegion)
 
-	_, rcvr, _ := createAndOptionallyStartReceiver(t, nil, false, receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()})
+	_, rcvr, _ := createAndOptionallyStartReceiver(t, nil, false, receiver.Settings{ID: receiverID, TelemetrySettings: tt.NewTelemetrySettings(), BuildInfo: component.NewDefaultBuildInfo()})
 	mPoller := &mockPoller{closeErr: errors.New("mockPollerCloseErr")}
 	rcvr.(*xrayReceiver).poller = mPoller
 	rcvr.(*xrayReceiver).server = &mockProxy{}
-	err = rcvr.Shutdown(context.Background())
+	err := rcvr.Shutdown(context.Background())
 	assert.ErrorIs(t, err, mPoller.closeErr, "expected error")
 }
 
 func TestProxyCloseError(t *testing.T) {
-	receiverID := component.NewID("TestPollerCloseError")
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
-	assert.NoError(t, err, "SetupTelemetry should succeed")
+	receiverID := component.MustNewID("TestPollerCloseError")
+	tt := componenttest.NewTelemetry()
 	defer func() {
 		assert.NoError(t, tt.Shutdown(context.Background()))
 	}()
 
 	t.Setenv(defaultRegionEnvName, mockRegion)
 
-	_, rcvr, _ := createAndOptionallyStartReceiver(t, nil, false, receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()})
+	_, rcvr, _ := createAndOptionallyStartReceiver(t, nil, false, receiver.Settings{ID: receiverID, TelemetrySettings: tt.NewTelemetrySettings(), BuildInfo: component.NewDefaultBuildInfo()})
 	mProxy := &mockProxy{closeErr: errors.New("mockProxyCloseErr")}
 	rcvr.(*xrayReceiver).poller = &mockPoller{}
 	rcvr.(*xrayReceiver).server = mProxy
-	err = rcvr.Shutdown(context.Background())
+	err := rcvr.Shutdown(context.Background())
 	assert.ErrorIs(t, err, mProxy.closeErr, "expected error")
 }
 
 func TestBothPollerAndProxyCloseError(t *testing.T) {
-	receiverID := component.NewID("TestBothPollerAndProxyCloseError")
-	tt, err := obsreporttest.SetupTelemetry(receiverID)
-	assert.NoError(t, err, "SetupTelemetry should succeed")
+	receiverID := component.MustNewID("TestBothPollerAndProxyCloseError")
+	tt := componenttest.NewTelemetry()
 	defer func() {
 		assert.NoError(t, tt.Shutdown(context.Background()))
 	}()
 
 	t.Setenv(defaultRegionEnvName, mockRegion)
 
-	_, rcvr, _ := createAndOptionallyStartReceiver(t, nil, false, receiver.CreateSettings{ID: receiverID, TelemetrySettings: tt.TelemetrySettings, BuildInfo: component.NewDefaultBuildInfo()})
+	_, rcvr, _ := createAndOptionallyStartReceiver(t, nil, false, receiver.Settings{ID: receiverID, TelemetrySettings: tt.NewTelemetrySettings(), BuildInfo: component.NewDefaultBuildInfo()})
 	mPoller := &mockPoller{closeErr: errors.New("mockPollerCloseErr")}
 	mProxy := &mockProxy{closeErr: errors.New("mockProxyCloseErr")}
 	rcvr.(*xrayReceiver).poller = mPoller
 	rcvr.(*xrayReceiver).server = mProxy
-	err = rcvr.Shutdown(context.Background())
+	err := rcvr.Shutdown(context.Background())
 	assert.ErrorIs(t, err, mPoller.closeErr, "expected error")
 	assert.ErrorIs(t, err, mProxy.closeErr, "expected error")
 }
@@ -286,7 +261,8 @@ func createAndOptionallyStartReceiver(
 	t *testing.T,
 	csu consumer.Traces,
 	start bool,
-	set receiver.CreateSettings) (string, receiver.Traces, *observer.ObservedLogs) {
+	set receiver.Settings,
+) (string, receiver.Traces, *observer.ObservedLogs) {
 	addr, err := findAvailableUDPAddress()
 	assert.NoError(t, err, "there should be address available")
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
@@ -302,12 +278,12 @@ func createAndOptionallyStartReceiver(
 	set.Logger = logger
 	rcvr, err := newReceiver(
 		&Config{
-			NetAddr: confignet.NetAddr{
+			AddrConfig: confignet.AddrConfig{
 				Endpoint:  addr,
 				Transport: udppoller.Transport,
 			},
 			ProxyServer: &proxy.Config{
-				TCPAddr: confignet.TCPAddr{
+				TCPAddrConfig: confignet.TCPAddrConfig{
 					Endpoint: tcpAddr,
 				},
 			},
@@ -359,4 +335,48 @@ func writePacket(t *testing.T, addr, toWrite string) error {
 func logSetup() (*zap.Logger, *observer.ObservedLogs) {
 	core, recorded := observer.New(zapcore.InfoLevel)
 	return zap.New(core), recorded
+}
+
+func assertReceiverTraces(t *testing.T, tt *componenttest.Telemetry, id component.ID, accepted, refused int64) {
+	got, err := tt.GetMetric("otelcol_receiver_accepted_spans")
+	assert.NoError(t, err)
+	metricdatatest.AssertEqual(t,
+		metricdata.Metrics{
+			Name:        "otelcol_receiver_accepted_spans",
+			Description: "Number of spans successfully pushed into the pipeline. [alpha]",
+			Unit:        "{spans}",
+			Data: metricdata.Sum[int64]{
+				Temporality: metricdata.CumulativeTemporality,
+				IsMonotonic: true,
+				DataPoints: []metricdata.DataPoint[int64]{
+					{
+						Attributes: attribute.NewSet(
+							attribute.String("receiver", id.String()),
+							attribute.String("transport", udppoller.Transport)),
+						Value: accepted,
+					},
+				},
+			},
+		}, got, metricdatatest.IgnoreTimestamp(), metricdatatest.IgnoreExemplars())
+
+	got, err = tt.GetMetric("otelcol_receiver_refused_spans")
+	assert.NoError(t, err)
+	metricdatatest.AssertEqual(t,
+		metricdata.Metrics{
+			Name:        "otelcol_receiver_refused_spans",
+			Description: "Number of spans that could not be pushed into the pipeline. [alpha]",
+			Unit:        "{spans}",
+			Data: metricdata.Sum[int64]{
+				Temporality: metricdata.CumulativeTemporality,
+				IsMonotonic: true,
+				DataPoints: []metricdata.DataPoint[int64]{
+					{
+						Attributes: attribute.NewSet(
+							attribute.String("receiver", id.String()),
+							attribute.String("transport", udppoller.Transport)),
+						Value: refused,
+					},
+				},
+			},
+		}, got, metricdatatest.IgnoreTimestamp(), metricdatatest.IgnoreExemplars())
 }

@@ -32,7 +32,7 @@ resourceMetrics:
             name: k8s.pod.status_reason
             unit: ""
         scope:
-          name: otelcol/k8sclusterreceiver
+          name: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver
           version: latest
   - resource:
       attributes:
@@ -48,6 +48,9 @@ resourceMetrics:
         - key: k8s.container.name
           value:
             stringValue: container-name
+        - key: k8s.container.status.last_terminated_reason
+          value:
+            stringValue: Evicted
         - key: k8s.namespace.name
           value:
             stringValue: test-namespace
@@ -88,5 +91,5 @@ resourceMetrics:
             name: k8s.container.cpu_limit
             unit: "{cpu}"
         scope:
-          name: otelcol/k8sclusterreceiver
+          name: github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver
           version: latest

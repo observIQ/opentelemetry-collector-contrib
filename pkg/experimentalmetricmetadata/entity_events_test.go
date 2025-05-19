@@ -19,6 +19,7 @@ func Test_Entity_State(t *testing.T) {
 	event.ID().PutStr("k8s.pod.uid", "123")
 	state := event.SetEntityState()
 	state.SetEntityType("k8s.pod")
+	state.SetInterval(1 * time.Hour)
 	state.Attributes().PutStr("label1", "value1")
 
 	actual := slice.At(0)
@@ -34,6 +35,8 @@ func Test_Entity_State(t *testing.T) {
 	assert.Equal(t, "value1", v.Str())
 
 	assert.Equal(t, "k8s.pod", actual.EntityStateDetails().EntityType())
+
+	assert.Equal(t, 1*time.Hour, actual.EntityStateDetails().Interval())
 }
 
 func Test_Entity_Delete(t *testing.T) {
@@ -88,14 +91,14 @@ func Test_EntityEventsSlice_ConvertAndMoveToLogs(t *testing.T) {
 	// Check the Scope
 	v, ok := scopeLogs.Scope().Attributes().Get(semconvOtelEntityEventAsScope)
 	assert.True(t, ok)
-	assert.Equal(t, true, v.Bool())
+	assert.True(t, v.Bool())
 
 	records := scopeLogs.LogRecords()
 	assert.Equal(t, 2, records.Len())
 
 	// Check the first event.
 	attrs := records.At(0).Attributes().AsRaw()
-	assert.EqualValues(
+	assert.Equal(
 		t, map[string]any{
 			semconvOtelEntityEventName:  semconvEventEntityEventState,
 			semconvOtelEntityType:       "k8s.pod",
@@ -106,7 +109,7 @@ func Test_EntityEventsSlice_ConvertAndMoveToLogs(t *testing.T) {
 
 	// Check the second event.
 	attrs = records.At(1).Attributes().AsRaw()
-	assert.EqualValues(
+	assert.Equal(
 		t, map[string]any{
 			semconvOtelEntityEventName: semconvEventEntityEventDelete,
 			semconvOtelEntityID:        map[string]any{"k8s.node.uid": "abc"},
@@ -126,7 +129,7 @@ func Test_EntityEventType(t *testing.T) {
 func Test_EntityTypeEmpty(t *testing.T) {
 	lr := plog.NewLogRecord()
 	e := EntityStateDetails{lr}
-	assert.Equal(t, "", e.EntityType())
+	assert.Empty(t, e.EntityType())
 }
 
 func Test_EntityEventTimestamp(t *testing.T) {
@@ -134,6 +137,6 @@ func Test_EntityEventTimestamp(t *testing.T) {
 	e := EntityEvent{lr}
 	ts := pcommon.NewTimestampFromTime(time.Now())
 	e.SetTimestamp(ts)
-	assert.EqualValues(t, ts, e.Timestamp())
-	assert.EqualValues(t, ts, lr.Timestamp())
+	assert.Equal(t, ts, e.Timestamp())
+	assert.Equal(t, ts, lr.Timestamp())
 }

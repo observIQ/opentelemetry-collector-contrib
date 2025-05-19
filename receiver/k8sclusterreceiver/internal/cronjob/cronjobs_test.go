@@ -22,7 +22,7 @@ func TestCronJobMetrics(t *testing.T) {
 	cj := testutils.NewCronJob("1")
 
 	ts := pcommon.Timestamp(time.Now().UnixNano())
-	mb := metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings())
+	mb := metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type))
 	RecordMetrics(mb, cj, ts)
 	m := mb.Emit()
 
@@ -43,7 +43,7 @@ func TestCronJobMetadata(t *testing.T) {
 
 	actualMetadata := GetMetadata(cj)
 
-	require.Equal(t, 1, len(actualMetadata))
+	require.Len(t, actualMetadata, 1)
 
 	// Assert metadata from Pod.
 	require.Equal(t,
@@ -59,6 +59,7 @@ func TestCronJobMetadata(t *testing.T) {
 				"concurrency_policy":         "concurrency_policy",
 				"k8s.workload.kind":          "CronJob",
 				"k8s.workload.name":          "test-cronjob-1",
+				"k8s.namespace.name":         "test-namespace",
 			},
 		},
 		*actualMetadata["test-cronjob-1-uid"],

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/aws/awsutil"
@@ -14,12 +15,13 @@ import (
 
 func TestDefaultConfig_exporterSettings(t *testing.T) {
 	want := &Config{
-		RetrySettings:      exporterhelper.NewDefaultRetrySettings(),
+		BackOffConfig:      configretry.NewDefaultBackOffConfig(),
 		AWSSessionSettings: awsutil.CreateDefaultSessionConfig(),
-		QueueSettings: exporterhelper.QueueSettings{
+		QueueSettings: exporterhelper.QueueBatchConfig{
 			Enabled:      true,
 			NumConsumers: 1,
-			QueueSize:    exporterhelper.NewDefaultQueueSettings().QueueSize,
+			QueueSize:    exporterhelper.NewDefaultQueueConfig().QueueSize,
+			Sizer:        exporterhelper.RequestSizerTypeRequests,
 		},
 	}
 	assert.Equal(t, want, createDefaultConfig())

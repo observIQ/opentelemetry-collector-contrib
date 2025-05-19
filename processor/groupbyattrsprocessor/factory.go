@@ -5,9 +5,7 @@ package groupbyattrsprocessor // import "github.com/open-telemetry/opentelemetry
 
 import (
 	"context"
-	"sync"
 
-	"go.opencensus.io/stats/view"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/processor"
@@ -17,19 +15,10 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbyattrsprocessor/internal/metadata"
 )
 
-var (
-	consumerCapabilities = consumer.Capabilities{MutatesData: true}
-)
-
-var once sync.Once
+var consumerCapabilities = consumer.Capabilities{MutatesData: true}
 
 // NewFactory returns a new factory for the Filter processor.
 func NewFactory() processor.Factory {
-	once.Do(func() {
-		// TODO: as with other -contrib factories registering metrics, this is causing the error being ignored
-		_ = view.Register(metricViews()...)
-	})
-
 	return processor.NewFactory(
 		metadata.Type,
 		createDefaultConfig,
@@ -45,7 +34,7 @@ func createDefaultConfig() component.Config {
 	}
 }
 
-func createGroupByAttrsProcessor(logger *zap.Logger, attributes []string) *groupByAttrsProcessor {
+func createGroupByAttrsProcessor(set processor.Settings, attributes []string) (*groupByAttrsProcessor, error) {
 	var nonEmptyAttributes []string
 	presentAttributes := make(map[string]struct{})
 
@@ -53,7 +42,7 @@ func createGroupByAttrsProcessor(logger *zap.Logger, attributes []string) *group
 		if str != "" {
 			_, isPresent := presentAttributes[str]
 			if isPresent {
-				logger.Warn("A grouping key is already present", zap.String("key", str))
+				set.Logger.Warn("A grouping key is already present", zap.String("key", str))
 			} else {
 				nonEmptyAttributes = append(nonEmptyAttributes, str)
 				presentAttributes[str] = struct{}{}
@@ -61,20 +50,27 @@ func createGroupByAttrsProcessor(logger *zap.Logger, attributes []string) *group
 		}
 	}
 
-	return &groupByAttrsProcessor{logger: logger, groupByKeys: nonEmptyAttributes}
+	telemetryBuilder, err := metadata.NewTelemetryBuilder(set.TelemetrySettings)
+	if err != nil {
+		return nil, err
+	}
+	return &groupByAttrsProcessor{logger: set.Logger, groupByKeys: nonEmptyAttributes, telemetryBuilder: telemetryBuilder}, nil
 }
 
 // createTracesProcessor creates a trace processor based on this config.
 func createTracesProcessor(
 	ctx context.Context,
-	set processor.CreateSettings,
+	set processor.Settings,
 	cfg component.Config,
-	nextConsumer consumer.Traces) (processor.Traces, error) {
-
+	nextConsumer consumer.Traces,
+) (processor.Traces, error) {
 	oCfg := cfg.(*Config)
-	gap := createGroupByAttrsProcessor(set.Logger, oCfg.GroupByKeys)
+	gap, err := createGroupByAttrsProcessor(set, oCfg.GroupByKeys)
+	if err != nil {
+		return nil, err
+	}
 
-	return processorhelper.NewTracesProcessor(
+	return processorhelper.NewTraces(
 		ctx,
 		set,
 		cfg,
@@ -86,14 +82,17 @@ func createTracesProcessor(
 // createLogsProcessor creates a logs processor based on this config.
 func createLogsProcessor(
 	ctx context.Context,
-	set processor.CreateSettings,
+	set processor.Settings,
 	cfg component.Config,
-	nextConsumer consumer.Logs) (processor.Logs, error) {
-
+	nextConsumer consumer.Logs,
+) (processor.Logs, error) {
 	oCfg := cfg.(*Config)
-	gap := createGroupByAttrsProcessor(set.Logger, oCfg.GroupByKeys)
+	gap, err := createGroupByAttrsProcessor(set, oCfg.GroupByKeys)
+	if err != nil {
+		return nil, err
+	}
 
-	return processorhelper.NewLogsProcessor(
+	return processorhelper.NewLogs(
 		ctx,
 		set,
 		cfg,
@@ -105,14 +104,17 @@ func createLogsProcessor(
 // createMetricsProcessor creates a metrics processor based on this config.
 func createMetricsProcessor(
 	ctx context.Context,
-	set processor.CreateSettings,
+	set processor.Settings,
 	cfg component.Config,
-	nextConsumer consumer.Metrics) (processor.Metrics, error) {
-
+	nextConsumer consumer.Metrics,
+) (processor.Metrics, error) {
 	oCfg := cfg.(*Config)
-	gap := createGroupByAttrsProcessor(set.Logger, oCfg.GroupByKeys)
+	gap, err := createGroupByAttrsProcessor(set, oCfg.GroupByKeys)
+	if err != nil {
+		return nil, err
+	}
 
-	return processorhelper.NewMetricsProcessor(
+	return processorhelper.NewMetrics(
 		ctx,
 		set,
 		cfg,

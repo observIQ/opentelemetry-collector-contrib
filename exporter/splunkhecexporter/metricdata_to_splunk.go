@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	jsoniter "github.com/json-iterator/go"
+	"github.com/goccy/go-json"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.uber.org/zap"
@@ -62,7 +62,7 @@ func mapMetricToSplunkEvent(res pcommon.Resource, m pmetric.Metric, config *Conf
 	index := config.Index
 	commonFields := map[string]any{}
 
-	res.Attributes().Range(func(k string, v pcommon.Value) bool {
+	for k, v := range res.Attributes().All() {
 		switch k {
 		case hostKey:
 			host = v.Str()
@@ -77,8 +77,7 @@ func mapMetricToSplunkEvent(res pcommon.Resource, m pmetric.Metric, config *Conf
 		default:
 			commonFields[k] = v.AsString()
 		}
-		return true
-	})
+	}
 	metricFieldName := splunkMetricValue + ":" + m.Name()
 	//exhaustive:enforce
 	switch m.Type() {
@@ -247,10 +246,9 @@ func copyEventWithoutValues(event *splunk.Event) *splunk.Event {
 }
 
 func populateAttributes(fields map[string]any, attributeMap pcommon.Map) {
-	attributeMap.Range(func(k string, v pcommon.Value) bool {
+	for k, v := range attributeMap.All() {
 		fields[k] = v.AsString()
-		return true
-	})
+	}
 }
 
 func cloneMap(fields map[string]any) map[string]any {
@@ -284,12 +282,11 @@ func mergeEventsToMultiMetricFormat(events []*splunk.Event) ([]*splunk.Event, er
 	hashes := map[uint32]*splunk.Event{}
 	hasher := fnv.New32a()
 	var merged []*splunk.Event
-	marshaler := jsoniter.ConfigCompatibleWithStandardLibrary
 
 	for _, e := range events {
 		cloned := copyEventWithoutValues(e)
 
-		data, err := marshaler.Marshal(cloned)
+		data, err := json.Marshal(cloned)
 		if err != nil {
 			return nil, err
 		}

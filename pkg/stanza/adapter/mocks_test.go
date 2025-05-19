@@ -8,7 +8,6 @@ import (
 	"errors"
 
 	"go.opentelemetry.io/collector/component"
-	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/entry"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
@@ -41,8 +40,8 @@ func NewUnstartableConfig() operator.Config {
 }
 
 // Build will build an unstartable operator
-func (c *UnstartableConfig) Build(logger *zap.SugaredLogger) (operator.Operator, error) {
-	o, _ := c.OutputConfig.Build(logger)
+func (c *UnstartableConfig) Build(set component.TelemetrySettings) (operator.Operator, error) {
+	o, _ := c.OutputConfig.Build(set)
 	return &UnstartableOperator{OutputOperator: o}, nil
 }
 
@@ -51,12 +50,18 @@ func (o *UnstartableOperator) Start(_ operator.Persister) error {
 	return errors.New("something very unusual happened")
 }
 
+func (o *UnstartableOperator) ProcessBatch(_ context.Context, _ []*entry.Entry) error {
+	return nil
+}
+
 // Process will return nil
 func (o *UnstartableOperator) Process(_ context.Context, _ *entry.Entry) error {
 	return nil
 }
 
-const testType = "test"
+const testTypeStr = "test"
+
+var testType = component.MustNewType(testTypeStr)
 
 type TestConfig struct {
 	BaseConfig `mapstructure:",squash"`

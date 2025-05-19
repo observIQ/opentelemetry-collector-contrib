@@ -3,10 +3,16 @@ type: saphana
 status:
   class: receiver
   stability:
-    development: [metrics]
-  distributions: [contrib, observiq, sumo]
+    alpha: [metrics]
+  distributions: []
   codeowners:
     active: [dehaansa]
+
+tests:
+  goleak:
+    ignore:
+      top:
+        - "github.com/SAP/go-hdb/driver.(*metrics).collect"
 
 resource_attributes:
   saphana.host:

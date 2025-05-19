@@ -7,12 +7,18 @@
 
 set -euo pipefail
 
-if [[ -z "${COMPONENT:-}" || -z "${ISSUE:-}" || -z "${SENDER:-}" ]]; then
-    echo "At least one of COMPONENT, ISSUE, or SENDER has not been set, please ensure each is set."
+if [[ -z "${COMPONENT:-}" || -z "${ISSUE:-}" ]]; then
+    echo "Either COMPONENT or ISSUE has not been set, please ensure both are set."
     exit 0
 fi
 
 CUR_DIRECTORY=$(dirname "$0")
+COMPONENT=$(COMPONENT="${COMPONENT}" "${CUR_DIRECTORY}/get-label-from-component.sh" || true)
+# Some labels are unrelated to components. These labels do not have code owners,
+# e.g "os:windows", "priority:p1", and "chore"
+if [[ -z "${COMPONENT}" ]]; then
+    exit 0
+fi
 
 OWNERS=$(COMPONENT="${COMPONENT}" bash "${CUR_DIRECTORY}/get-codeowners.sh")
 
@@ -20,9 +26,4 @@ if [[ -z "${OWNERS}" ]]; then
     exit 0
 fi
 
-if [[ "${OWNERS}" =~ "${SENDER}" ]]; then
-    echo "Label applied by code owner ${SENDER}"
-    exit 0
-fi
-
-gh issue comment "${ISSUE}" --body "Pinging code owners for ${COMPONENT}: ${OWNERS}. See [Adding Labels via Comments](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md#adding-labels-via-comments) if you do not have permissions to add labels yourself."
+gh issue comment "${ISSUE}" --body "Pinging code owners for ${COMPONENT}: ${OWNERS}. See [Adding Labels via Comments](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md#adding-labels-via-comments) if you do not have permissions to add labels yourself. For example, comment '/label priority:p2 -needs-triaged' to set the priority and remove the needs-triaged label."

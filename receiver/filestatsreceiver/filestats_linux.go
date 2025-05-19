@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build linux || solaris
-// +build linux solaris
 
 package filestatsreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filestatsreceiver"
 
@@ -20,8 +19,8 @@ func collectStats(now pcommon.Timestamp, fileinfo os.FileInfo, metricsBuilder *m
 	stat := fileinfo.Sys().(*syscall.Stat_t)
 	atime := stat.Atim.Sec
 	ctime := stat.Ctim.Sec
-	//nolint
+	//nolint:unconvert
 	metricsBuilder.RecordFileAtimeDataPoint(now, int64(atime))
-	//nolint
+	//nolint:unconvert
 	metricsBuilder.RecordFileCtimeDataPoint(now, int64(ctime), fileinfo.Mode().Perm().String())
 }

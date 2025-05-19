@@ -9,11 +9,12 @@ import (
 	"fmt"
 	"time"
 
+	"go.mongodb.org/atlas/mongodbatlas"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver/internal/metadata"
 )
@@ -31,28 +32,30 @@ func NewFactory() receiver.Factory {
 		createDefaultConfig,
 		receiver.WithMetrics(createMetricsReceiver, metadata.MetricsStability),
 		receiver.WithLogs(createCombinedLogReceiver, metadata.LogsStability))
-
 }
 
 func createMetricsReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	rConf component.Config,
 	consumer consumer.Metrics,
 ) (receiver.Metrics, error) {
 	cfg := rConf.(*Config)
-	recv := newMongoDBAtlasReceiver(params, cfg)
+	recv, err := newMongoDBAtlasReceiver(params, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create a MongoDB Atlas Receiver instance: %w", err)
+	}
 	ms, err := newMongoDBAtlasScraper(recv)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create a MongoDB Atlas Scaper instance: %w", err)
+		return nil, fmt.Errorf("unable to create a MongoDB Atlas Scraper instance: %w", err)
 	}
 
-	return scraperhelper.NewScraperControllerReceiver(&cfg.ScraperControllerSettings, params, consumer, scraperhelper.AddScraper(ms))
+	return scraperhelper.NewMetricsController(&cfg.ControllerConfig, params, consumer, scraperhelper.AddScraper(metadata.Type, ms))
 }
 
 func createCombinedLogReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	rConf component.Config,
 	consumer consumer.Logs,
 ) (receiver.Logs, error) {
@@ -76,18 +79,27 @@ func createCombinedLogReceiver(
 	}
 
 	if cfg.Logs.Enabled {
-		recv.logs = newMongoDBAtlasLogsReceiver(params, cfg, consumer)
+		recv.logs, err = newMongoDBAtlasLogsReceiver(params, cfg, consumer)
+		if err != nil {
+			return nil, fmt.Errorf("unable to create a MongoDB Atlas Logs Receiver instance: %w", err)
+		}
 		// Confirm at least one project is enabled for access logs before adding
 		for _, project := range cfg.Logs.Projects {
 			if project.AccessLogs != nil && project.AccessLogs.IsEnabled() {
-				recv.accessLogs = newAccessLogsReceiver(params, cfg, consumer)
+				recv.accessLogs, err = newAccessLogsReceiver(params, cfg, consumer)
+				if err != nil {
+					return nil, fmt.Errorf("unable to create a MongoDB Atlas Access Logs Receiver instance: %w", err)
+				}
 				break
 			}
 		}
 	}
 
 	if cfg.Events != nil {
-		recv.events = newEventsReceiver(params, cfg, consumer)
+		recv.events, err = newEventsReceiver(params, cfg, consumer)
+		if err != nil {
+			return nil, fmt.Errorf("unable to create a MongoDB Atlas Events Receiver instance: %w", err)
+		}
 	}
 
 	return recv, nil
@@ -95,10 +107,11 @@ func createCombinedLogReceiver(
 
 func createDefaultConfig() component.Config {
 	c := &Config{
-		ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
-		Granularity:               defaultGranularity,
-		RetrySettings:             exporterhelper.NewDefaultRetrySettings(),
-		MetricsBuilderConfig:      metadata.DefaultMetricsBuilderConfig(),
+		BaseURL:              mongodbatlas.CloudURL,
+		ControllerConfig:     scraperhelper.NewDefaultControllerConfig(),
+		Granularity:          defaultGranularity,
+		BackOffConfig:        configretry.NewDefaultBackOffConfig(),
+		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
 		Alerts: AlertConfig{
 			Enabled:      defaultAlertsEnabled,
 			Mode:         alertModeListen,
@@ -113,6 +126,6 @@ func createDefaultConfig() component.Config {
 	}
 	// reset default of 1 minute to be 3 minutes in order to avoid null values for some metrics that do not publish
 	// more frequently
-	c.ScraperControllerSettings.CollectionInterval = 3 * time.Minute
+	c.CollectionInterval = 3 * time.Minute
 	return c
 }

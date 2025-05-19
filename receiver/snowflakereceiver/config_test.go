@@ -14,7 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 	"go.uber.org/multierr"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/snowflakereceiver/internal/metadata"
@@ -37,68 +38,65 @@ func TestValidateConfig(t *testing.T) {
 			desc:   "Missing username all else present",
 			expect: errMissingUsername,
 			conf: Config{
-				Username:                  "",
-				Password:                  "password",
-				Account:                   "account",
-				Warehouse:                 "warehouse",
-				ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
+				Username:         "",
+				Password:         "password",
+				Account:          "account",
+				Warehouse:        "warehouse",
+				ControllerConfig: scraperhelper.NewDefaultControllerConfig(),
 			},
 		},
 		{
 			desc:   "Missing password all else present",
 			expect: errMissingPassword,
 			conf: Config{
-				Username:                  "username",
-				Password:                  "",
-				Account:                   "account",
-				Warehouse:                 "warehouse",
-				ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
+				Username:         "username",
+				Password:         "",
+				Account:          "account",
+				Warehouse:        "warehouse",
+				ControllerConfig: scraperhelper.NewDefaultControllerConfig(),
 			},
 		},
 		{
 			desc:   "Missing account all else present",
 			expect: errMissingAccount,
 			conf: Config{
-				Username:                  "username",
-				Password:                  "password",
-				Account:                   "",
-				Warehouse:                 "warehouse",
-				ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
+				Username:         "username",
+				Password:         "password",
+				Account:          "",
+				Warehouse:        "warehouse",
+				ControllerConfig: scraperhelper.NewDefaultControllerConfig(),
 			},
 		},
 		{
 			desc:   "Missing warehouse all else present",
 			expect: errMissingWarehouse,
 			conf: Config{
-				Username:                  "username",
-				Password:                  "password",
-				Account:                   "account",
-				Warehouse:                 "",
-				ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
+				Username:         "username",
+				Password:         "password",
+				Account:          "account",
+				Warehouse:        "",
+				ControllerConfig: scraperhelper.NewDefaultControllerConfig(),
 			},
 		},
 		{
 			desc:   "Missing multiple check multierror",
 			expect: multierror,
 			conf: Config{
-				Username:                  "username",
-				Password:                  "",
-				Account:                   "account",
-				Warehouse:                 "",
-				ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
+				Username:         "username",
+				Password:         "",
+				Account:          "account",
+				Warehouse:        "",
+				ControllerConfig: scraperhelper.NewDefaultControllerConfig(),
 			},
 		},
 	}
 
-	for i := range tests {
-		test := tests[i]
-
+	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
 			t.Parallel()
 
 			err := test.conf.Validate()
-			require.Error(t, err)
-			require.Contains(t, err.Error(), test.expect.Error())
+			require.ErrorContains(t, err, test.expect.Error())
 		})
 	}
 }
@@ -122,7 +120,7 @@ func TestLoadConfig(t *testing.T) {
 		Password:  "securepassword",
 		Account:   "bigbusinessaccount",
 		Warehouse: "metricWarehouse",
-		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+		ControllerConfig: scraperhelper.ControllerConfig{
 			CollectionInterval: 18 * time.Minute,
 			InitialDelay:       time.Second,
 		},
@@ -135,8 +133,8 @@ func TestLoadConfig(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 
-	require.NoError(t, component.UnmarshalConfig(cmNoStr, cfg))
-	assert.NoError(t, component.ValidateConfig(cfg))
+	require.NoError(t, cmNoStr.Unmarshal(cfg))
+	assert.NoError(t, xconfmap.Validate(cfg))
 
 	diff := cmp.Diff(expected, cfg, cmpopts.IgnoreUnexported(metadata.MetricConfig{}), cmpopts.IgnoreUnexported(metadata.ResourceAttributeConfig{}))
 	if diff != "" {

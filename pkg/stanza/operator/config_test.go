@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	yaml "gopkg.in/yaml.v2"
+	"go.opentelemetry.io/collector/component"
+	"gopkg.in/yaml.v3"
 )
 
 type FakeBuilder struct {
@@ -18,7 +18,7 @@ type FakeBuilder struct {
 	Array        []string `json:"array" yaml:"array"`
 }
 
-func (f *FakeBuilder) Build(_ *zap.SugaredLogger) (Operator, error) {
+func (f *FakeBuilder) Build(_ component.TelemetrySettings) (Operator, error) {
 	return nil, nil
 }
 func (f *FakeBuilder) ID() string     { return "operator" }
@@ -43,24 +43,21 @@ func TestUnmarshalJSONErrors(t *testing.T) {
 		raw := `{}}`
 		cfg := &Config{}
 		err := cfg.UnmarshalJSON([]byte(raw))
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "invalid")
+		require.ErrorContains(t, err, "invalid")
 	})
 
 	t.Run("MissingType", func(t *testing.T) {
 		raw := `{"id":"stdout"}`
 		var cfg Config
 		err := json.Unmarshal([]byte(raw), &cfg)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "missing required field")
+		require.ErrorContains(t, err, "missing required field")
 	})
 
 	t.Run("UnknownType", func(t *testing.T) {
 		raw := `{"id":"stdout","type":"nonexist"}`
 		var cfg Config
 		err := json.Unmarshal([]byte(raw), &cfg)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "unsupported type")
+		require.ErrorContains(t, err, "unsupported type")
 	})
 
 	t.Run("TypeSpecificUnmarshal", func(t *testing.T) {
@@ -68,8 +65,7 @@ func TestUnmarshalJSONErrors(t *testing.T) {
 		Register("operator", func() Builder { return &FakeBuilder{} })
 		var cfg Config
 		err := json.Unmarshal([]byte(raw), &cfg)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "cannot unmarshal string into")
+		require.ErrorContains(t, err, "cannot unmarshal string into")
 	})
 }
 
@@ -87,32 +83,28 @@ func TestUnmarshalYAMLErrors(t *testing.T) {
 		raw := `-- - \n||\\`
 		var cfg Config
 		err := yaml.Unmarshal([]byte(raw), &cfg)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "failed ")
+		require.ErrorContains(t, err, "failed ")
 	})
 
 	t.Run("MissingType", func(t *testing.T) {
 		raw := "id: operator\n"
 		var cfg Config
 		err := yaml.Unmarshal([]byte(raw), &cfg)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "missing required field")
+		require.ErrorContains(t, err, "missing required field")
 	})
 
 	t.Run("NonStringType", func(t *testing.T) {
 		raw := "id: operator\ntype: 123"
 		var cfg Config
 		err := yaml.Unmarshal([]byte(raw), &cfg)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "non-string type")
+		require.ErrorContains(t, err, "non-string type")
 	})
 
 	t.Run("UnknownType", func(t *testing.T) {
 		raw := "id: operator\ntype: unknown\n"
 		var cfg Config
 		err := yaml.Unmarshal([]byte(raw), &cfg)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "unsupported type")
+		require.ErrorContains(t, err, "unsupported type")
 	})
 
 	t.Run("TypeSpecificUnmarshal", func(t *testing.T) {
@@ -120,7 +112,6 @@ func TestUnmarshalYAMLErrors(t *testing.T) {
 		Register("operator", func() Builder { return &FakeBuilder{} })
 		var cfg Config
 		err := yaml.Unmarshal([]byte(raw), &cfg)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "cannot unmarshal !!str")
+		require.ErrorContains(t, err, "cannot unmarshal !!str")
 	})
 }

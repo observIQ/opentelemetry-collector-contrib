@@ -4,8 +4,10 @@
 package azuremonitorexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/azuremonitorexporter"
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 )
@@ -16,26 +18,38 @@ type ConnectionVars struct {
 }
 
 const (
-	DefaultIngestionEndpoint  = "https://dc.services.visualstudio.com/"
-	IngestionEndpointKey      = "IngestionEndpoint"
-	InstrumentationKey        = "InstrumentationKey"
-	ConnectionStringMaxLength = 4096
+	ApplicationInsightsConnectionString = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+	DefaultIngestionEndpoint            = "https://dc.services.visualstudio.com/"
+	IngestionEndpointKey                = "IngestionEndpoint"
+	InstrumentationKey                  = "InstrumentationKey"
+	ConnectionStringMaxLength           = 4096
 )
 
 func parseConnectionString(exporterConfig *Config) (*ConnectionVars, error) {
-	connectionString := string(exporterConfig.ConnectionString)
+	// First, try to get the connection string from the environment variable
+	connectionString := os.Getenv(ApplicationInsightsConnectionString)
+
+	// If not found in the environment, use the one from the configuration
+	if connectionString == "" {
+		connectionString = string(exporterConfig.ConnectionString)
+	}
+
 	instrumentationKey := string(exporterConfig.InstrumentationKey)
 	connectionVars := &ConnectionVars{}
 
 	if connectionString == "" && instrumentationKey == "" {
-		return nil, fmt.Errorf("ConnectionString and InstrumentationKey cannot be empty")
+		return nil, errors.New("ConnectionString and InstrumentationKey cannot be empty")
 	}
 	if len(connectionString) > ConnectionStringMaxLength {
 		return nil, fmt.Errorf("ConnectionString exceeds maximum length of %d characters", ConnectionStringMaxLength)
 	}
 	if connectionString == "" {
 		connectionVars.InstrumentationKey = instrumentationKey
-		connectionVars.IngestionURL = getIngestionURL(DefaultIngestionEndpoint)
+		if exporterConfig.Endpoint == "" {
+			connectionVars.IngestionURL = getIngestionURL(DefaultIngestionEndpoint)
+		} else {
+			connectionVars.IngestionURL = getIngestionURL(exporterConfig.Endpoint)
+		}
 		return connectionVars, nil
 	}
 
@@ -49,7 +63,7 @@ func parseConnectionString(exporterConfig *Config) (*ConnectionVars, error) {
 
 		key, value := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
 		if key == "" {
-			return nil, fmt.Errorf("key cannot be empty")
+			return nil, errors.New("key cannot be empty")
 		}
 		values[key] = value
 	}

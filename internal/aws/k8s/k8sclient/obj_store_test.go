@@ -25,7 +25,7 @@ var transformFuncWithError = func(v any) (any, error) {
 
 func TestResync(t *testing.T) {
 	o := NewObjStore(transformFunc, zap.NewNop())
-	assert.Nil(t, o.Resync())
+	assert.NoError(t, o.Resync())
 }
 
 func TestGet(t *testing.T) {
@@ -33,7 +33,7 @@ func TestGet(t *testing.T) {
 	item, exists, err := o.Get("a")
 	assert.Nil(t, item)
 	assert.False(t, exists)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestGetByKey(t *testing.T) {
@@ -41,7 +41,7 @@ func TestGetByKey(t *testing.T) {
 	item, exists, err := o.GetByKey("a")
 	assert.Nil(t, item)
 	assert.False(t, exists)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestGetListKeys(t *testing.T) {
@@ -68,7 +68,7 @@ func TestGetList(t *testing.T) {
 		"20036b33-cb03-489b-b778-e516b4dae519": "a",
 	}
 	val := o.List()
-	assert.Equal(t, 1, len(val))
+	assert.Len(t, val, 1)
 	expected := o.objs["20036b33-cb03-489b-b778-e516b4dae519"]
 	assert.Equal(t, expected, val[0])
 }
@@ -76,7 +76,7 @@ func TestGetList(t *testing.T) {
 func TestDelete(t *testing.T) {
 	o := NewObjStore(transformFunc, zap.NewNop())
 	err := o.Delete(nil)
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	o.objs = map[types.UID]any{
 		"bc5f5839-f62e-44b9-a79e-af250d92dcb1": &v1.Pod{
@@ -115,18 +115,18 @@ func TestDelete(t *testing.T) {
 		},
 	}
 	err = o.Delete(obj)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.True(t, o.refreshed)
 
 	keys := o.ListKeys()
-	assert.Equal(t, 1, len(keys))
+	assert.Len(t, keys, 1)
 	assert.Equal(t, "75ab40d2-552a-4c05-82c9-0ddcb3008657", keys[0])
 }
 
 func TestAdd(t *testing.T) {
 	o := NewObjStore(transformFunc, zap.NewNop())
 	err := o.Add(nil)
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	o = NewObjStore(transformFuncWithError, zap.NewNop())
 	obj := &v1.Pod{
@@ -141,7 +141,7 @@ func TestAdd(t *testing.T) {
 		},
 	}
 	err = o.Add(obj)
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 }
 
 func TestUpdate(t *testing.T) {
@@ -171,14 +171,14 @@ func TestUpdate(t *testing.T) {
 		},
 	}
 	err := o.Update(updatedObj)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	keys := o.ListKeys()
-	assert.Equal(t, 1, len(keys))
+	assert.Len(t, keys, 1)
 	assert.Equal(t, "bc5f5839-f62e-44b9-a79e-af250d92dcb1", keys[0])
 
 	values := o.List()
-	assert.Equal(t, 1, len(values))
+	assert.Len(t, values, 1)
 	assert.Equal(t, updatedObj, values[0])
 }
 
@@ -209,5 +209,5 @@ func TestReplace(t *testing.T) {
 		},
 	}
 	err := o.Replace(objArray, "")
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 }

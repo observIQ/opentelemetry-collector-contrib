@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build !windows
-// +build !windows
 
 // TODO review if tests should succeed on Windows
 
@@ -29,9 +28,11 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/k8sconfig"
 )
 
-const certPath = "./testdata/testcert.crt"
-const keyFile = "./testdata/testkey.key"
-const errSignedByUnknownCA = "tls: failed to verify certificate: x509: certificate signed by unknown authority"
+const (
+	certPath             = "./testdata/testcert.crt"
+	keyFile              = "./testdata/testkey.key"
+	errSignedByUnknownCA = "tls: failed to verify certificate: x509: certificate signed by unknown authority"
+)
 
 func TestClient(t *testing.T) {
 	tr := &fakeRoundTripper{}
@@ -46,9 +47,9 @@ func TestClient(t *testing.T) {
 	require.Equal(t, "hello", string(resp))
 	require.True(t, tr.closed)
 	require.Equal(t, baseURL+"/foo", tr.url)
-	require.Equal(t, 1, len(tr.header))
+	require.Len(t, tr.header, 1)
 	require.Equal(t, "application/json", tr.header["Content-Type"][0])
-	require.Equal(t, "GET", tr.method)
+	require.Equal(t, http.MethodGet, tr.method)
 }
 
 func TestNewTLSClientProvider(t *testing.T) {
@@ -56,7 +57,7 @@ func TestNewTLSClientProvider(t *testing.T) {
 		APIConfig: k8sconfig.APIConfig{
 			AuthType: k8sconfig.AuthTypeTLS,
 		},
-		TLSSetting: configtls.TLSSetting{
+		Config: configtls.Config{
 			CAFile:   certPath,
 			CertFile: certPath,
 			KeyFile:  keyFile,
@@ -67,7 +68,7 @@ func TestNewTLSClientProvider(t *testing.T) {
 	require.NoError(t, err)
 	c := client.(*clientImpl)
 	tcc := c.httpClient.Transport.(*http.Transport).TLSClientConfig
-	require.Equal(t, 1, len(tcc.Certificates))
+	require.Len(t, tcc.Certificates, 1)
 	require.NotNil(t, tcc.RootCAs)
 }
 
@@ -106,9 +107,9 @@ func TestDefaultTLSClient(t *testing.T) {
 func TestSvcAcctClient(t *testing.T) {
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		// Check if call is authenticated using token from test file
-		require.Equal(t, req.Header.Get("Authorization"), "Bearer s3cr3t")
+		assert.Equal(t, "Bearer s3cr3t", req.Header.Get("Authorization"))
 		_, err := rw.Write([]byte(`OK`))
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	cert, err := tls.LoadX509KeyPair(certPath, keyFile)
 	require.NoError(t, err)
@@ -117,11 +118,45 @@ func TestSvcAcctClient(t *testing.T) {
 	defer server.Close()
 
 	p := &saClientProvider{
-		endpoint:           server.Listener.Addr().String(),
-		caCertPath:         certPath,
-		tokenPath:          "./testdata/token",
-		insecureSkipVerify: false,
-		logger:             zap.NewNop(),
+		endpoint:   server.Listener.Addr().String(),
+		caCertPath: certPath,
+		tokenPath:  "./testdata/token",
+		cfg: &ClientConfig{
+			InsecureSkipVerify: false,
+		},
+		logger: zap.NewNop(),
+	}
+	client, err := p.BuildClient()
+	require.NoError(t, err)
+	resp, err := client.Get("/")
+	require.NoError(t, err)
+	require.Equal(t, []byte(`OK`), resp)
+}
+
+func TestSAClientCustomCA(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		// Check if call is authenticated using token from test file
+		assert.Equal(t, "Bearer s3cr3t", req.Header.Get("Authorization"))
+		_, err := rw.Write([]byte(`OK`))
+		assert.NoError(t, err)
+	}))
+	cert, err := tls.LoadX509KeyPair(certPath, keyFile)
+	require.NoError(t, err)
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
+	server.StartTLS()
+	defer server.Close()
+
+	p := &saClientProvider{
+		endpoint:   server.Listener.Addr().String(),
+		caCertPath: certPath,
+		tokenPath:  "./testdata/token",
+		cfg: &ClientConfig{
+			InsecureSkipVerify: false,
+			Config: configtls.Config{
+				CAFile: certPath,
+			},
+		},
+		logger: zap.NewNop(),
 	}
 	client, err := p.BuildClient()
 	require.NoError(t, err)
@@ -131,7 +166,7 @@ func TestSvcAcctClient(t *testing.T) {
 }
 
 func TestSAClientBadTLS(t *testing.T) {
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 		_, _ = rw.Write([]byte(`OK`))
 	}))
 	cert, err := tls.LoadX509KeyPair(certPath, keyFile)
@@ -141,11 +176,13 @@ func TestSAClientBadTLS(t *testing.T) {
 	defer server.Close()
 
 	p := &saClientProvider{
-		endpoint:           server.Listener.Addr().String(),
-		caCertPath:         "./testdata/mismatch.crt",
-		tokenPath:          "./testdata/token",
-		insecureSkipVerify: false,
-		logger:             zap.NewNop(),
+		endpoint:   server.Listener.Addr().String(),
+		caCertPath: "./testdata/mismatch.crt",
+		tokenPath:  "./testdata/token",
+		cfg: &ClientConfig{
+			InsecureSkipVerify: false,
+		},
+		logger: zap.NewNop(),
 	}
 	client, err := p.BuildClient()
 	require.NoError(t, err)
@@ -175,11 +212,11 @@ func TestNewKubeConfigClient(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewUnstartedServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 				// Check if call is authenticated using provided kubeconfig
-				require.Equal(t, req.Header.Get("Authorization"), "Bearer my-token")
-				require.Equal(t, "/api/v1/nodes/nodename/proxy/", req.URL.EscapedPath())
+				assert.Equal(t, "Bearer my-token", req.Header.Get("Authorization"))
+				assert.Equal(t, "/api/v1/nodes/nodename/proxy/", req.URL.EscapedPath())
 				// Send response to be tested
 				_, err := rw.Write([]byte(`OK`))
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}))
 			server.StartTLS()
 			defer server.Close()
@@ -279,7 +316,7 @@ func TestTLSMissingCertFile(t *testing.T) {
 	p := tlsClientProvider{
 		endpoint: "",
 		cfg: &ClientConfig{
-			TLSSetting: configtls.TLSSetting{
+			Config: configtls.Config{
 				CAFile: certPath,
 			},
 		},
@@ -293,6 +330,7 @@ func TestSABadCertPath(t *testing.T) {
 	p := &saClientProvider{
 		endpoint:   "foo",
 		caCertPath: "bar",
+		cfg:        &ClientConfig{},
 		tokenPath:  "baz",
 		logger:     zap.NewNop(),
 	}
@@ -304,6 +342,7 @@ func TestSABadTokenPath(t *testing.T) {
 	p := &saClientProvider{
 		endpoint:   "foo",
 		caCertPath: certPath,
+		cfg:        &ClientConfig{},
 		tokenPath:  "bar",
 		logger:     zap.NewNop(),
 	}
@@ -322,6 +361,7 @@ func TestBuildReq(t *testing.T) {
 	p := &saClientProvider{
 		endpoint:   "localhost:9876",
 		caCertPath: certPath,
+		cfg:        &ClientConfig{},
 		tokenPath:  "./testdata/token",
 		logger:     zap.NewNop(),
 	}
@@ -336,6 +376,7 @@ func TestBuildBadReq(t *testing.T) {
 	p := &saClientProvider{
 		endpoint:   "[]localhost:9876",
 		caCertPath: certPath,
+		cfg:        &ClientConfig{},
 		tokenPath:  "./testdata/token",
 		logger:     zap.NewNop(),
 	}

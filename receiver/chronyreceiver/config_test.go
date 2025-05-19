@@ -4,7 +4,6 @@
 package chronyreceiver
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/chronyreceiver/internal/chrony"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/chronyreceiver/internal/metadata"
@@ -31,15 +30,15 @@ func TestLoadConfig(t *testing.T) {
 
 	sub, err := cm.Sub(component.NewIDWithName(metadata.Type, "custom").String())
 	require.NoError(t, err)
-	require.NoError(t, component.UnmarshalConfig(sub, cfg))
+	require.NoError(t, sub.Unmarshal(cfg))
 
-	scs := scraperhelper.NewDefaultScraperControllerSettings(metadata.Type)
+	scs := scraperhelper.NewDefaultControllerConfig()
 	scs.Timeout = 10 * time.Second
 
 	assert.Equal(t, &Config{
-		ScraperControllerSettings: scs,
-		MetricsBuilderConfig:      metadata.DefaultMetricsBuilderConfig(),
-		Endpoint:                  "udp://localhost:3030",
+		ControllerConfig:     scs,
+		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
+		Endpoint:             "udp://localhost:3030",
 	}, cfg)
 }
 
@@ -55,7 +54,7 @@ func TestValidate(t *testing.T) {
 			scenario: "Valid udp configuration",
 			conf: Config{
 				Endpoint: "udp://localhost:323",
-				ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+				ControllerConfig: scraperhelper.ControllerConfig{
 					CollectionInterval: time.Minute,
 					InitialDelay:       time.Second,
 					Timeout:            10 * time.Second,
@@ -67,7 +66,7 @@ func TestValidate(t *testing.T) {
 			scenario: "Invalid udp hostname",
 			conf: Config{
 				Endpoint: "udp://:323",
-				ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+				ControllerConfig: scraperhelper.ControllerConfig{
 					CollectionInterval: time.Minute,
 					InitialDelay:       time.Second,
 					Timeout:            10 * time.Second,
@@ -79,7 +78,7 @@ func TestValidate(t *testing.T) {
 			scenario: "Invalid udp port",
 			conf: Config{
 				Endpoint: "udp://localhost",
-				ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+				ControllerConfig: scraperhelper.ControllerConfig{
 					CollectionInterval: time.Minute,
 					InitialDelay:       time.Second,
 					Timeout:            10 * time.Second,
@@ -90,8 +89,8 @@ func TestValidate(t *testing.T) {
 		{
 			scenario: "Valid unix path",
 			conf: Config{
-				Endpoint: fmt.Sprintf("unix://%s", t.TempDir()),
-				ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+				Endpoint: "unix://" + t.TempDir(),
+				ControllerConfig: scraperhelper.ControllerConfig{
 					CollectionInterval: time.Minute,
 					InitialDelay:       time.Second,
 					Timeout:            10 * time.Second,
@@ -103,7 +102,7 @@ func TestValidate(t *testing.T) {
 			scenario: "Invalid unix path",
 			conf: Config{
 				Endpoint: "unix:///no/dir/to/socket",
-				ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+				ControllerConfig: scraperhelper.ControllerConfig{
 					CollectionInterval: time.Minute,
 					InitialDelay:       time.Second,
 					Timeout:            10 * time.Second,
@@ -115,7 +114,7 @@ func TestValidate(t *testing.T) {
 			scenario: "Invalid timeout set",
 			conf: Config{
 				Endpoint: "unix://no/dir/to/socket",
-				ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+				ControllerConfig: scraperhelper.ControllerConfig{
 					CollectionInterval: time.Minute,
 					InitialDelay:       time.Second,
 					Timeout:            0,

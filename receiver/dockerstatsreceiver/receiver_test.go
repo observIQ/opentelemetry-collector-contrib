@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build !windows
-// +build !windows
 
 // TODO review if tests should succeed on Windows
 
@@ -17,14 +16,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types"
+	ctypes "github.com/docker/docker/api/types/container"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/docker"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/pmetrictest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/dockerstatsreceiver/internal/metadata"
@@ -54,6 +54,7 @@ var (
 		ContainerCPUUsageSystem:                    metricEnabled,
 		ContainerCPUUsageTotal:                     metricEnabled,
 		ContainerCPUUsageUsermode:                  metricEnabled,
+		ContainerCPULogicalCount:                   metricEnabled,
 		ContainerMemoryActiveAnon:                  metricEnabled,
 		ContainerMemoryActiveFile:                  metricEnabled,
 		ContainerMemoryCache:                       metricEnabled,
@@ -90,6 +91,7 @@ var (
 		ContainerMemoryUsageMax:                    metricEnabled,
 		ContainerMemoryUsageTotal:                  metricEnabled,
 		ContainerMemoryWriteback:                   metricEnabled,
+		ContainerMemoryFails:                       metricEnabled,
 		ContainerNetworkIoUsageRxBytes:             metricEnabled,
 		ContainerNetworkIoUsageRxDropped:           metricEnabled,
 		ContainerNetworkIoUsageRxErrors:            metricEnabled,
@@ -118,43 +120,82 @@ var (
 	}
 )
 
+func TestClientOptions(t *testing.T) {
+	tests := []struct {
+		name        string
+		endpoint    string
+		expectEnv   bool
+		description string
+	}{
+		{
+			name:        "Empty endpoint, DOCKER_HOST set",
+			endpoint:    "",
+			expectEnv:   true,
+			description: "Should append WithHostFromEnv() when Endpoint is empty.",
+		},
+		{
+			name:        "Config endpoint set, DOCKER_HOST ignored",
+			endpoint:    "tcp://config:1234",
+			expectEnv:   false,
+			description: "Should not append WithHostFromEnv() when Endpoint is set.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{
+				Config: docker.Config{
+					Endpoint: tt.endpoint,
+				},
+			}
+
+			receiver := &metricsReceiver{config: config}
+			opts := receiver.clientOptions()
+
+			// If expectEnv is true, opts should not be empty
+			assert.Equal(t, tt.expectEnv, len(opts) > 0, tt.description)
+		})
+	}
+}
+
 func TestNewReceiver(t *testing.T) {
 	cfg := &Config{
-		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+		ControllerConfig: scraperhelper.ControllerConfig{
 			CollectionInterval: 1 * time.Second,
 		},
-		Endpoint:         "unix:///run/some.sock",
-		DockerAPIVersion: defaultDockerAPIVersion,
+		Config: docker.Config{
+			Endpoint:         "unix:///run/some.sock",
+			DockerAPIVersion: defaultDockerAPIVersion,
+		},
 	}
-	mr := newMetricsReceiver(receivertest.NewNopCreateSettings(), cfg)
+	mr := newMetricsReceiver(receivertest.NewNopSettings(metadata.Type), cfg)
 	assert.NotNil(t, mr)
 }
 
 func TestErrorsInStart(t *testing.T) {
 	unreachable := "unix:///not/a/thing.sock"
 	cfg := &Config{
-		ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+		ControllerConfig: scraperhelper.ControllerConfig{
 			CollectionInterval: 1 * time.Second,
 		},
-		Endpoint:         unreachable,
-		DockerAPIVersion: defaultDockerAPIVersion,
+		Config: docker.Config{
+			Endpoint:         unreachable,
+			DockerAPIVersion: defaultDockerAPIVersion,
+		},
 	}
-	recv := newMetricsReceiver(receivertest.NewNopCreateSettings(), cfg)
+	recv := newMetricsReceiver(receivertest.NewNopSettings(metadata.Type), cfg)
 	assert.NotNil(t, recv)
 
 	cfg.Endpoint = "..not/a/valid/endpoint"
 	err := recv.start(context.Background(), componenttest.NewNopHost())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unable to parse docker host")
+	assert.ErrorContains(t, err, "unable to parse docker host")
 
 	cfg.Endpoint = unreachable
 	err = recv.start(context.Background(), componenttest.NewNopHost())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "context deadline exceeded")
+	assert.ErrorContains(t, err, "context deadline exceeded")
 }
 
 func TestScrapeV2(t *testing.T) {
-
 	testCases := []struct {
 		desc                string
 		expectedMetricsFile string
@@ -299,9 +340,10 @@ func TestScrapeV2(t *testing.T) {
 			defer mockDockerEngine.Close()
 
 			receiver := newMetricsReceiver(
-				receivertest.NewNopCreateSettings(), tc.cfgBuilder.withEndpoint(mockDockerEngine.URL).build())
+				receivertest.NewNopSettings(metadata.Type), tc.cfgBuilder.withEndpoint(mockDockerEngine.URL).build())
 			err := receiver.start(context.Background(), componenttest.NewNopHost())
 			require.NoError(t, err)
+			defer func() { require.NoError(t, receiver.shutdown(context.Background())) }()
 
 			actualMetrics, err := receiver.scrapeV2(context.Background())
 			require.NoError(t, err)
@@ -327,18 +369,18 @@ func TestScrapeV2(t *testing.T) {
 
 func TestRecordBaseMetrics(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
-	cfg.MetricsBuilderConfig.Metrics = metadata.MetricsConfig{
+	cfg.Metrics = metadata.MetricsConfig{
 		ContainerUptime: metricEnabled,
 	}
-	r := newMetricsReceiver(receivertest.NewNopCreateSettings(), cfg)
+	r := newMetricsReceiver(receivertest.NewNopSettings(metadata.Type), cfg)
 	now := time.Now()
 	started := now.Add(-2 * time.Second).Format(time.RFC3339)
 
 	t.Run("ok", func(t *testing.T) {
 		err := r.recordBaseMetrics(
 			pcommon.NewTimestampFromTime(now),
-			&types.ContainerJSONBase{
-				State: &types.ContainerState{
+			&ctypes.ContainerJSONBase{
+				State: &ctypes.State{
 					StartedAt: started,
 				},
 			},
@@ -354,8 +396,8 @@ func TestRecordBaseMetrics(t *testing.T) {
 	t.Run("error", func(t *testing.T) {
 		err := r.recordBaseMetrics(
 			pcommon.NewTimestampFromTime(now),
-			&types.ContainerJSONBase{
-				State: &types.ContainerState{
+			&ctypes.ContainerJSONBase{
+				State: &ctypes.State{
 					StartedAt: "bad date",
 				},
 			},
@@ -405,12 +447,12 @@ func (cb *testConfigBuilder) withEndpoint(endpoint string) *testConfigBuilder {
 }
 
 func (cb *testConfigBuilder) withMetrics(ms metadata.MetricsConfig) *testConfigBuilder {
-	cb.config.MetricsBuilderConfig.Metrics = ms
+	cb.config.Metrics = ms
 	return cb
 }
 
 func (cb *testConfigBuilder) withResourceAttributes(ras metadata.ResourceAttributesConfig) *testConfigBuilder {
-	cb.config.MetricsBuilderConfig.ResourceAttributes = ras
+	cb.config.ResourceAttributes = ras
 	return cb
 }
 

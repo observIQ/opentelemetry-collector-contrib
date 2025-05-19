@@ -9,8 +9,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/googlecloudspannerreceiver/internal/filter"
 )
 
-const instrumentationLibraryName = "otelcol/googlecloudspannermetrics"
-
 type MetricsBuilder interface {
 	Build(dataPoints []*MetricsDataPoint) (pmetric.Metrics, error)
 	Shutdown() error
@@ -44,7 +42,7 @@ func (b *metricsFromDataPointBuilder) Build(dataPoints []*MetricsDataPoint) (pme
 
 	ilms := rm.ScopeMetrics()
 	ilm := ilms.AppendEmpty()
-	ilm.Scope().SetName(instrumentationLibraryName)
+	ilm.Scope().SetName(ScopeName)
 
 	for key, points := range groupedDataPoints {
 		metric := ilm.Metrics().AppendEmpty()
@@ -110,10 +108,7 @@ func (b *metricsFromDataPointBuilder) filter(metricName string, dataPoints []*Me
 		}
 	}
 
-	filteredItems, err := itemFilter.Filter(itemsForFiltering)
-	if err != nil {
-		return nil, err
-	}
+	filteredItems := itemFilter.Filter(itemsForFiltering)
 
 	// Creating new slice instead of removing elements from source slice because removing by value is not efficient operation.
 	// Need to use such approach for preserving data points order.

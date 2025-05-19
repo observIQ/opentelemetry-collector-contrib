@@ -5,7 +5,7 @@ package metrics // import "github.com/open-telemetry/opentelemetry-collector-con
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
@@ -13,19 +13,21 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlmetric"
 )
 
+const sumCountName = "extract_count_metric"
+
 type extractCountMetricArguments struct {
 	Monotonic bool
 }
 
 func newExtractCountMetricFactory() ottl.Factory[ottlmetric.TransformContext] {
-	return ottl.NewFactory("extract_count_metric", &extractCountMetricArguments{}, createExtractCountMetricFunction)
+	return ottl.NewFactory(sumCountName, &extractCountMetricArguments{}, createExtractCountMetricFunction)
 }
 
 func createExtractCountMetricFunction(_ ottl.FunctionContext, oArgs ottl.Arguments) (ottl.ExprFunc[ottlmetric.TransformContext], error) {
 	args, ok := oArgs.(*extractCountMetricArguments)
 
 	if !ok {
-		return nil, fmt.Errorf("extractCountMetricFactory args must be of type *extractCountMetricArguments")
+		return nil, errors.New("extractCountMetricFactory args must be of type *extractCountMetricArguments")
 	}
 
 	return extractCountMetric(args.Monotonic)
@@ -34,17 +36,17 @@ func createExtractCountMetricFunction(_ ottl.FunctionContext, oArgs ottl.Argumen
 func extractCountMetric(monotonic bool) (ottl.ExprFunc[ottlmetric.TransformContext], error) {
 	return func(_ context.Context, tCtx ottlmetric.TransformContext) (any, error) {
 		metric := tCtx.GetMetric()
-		invalidMetricTypeError := fmt.Errorf("extract_count_metric requires an input metric of type Histogram, ExponentialHistogram or Summary, got %s", metric.Type())
 
 		aggTemp := getAggregationTemporality(metric)
 		if aggTemp == pmetric.AggregationTemporalityUnspecified {
-			return nil, invalidMetricTypeError
+			return nil, invalidMetricTypeError(sumCountName, metric)
 		}
 
 		countMetric := pmetric.NewMetric()
 		countMetric.SetDescription(metric.Description())
 		countMetric.SetName(metric.Name() + "_count")
-		countMetric.SetUnit(metric.Unit())
+		// Use the default unit as the original metric unit does not apply to the 'count' field
+		countMetric.SetUnit("1")
 		countMetric.SetEmptySum().SetAggregationTemporality(aggTemp)
 		countMetric.Sum().SetIsMonotonic(monotonic)
 
@@ -65,7 +67,7 @@ func extractCountMetric(monotonic bool) (ottl.ExprFunc[ottlmetric.TransformConte
 				addCountDataPoint(dataPoints.At(i), countMetric.Sum().DataPoints())
 			}
 		default:
-			return nil, invalidMetricTypeError
+			return nil, invalidMetricTypeError(sumCountName, metric)
 		}
 
 		if countMetric.Sum().DataPoints().Len() > 0 {

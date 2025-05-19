@@ -4,9 +4,9 @@
 package file // import "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/input/file"
 
 import (
-	"go.uber.org/zap"
+	"go.opentelemetry.io/collector/component"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/decode"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/textutils"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/helper"
@@ -38,29 +38,28 @@ type Config struct {
 }
 
 // Build will build a file input operator from the supplied configuration
-func (c Config) Build(logger *zap.SugaredLogger) (operator.Operator, error) {
-	inputOperator, err := c.InputConfig.Build(logger)
+func (c Config) Build(set component.TelemetrySettings) (operator.Operator, error) {
+	inputOperator, err := c.InputConfig.Build(set)
 	if err != nil {
 		return nil, err
 	}
 
 	var toBody toBodyFunc = func(token []byte) any {
-		return string(token)
+		return textutils.UnsafeBytesAsString(token)
 	}
-	if decode.IsNop(c.Config.Encoding) {
+	if textutils.IsNop(c.Encoding) {
 		toBody = func(token []byte) any {
-			copied := make([]byte, len(token))
-			copy(copied, token)
-			return copied
+			return token
 		}
 	}
 
 	input := &Input{
-		InputOperator: inputOperator,
-		toBody:        toBody,
+		InputOperator:           inputOperator,
+		toBody:                  toBody,
+		includeFileRecordNumber: c.IncludeFileRecordNumber,
 	}
 
-	input.fileConsumer, err = c.Config.Build(logger, input.emit)
+	input.fileConsumer, err = c.Config.Build(set, input.emitBatch)
 	if err != nil {
 		return nil, err
 	}

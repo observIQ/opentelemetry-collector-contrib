@@ -6,7 +6,11 @@ package common // import "github.com/open-telemetry/opentelemetry-collector-cont
 import (
 	"fmt"
 	"strings"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 )
+
+var _ ottl.StatementsGetter = (*ContextStatements)(nil)
 
 type ContextID string
 
@@ -33,5 +37,21 @@ func (c *ContextID) UnmarshalText(text []byte) error {
 
 type ContextStatements struct {
 	Context    ContextID `mapstructure:"context"`
+	Conditions []string  `mapstructure:"conditions"`
 	Statements []string  `mapstructure:"statements"`
+	// ErrorMode determines how the processor reacts to errors that occur while processing
+	// this group of statements. When provided, it overrides the default Config ErrorMode.
+	ErrorMode ottl.ErrorMode `mapstructure:"error_mode"`
+}
+
+func (c ContextStatements) GetStatements() []string {
+	return c.Statements
+}
+
+func toContextStatements(statements any) (*ContextStatements, error) {
+	contextStatements, ok := statements.(ContextStatements)
+	if !ok {
+		return nil, fmt.Errorf("invalid context statements type, expected: common.ContextStatements, got: %T", statements)
+	}
+	return &contextStatements, nil
 }

@@ -4,101 +4,80 @@
 package awss3exporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awss3exporter"
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"math/rand"
-	"strconv"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awss3exporter/internal/upload"
 )
 
-type s3Writer struct {
-}
+func newUploadManager(
+	ctx context.Context,
+	conf *Config,
+	metadata string,
+	format string,
+) (upload.Manager, error) {
+	configOpts := []func(*config.LoadOptions) error{}
 
-// generate the s3 time key based on partition configuration
-func getTimeKey(time time.Time, partition string) string {
-	var timeKey string
-	year, month, day := time.Date()
-	hour, minute, _ := time.Clock()
-
-	if partition == "hour" {
-		timeKey = fmt.Sprintf("year=%d/month=%02d/day=%02d/hour=%02d", year, month, day, hour)
-	} else {
-		timeKey = fmt.Sprintf("year=%d/month=%02d/day=%02d/hour=%02d/minute=%02d", year, month, day, hour, minute)
-	}
-	return timeKey
-}
-
-func randomInRange(low, hi int) int {
-	return low + rand.Intn(hi-low)
-}
-
-func getS3Key(time time.Time, keyPrefix string, partition string, filePrefix string, metadata string, fileformat string) string {
-	timeKey := getTimeKey(time, partition)
-	randomID := randomInRange(100000000, 999999999)
-
-	s3Key := keyPrefix + "/" + timeKey + "/" + filePrefix + metadata + "_" + strconv.Itoa(randomID) + "." + fileformat
-
-	return s3Key
-}
-
-func getSessionConfig(config *Config) *aws.Config {
-	sessionConfig := &aws.Config{
-		Region:           aws.String(config.S3Uploader.Region),
-		S3ForcePathStyle: &config.S3Uploader.S3ForcePathStyle,
-		DisableSSL:       &config.S3Uploader.DisableSSL,
+	if region := conf.S3Uploader.Region; region != "" {
+		configOpts = append(configOpts, config.WithRegion(region))
 	}
 
-	endpoint := config.S3Uploader.Endpoint
-	if endpoint != "" {
-		sessionConfig.Endpoint = aws.String(endpoint)
-	}
-
-	return sessionConfig
-}
-
-func getSession(config *Config, sessionConfig *aws.Config) (*session.Session, error) {
-	sess, err := session.NewSession(sessionConfig)
-
-	if config.S3Uploader.RoleArn != "" {
-		credentials := stscreds.NewCredentials(sess, config.S3Uploader.RoleArn)
-		sess.Config.Credentials = credentials
-	}
-
-	return sess, err
-}
-
-func (s3writer *s3Writer) writeBuffer(_ context.Context, buf []byte, config *Config, metadata string, format string) error {
-	now := time.Now()
-	key := getS3Key(now,
-		config.S3Uploader.S3Prefix, config.S3Uploader.S3Partition,
-		config.S3Uploader.FilePrefix, metadata, format)
-
-	// create a reader from data data in memory
-	reader := bytes.NewReader(buf)
-
-	sessionConfig := getSessionConfig(config)
-	sess, err := getSession(config, sessionConfig)
-
+	cfg, err := config.LoadDefaultConfig(ctx, configOpts...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	uploader := s3manager.NewUploader(sess)
-
-	_, err = uploader.Upload(&s3manager.UploadInput{
-		Bucket: aws.String(config.S3Uploader.S3Bucket),
-		Key:    aws.String(key),
-		Body:   reader,
-	})
-	if err != nil {
-		return err
+	s3Opts := []func(*s3.Options){
+		func(o *s3.Options) {
+			o.EndpointOptions = s3.EndpointResolverOptions{
+				DisableHTTPS: conf.S3Uploader.DisableSSL,
+			}
+			o.UsePathStyle = conf.S3Uploader.S3ForcePathStyle
+		},
 	}
 
-	return nil
+	if conf.S3Uploader.Endpoint != "" {
+		s3Opts = append(s3Opts, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String((conf.S3Uploader.Endpoint))
+		})
+	}
+
+	if arn := conf.S3Uploader.RoleArn; arn != "" {
+		s3Opts = append(s3Opts, func(o *s3.Options) {
+			o.Credentials = stscreds.NewAssumeRoleProvider(sts.NewFromConfig(cfg), arn)
+		})
+	}
+
+	if endpoint := conf.S3Uploader.Endpoint; endpoint != "" {
+		s3Opts = append(s3Opts, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
+		})
+	}
+
+	var managerOpts []upload.ManagerOpt
+	if conf.S3Uploader.ACL != "" {
+		managerOpts = append(managerOpts,
+			upload.WithACL(s3types.ObjectCannedACL(conf.S3Uploader.ACL)))
+	}
+
+	return upload.NewS3Manager(
+		conf.S3Uploader.S3Bucket,
+		&upload.PartitionKeyBuilder{
+			PartitionPrefix: conf.S3Uploader.S3Prefix,
+			PartitionFormat: conf.S3Uploader.S3PartitionFormat,
+			FilePrefix:      conf.S3Uploader.FilePrefix,
+			Metadata:        metadata,
+			FileFormat:      format,
+			Compression:     conf.S3Uploader.Compression,
+		},
+		s3.NewFromConfig(cfg, s3Opts...),
+		s3types.StorageClass(conf.S3Uploader.StorageClass),
+		managerOpts...,
+	), nil
 }

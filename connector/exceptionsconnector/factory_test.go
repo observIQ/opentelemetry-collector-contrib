@@ -5,21 +5,25 @@ package exceptionsconnector
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/connector/connectortest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/connector/exceptionsconnector/internal/metadata"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/pdatautil"
 )
 
 func TestNewConnector(t *testing.T) {
-	defaultMethod := "GET"
+	defaultMethod := http.MethodGet
 	defaultMethodValue := pcommon.NewValueStr(defaultMethod)
 	for _, tc := range []struct {
 		name           string
 		dimensions     []Dimension
-		wantDimensions []dimension
+		wantDimensions []pdatautil.Dimension
 	}{
 		{
 			name: "simplest config (use defaults)",
@@ -30,9 +34,9 @@ func TestNewConnector(t *testing.T) {
 				{Name: "http.method", Default: &defaultMethod},
 				{Name: "http.status_code"},
 			},
-			wantDimensions: []dimension{
-				{name: "http.method", value: &defaultMethodValue},
-				{"http.status_code", nil},
+			wantDimensions: []pdatautil.Dimension{
+				{Name: "http.method", Value: &defaultMethodValue},
+				{Name: "http.status_code", Value: nil},
 			},
 		},
 	} {
@@ -40,7 +44,7 @@ func TestNewConnector(t *testing.T) {
 			// Prepare
 			factory := NewFactory()
 
-			creationParams := connectortest.NewNopCreateSettings()
+			creationParams := connectortest.NewNopSettings(metadata.Type)
 			cfg := factory.CreateDefaultConfig().(*Config)
 			cfg.Dimensions = tc.dimensions
 
@@ -48,7 +52,7 @@ func TestNewConnector(t *testing.T) {
 			traceMetricsConnector, err := factory.CreateTracesToMetrics(context.Background(), creationParams, cfg, consumertest.NewNop())
 			smc := traceMetricsConnector.(*metricsConnector)
 
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			assert.NotNil(t, smc)
 			assert.Equal(t, tc.wantDimensions, smc.dimensions)
 
@@ -56,7 +60,7 @@ func TestNewConnector(t *testing.T) {
 			traceLogsConnector, err := factory.CreateTracesToLogs(context.Background(), creationParams, cfg, consumertest.NewNop())
 			slc := traceLogsConnector.(*logsConnector)
 
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			assert.NotNil(t, slc)
 			assert.Equal(t, tc.wantDimensions, smc.dimensions)
 		})

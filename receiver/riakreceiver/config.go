@@ -10,7 +10,7 @@ import (
 
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configopaque"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 	"go.uber.org/multierr"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/riakreceiver/internal/metadata"
@@ -28,11 +28,11 @@ const defaultEndpoint = "http://localhost:8098"
 
 // Config defines the configuration for the various elements of the receiver agent.
 type Config struct {
-	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
-	confighttp.HTTPClientSettings           `mapstructure:",squash"`
-	Username                                string                        `mapstructure:"username"`
-	Password                                configopaque.String           `mapstructure:"password"`
-	MetricsBuilderConfig                    metadata.MetricsBuilderConfig `mapstructure:"metrics"`
+	scraperhelper.ControllerConfig `mapstructure:",squash"`
+	confighttp.ClientConfig        `mapstructure:",squash"`
+	Username                       string                        `mapstructure:"username"`
+	Password                       configopaque.String           `mapstructure:"password"`
+	MetricsBuilderConfig           metadata.MetricsBuilderConfig `mapstructure:"metrics"`
 }
 
 // Validate validates the configuration by checking for missing or invalid fields

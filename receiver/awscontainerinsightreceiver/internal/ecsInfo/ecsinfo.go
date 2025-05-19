@@ -80,18 +80,17 @@ type ecsInfoOption func(*EcsInfo)
 
 // New creates a k8sApiServer which can generate cluster-level metrics
 func NewECSInfo(refreshInterval time.Duration, hostIPProvider hostIPProvider, host component.Host, settings component.TelemetrySettings, options ...ecsInfoOption) (*EcsInfo, error) {
-	setting := confighttp.HTTPClientSettings{
+	setting := confighttp.ClientConfig{
 		Timeout: defaultTimeout,
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 
-	client, err := setting.ToClient(host, settings)
-
+	client, err := setting.ToClient(ctx, host, settings)
 	if err != nil {
 		settings.Logger.Warn("Failed to create a http client for ECS info!")
+		cancel()
 		return nil, err
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
 
 	ecsInfo := &EcsInfo{
 		logger:                       settings.Logger,
@@ -123,7 +122,6 @@ func NewECSInfo(refreshInterval time.Duration, hostIPProvider hostIPProvider, ho
 }
 
 func (e *EcsInfo) initContainerInfo(ctx context.Context) {
-
 	<-e.hostIPProvider.GetInstanceIPReadyC()
 
 	e.logger.Info("instance ip is ready and begin initializing ecs container info")
@@ -133,7 +131,6 @@ func (e *EcsInfo) initContainerInfo(ctx context.Context) {
 }
 
 func (e *EcsInfo) initTaskInfo(ctx context.Context) {
-
 	<-e.hostIPProvider.GetInstanceIPReadyC()
 
 	e.logger.Info("instance ip is ready and begin initializing ecs task info")
@@ -144,7 +141,6 @@ func (e *EcsInfo) initTaskInfo(ctx context.Context) {
 }
 
 func (e *EcsInfo) initCgroupScanner(ctx context.Context) {
-
 	<-e.isContainerInfoReadyC
 	<-e.isTaskInfoReadyC
 

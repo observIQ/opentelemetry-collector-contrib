@@ -32,9 +32,7 @@ const (
 	kubeProxy          = "kube-proxy"
 )
 
-var (
-	re = regexp.MustCompile(splitRegexStr)
-)
+var re = regexp.MustCompile(splitRegexStr)
 
 type cachedEntry struct {
 	pod      corev1.Pod
@@ -59,8 +57,8 @@ type mapWithExpiry struct {
 }
 
 func (m *mapWithExpiry) Get(key string) (any, bool) {
-	m.MapWithExpiry.Lock()
-	defer m.MapWithExpiry.Unlock()
+	m.Lock()
+	defer m.Unlock()
 	if val, ok := m.MapWithExpiry.Get(awsmetrics.NewKey(key, nil)); ok {
 		return val.RawValue, ok
 	}
@@ -69,8 +67,8 @@ func (m *mapWithExpiry) Get(key string) (any, bool) {
 }
 
 func (m *mapWithExpiry) Set(key string, content any) {
-	m.MapWithExpiry.Lock()
-	defer m.MapWithExpiry.Unlock()
+	m.Lock()
+	defer m.Unlock()
 	val := awsmetrics.MetricValue{
 		RawValue:  content,
 		Timestamp: time.Now(),
@@ -208,18 +206,17 @@ func (p *PodStore) Decorate(ctx context.Context, metric CIMetric, kubernetesBlob
 		}
 
 		// If the entry is not a placeholder, decorate the pod
-		if entry.pod.Name != "" {
-			p.decorateCPU(metric, &entry.pod)
-			p.decorateMem(metric, &entry.pod)
-			p.addStatus(metric, &entry.pod)
-			addContainerCount(metric, &entry.pod)
-			addContainerID(&entry.pod, metric, kubernetesBlob, p.logger)
-			p.addPodOwnersAndPodName(metric, &entry.pod, kubernetesBlob)
-			addLabels(&entry.pod, kubernetesBlob)
-		} else {
-			p.logger.Warn(fmt.Sprintf("no pod information is found in podstore for pod %s", podKey))
+		if entry.pod.Name == "" {
+			p.logger.Warn("no pod information is found in podstore for pod " + podKey)
 			return false
 		}
+		p.decorateCPU(metric, &entry.pod)
+		p.decorateMem(metric, &entry.pod)
+		p.addStatus(metric, &entry.pod)
+		addContainerCount(metric, &entry.pod)
+		addContainerID(&entry.pod, metric, kubernetesBlob, p.logger)
+		p.addPodOwnersAndPodName(metric, &entry.pod, kubernetesBlob)
+		addLabels(&entry.pod, kubernetesBlob)
 	}
 	return true
 }
@@ -262,7 +259,7 @@ func (p *PodStore) refreshInternal(now time.Time, podList []corev1.Pod) {
 		pod := podList[i]
 		podKey := createPodKeyFromMetaData(&pod)
 		if podKey == "" {
-			p.logger.Warn(fmt.Sprintf("podKey is unavailable, refresh pod store for pod %s", pod.Name))
+			p.logger.Warn("podKey is unavailable, refresh pod store for pod " + pod.Name)
 			continue
 		}
 		if pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
@@ -283,7 +280,8 @@ func (p *PodStore) refreshInternal(now time.Time, podList []corev1.Pod) {
 
 		p.setCachedEntry(podKey, &cachedEntry{
 			pod:      pod,
-			creation: now})
+			creation: now,
+		})
 	}
 
 	p.nodeInfo.setNodeStats(nodeStats{podCnt: podCount, containerCnt: containerCount, memReq: memRequest, cpuReq: cpuRequest})
@@ -567,7 +565,8 @@ func (p *PodStore) addPodOwnersAndPodName(metric CIMetric, pod *corev1.Pod, kube
 		if owner.Kind != "" && owner.Name != "" {
 			kind := owner.Kind
 			name := owner.Name
-			if owner.Kind == ci.ReplicaSet {
+			switch owner.Kind {
+			case ci.ReplicaSet:
 				replicaSetClient := p.k8sClient.GetReplicaSetClient()
 				rsToDeployment := replicaSetClient.ReplicaSetToDeployment()
 				if parent := rsToDeployment[owner.Name]; parent != "" {
@@ -577,7 +576,7 @@ func (p *PodStore) addPodOwnersAndPodName(metric CIMetric, pod *corev1.Pod, kube
 					kind = ci.Deployment
 					name = parent
 				}
-			} else if owner.Kind == ci.Job {
+			case ci.Job:
 				if parent := parseCronJobFromJob(owner.Name); parent != "" {
 					kind = ci.CronJob
 					name = parent
@@ -588,10 +587,10 @@ func (p *PodStore) addPodOwnersAndPodName(metric CIMetric, pod *corev1.Pod, kube
 			owners = append(owners, map[string]string{"owner_kind": kind, "owner_name": name})
 
 			if podName == "" {
-				if owner.Kind == ci.StatefulSet {
+				switch owner.Kind {
+				case ci.StatefulSet:
 					podName = pod.Name
-				} else if owner.Kind == ci.DaemonSet || owner.Kind == ci.Job ||
-					owner.Kind == ci.ReplicaSet || owner.Kind == ci.ReplicationController {
+				case ci.DaemonSet, ci.Job, ci.ReplicaSet, ci.ReplicationController:
 					podName = name
 				}
 			}

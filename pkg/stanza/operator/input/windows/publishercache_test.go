@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build windows
-// +build windows
 
 package windows
 
@@ -14,7 +13,9 @@ import (
 
 func TestGetValidPublisher(t *testing.T) {
 	publisherCache := newPublisherCache()
-	defer publisherCache.evictAll()
+	defer func() {
+		require.NoError(t, publisherCache.evictAll())
+	}()
 
 	// Provider "Application" exists in all Windows versions.
 	publisher, openPublisherErr := publisherCache.get("Application")
@@ -29,7 +30,9 @@ func TestGetValidPublisher(t *testing.T) {
 
 func TestGetInvalidPublisher(t *testing.T) {
 	publisherCache := newPublisherCache()
-	defer publisherCache.evictAll()
+	defer func() {
+		require.NoError(t, publisherCache.evictAll())
+	}()
 
 	// Provider "InvalidProvider" does not exist in any Windows version.
 	publisher, openPublisherErr := publisherCache.get("InvalidProvider")
@@ -42,9 +45,27 @@ func TestGetInvalidPublisher(t *testing.T) {
 	require.False(t, publisher.Valid())
 }
 
+func TestEmptyPublisherNameBehavior(t *testing.T) {
+	publisherCache := newPublisherCache()
+	defer func() {
+		require.NoError(t, publisherCache.evictAll())
+	}()
+
+	publisher, openPublisherErr := publisherCache.get("")
+	require.NoError(t, openPublisherErr) // There should be no error for an empty provider.
+	require.False(t, publisher.Valid())
+
+	// Checked that the cached version works as expected.
+	publisher, openPublisherErr = publisherCache.get("")
+	require.NoError(t, openPublisherErr)
+	require.False(t, publisher.Valid())
+}
+
 func TestValidAndInvalidPublishers(t *testing.T) {
 	publisherCache := newPublisherCache()
-	defer publisherCache.evictAll()
+	defer func() {
+		require.NoError(t, publisherCache.evictAll())
+	}()
 
 	// Provider "Application" exists in all Windows versions.
 	publisher, openPublisherErr := publisherCache.get("Application")

@@ -10,7 +10,6 @@ import (
 )
 
 func TestValidate(t *testing.T) {
-
 	tests := []struct {
 		name string
 		cfg  *Config
@@ -24,7 +23,7 @@ func TestValidate(t *testing.T) {
 				Protocol: "rfc542",
 				Network:  "udp",
 			},
-			err: "unsupported port: port is required, must be in the range 1-65535; " +
+			err: "unsupported port: port is required, must be in the range 1-65535" + "\n" +
 				"unsupported protocol: Only rfc5424 and rfc3164 supported",
 		},
 		{

@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/atlas/mongodbatlas"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/extension/experimental/storage"
+	"go.opentelemetry.io/collector/extension/xextension/storage"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	rcvr "go.opentelemetry.io/collector/receiver"
@@ -53,10 +53,15 @@ type accessLogsReceiver struct {
 	cancel     context.CancelFunc
 }
 
-func newAccessLogsReceiver(settings rcvr.CreateSettings, cfg *Config, consumer consumer.Logs) *accessLogsReceiver {
+func newAccessLogsReceiver(settings rcvr.Settings, cfg *Config, consumer consumer.Logs) (*accessLogsReceiver, error) {
+	client, err := internal.NewMongoDBAtlasClient(cfg.BaseURL, cfg.PublicKey, string(cfg.PrivateKey), cfg.BackOffConfig, settings.Logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MongoDB Atlas client for access logs receiver: %w", err)
+	}
+
 	r := &accessLogsReceiver{
 		cancel:        func() {},
-		client:        internal.NewMongoDBAtlasClient(cfg.PublicKey, string(cfg.PrivateKey), cfg.RetrySettings, settings.Logger),
+		client:        client,
 		cfg:           cfg,
 		logger:        settings.Logger,
 		consumer:      consumer,
@@ -80,7 +85,7 @@ func newAccessLogsReceiver(settings rcvr.CreateSettings, cfg *Config, consumer c
 		}
 	}
 
-	return r
+	return r, nil
 }
 
 func (alr *accessLogsReceiver) Start(ctx context.Context, _ component.Host, storageClient storage.Client) error {
@@ -101,7 +106,6 @@ func (alr *accessLogsReceiver) Shutdown(_ context.Context) error {
 
 func (alr *accessLogsReceiver) startPolling(ctx context.Context) error {
 	for _, pc := range alr.cfg.Logs.Projects {
-		pc := pc
 		if pc.AccessLogs == nil || !pc.AccessLogs.IsEnabled() {
 			continue
 		}

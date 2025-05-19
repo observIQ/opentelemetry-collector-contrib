@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 )
 
@@ -27,10 +28,11 @@ const (
 
 // Config defines configuration for OpenSearch exporter.
 type Config struct {
-	confighttp.HTTPClientSettings  `mapstructure:"http"`
-	exporterhelper.RetrySettings   `mapstructure:"retry_on_failure"`
-	exporterhelper.TimeoutSettings `mapstructure:",squash"`
-	MappingsSettings               `mapstructure:"mapping"`
+	confighttp.ClientConfig   `mapstructure:"http"`
+	configretry.BackOffConfig `mapstructure:"retry_on_failure"`
+	TimeoutSettings           exporterhelper.TimeoutConfig `mapstructure:",squash"`
+	MappingsSettings          `mapstructure:"mapping"`
+	QueueConfig               exporterhelper.QueueBatchConfig `mapstructure:"sending_queue"`
 
 	// The Observability indices would follow the recommended for immutable data stream ingestion pattern using
 	// the data_stream concepts. See https://opensearch.org/docs/latest/dashboards/im-dashboards/datastream/
@@ -81,7 +83,7 @@ type MappingsSettings struct {
 	// Field to store timestamp in.  If not set uses the default @timestamp
 	TimestampField string `mapstructure:"timestamp_field"`
 
-	// Whether to store timestamp in Epoch miliseconds
+	// Whether to store timestamp in Epoch milliseconds
 	UnixTimestamp bool `mapstructure:"unix_timestamp"`
 
 	// Try to find and remove duplicate fields
@@ -143,7 +145,7 @@ func (cfg *Config) Validate() error {
 		return errBulkActionInvalid
 	}
 
-	if _, ok := mappingModes[cfg.MappingsSettings.Mode]; !ok {
+	if _, ok := mappingModes[cfg.Mode]; !ok {
 		multiErr = append(multiErr, errMappingModeInvalid)
 	}
 

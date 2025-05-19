@@ -6,21 +6,13 @@ package flush // import "github.com/open-telemetry/opentelemetry-collector-contr
 import (
 	"bufio"
 	"time"
+
+	internaltime "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/internal/time"
 )
 
 type State struct {
 	LastDataChange time.Time
 	LastDataLength int
-}
-
-func (s *State) Copy() *State {
-	if s == nil {
-		return nil
-	}
-	return &State{
-		LastDataChange: s.LastDataChange,
-		LastDataLength: s.LastDataLength,
-	}
 }
 
 // Func wraps a bufio.SplitFunc with a timer.
@@ -33,7 +25,6 @@ func (s *State) Func(splitFunc bufio.SplitFunc, period time.Duration) bufio.Spli
 
 	return func(data []byte, atEOF bool) (int, []byte, error) {
 		advance, token, err := splitFunc(data, atEOF)
-
 		// Don't interfere with errors
 		if err != nil {
 			return advance, token, err
@@ -41,7 +32,7 @@ func (s *State) Func(splitFunc bufio.SplitFunc, period time.Duration) bufio.Spli
 
 		// If there's a token, return it
 		if token != nil {
-			s.LastDataChange = time.Now()
+			s.LastDataChange = internaltime.Now()
 			s.LastDataLength = 0
 			return advance, token, err
 		}
@@ -52,26 +43,21 @@ func (s *State) Func(splitFunc bufio.SplitFunc, period time.Duration) bufio.Spli
 			return 0, nil, nil
 		}
 
-		// Flush timed out
-		if time.Since(s.LastDataChange) > period {
-			s.LastDataChange = time.Now()
-			s.LastDataLength = 0
-			return len(data), data, nil
-		}
-
 		// We're seeing new data so postpone the next flush
 		if len(data) > s.LastDataLength {
-			s.LastDataChange = time.Now()
+			s.LastDataChange = internaltime.Now()
 			s.LastDataLength = len(data)
+			return 0, nil, nil
+		}
+
+		// Flush timed out
+		if internaltime.Since(s.LastDataChange) > period {
+			s.LastDataChange = internaltime.Now()
+			s.LastDataLength = 0
+			return len(data), data, nil
 		}
 
 		// Ask for more data
 		return 0, nil, nil
 	}
-}
-
-// Deprecated: [v0.88.0] Use WithFunc instead.
-func WithPeriod(splitFunc bufio.SplitFunc, period time.Duration) bufio.SplitFunc {
-	s := &State{LastDataChange: time.Now()}
-	return s.Func(splitFunc, period)
 }

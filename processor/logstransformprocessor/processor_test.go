@@ -5,11 +5,13 @@ package logstransformprocessor
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
@@ -22,32 +24,31 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/helper"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/parser/regex"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/logstransformprocessor/internal/metadata"
 )
 
-var (
-	cfg = &Config{
-		BaseConfig: adapter.BaseConfig{
-			Operators: []operator.Config{
-				{
-					Builder: func() *regex.Config {
-						cfg := regex.NewConfig()
-						cfg.Regex = "^(?P<time>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) (?P<sev>[A-Z]*) (?P<msg>.*)$"
-						sevField := entry.NewAttributeField("sev")
-						sevCfg := helper.NewSeverityConfig()
-						sevCfg.ParseFrom = &sevField
-						cfg.SeverityConfig = &sevCfg
-						timeField := entry.NewAttributeField("time")
-						timeCfg := helper.NewTimeParser()
-						timeCfg.Layout = "%Y-%m-%d %H:%M:%S"
-						timeCfg.ParseFrom = &timeField
-						cfg.TimeParser = &timeCfg
-						return cfg
-					}(),
-				},
+var cfg = &Config{
+	BaseConfig: adapter.BaseConfig{
+		Operators: []operator.Config{
+			{
+				Builder: func() *regex.Config {
+					cfg := regex.NewConfig()
+					cfg.Regex = "^(?P<time>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) (?P<sev>[A-Z]*) (?P<msg>.*)$"
+					sevField := entry.NewAttributeField("sev")
+					sevCfg := helper.NewSeverityConfig()
+					sevCfg.ParseFrom = &sevField
+					cfg.SeverityConfig = &sevCfg
+					timeField := entry.NewAttributeField("time")
+					timeCfg := helper.NewTimeParser()
+					timeCfg.Layout = "%Y-%m-%d %H:%M:%S"
+					timeCfg.ParseFrom = &timeField
+					cfg.TimeParser = &timeCfg
+					return cfg
+				}(),
 			},
 		},
-	}
-)
+	},
+}
 
 func parseTime(format, input string) *time.Time {
 	val, _ := time.ParseInLocation(format, input, time.Local)
@@ -142,7 +143,7 @@ func TestLogsTransformProcessor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tln := new(consumertest.LogsSink)
 			factory := NewFactory()
-			ltp, err := factory.CreateLogsProcessor(context.Background(), processortest.NewNopCreateSettings(), tt.config, tln)
+			ltp, err := factory.CreateLogs(context.Background(), processortest.NewNopSettings(metadata.Type), tt.config, tln)
 			require.NoError(t, err)
 			assert.True(t, ltp.Capabilities().MutatesData)
 
@@ -194,4 +195,95 @@ func generateLogData(messages []testLogMessage) plog.Logs {
 	}
 
 	return ld
+}
+
+// laggy operator is a test operator that simulates heavy processing that takes a large amount of time.
+// The heavy processing only occurs for every 100th log
+type laggyOperator struct {
+	helper.WriterOperator
+	logsCount int
+}
+
+func (t *laggyOperator) ProcessBatch(ctx context.Context, entries []*entry.Entry) error {
+	var errs []error
+	for i := range entries {
+		errs = append(errs, t.Process(ctx, entries[i]))
+	}
+	return errors.Join(errs...)
+}
+
+func (t *laggyOperator) Process(ctx context.Context, e *entry.Entry) error {
+	// Wait for a large amount of time every 100 logs
+	if t.logsCount%100 == 0 {
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	t.logsCount++
+
+	return t.Write(ctx, e)
+}
+
+func (t *laggyOperator) CanProcess() bool {
+	return true
+}
+
+type laggyOperatorConfig struct {
+	helper.WriterConfig
+}
+
+func (l *laggyOperatorConfig) Build(set component.TelemetrySettings) (operator.Operator, error) {
+	wo, err := l.WriterConfig.Build(set)
+	if err != nil {
+		return nil, err
+	}
+
+	return &laggyOperator{
+		WriterOperator: wo,
+	}, nil
+}
+
+func TestProcessorShutdownWithSlowOperator(t *testing.T) {
+	operator.Register("laggy", func() operator.Builder { return &laggyOperatorConfig{} })
+
+	config := &Config{
+		BaseConfig: adapter.BaseConfig{
+			Operators: []operator.Config{
+				{
+					Builder: func() *laggyOperatorConfig {
+						l := &laggyOperatorConfig{}
+						l.OperatorType = "laggy"
+						return l
+					}(),
+				},
+			},
+		},
+	}
+
+	tln := new(consumertest.LogsSink)
+	factory := NewFactory()
+	ltp, err := factory.CreateLogs(context.Background(), processortest.NewNopSettings(metadata.Type), config, tln)
+	require.NoError(t, err)
+	assert.True(t, ltp.Capabilities().MutatesData)
+
+	err = ltp.Start(context.Background(), nil)
+	require.NoError(t, err)
+
+	testLog := plog.NewLogs()
+	scopeLogs := testLog.ResourceLogs().AppendEmpty().
+		ScopeLogs().AppendEmpty()
+
+	for i := 0; i < 500; i++ {
+		lr := scopeLogs.LogRecords().AppendEmpty()
+		lr.Body().SetStr("Test message")
+	}
+
+	// The idea is to check that shutdown, when there are a lot of entries, doesn't try to write logs to
+	// a closed channel, since that'll cause a panic.
+	// In order to test, we send a lot of logs to be consumed, then shutdown immediately.
+
+	err = ltp.ConsumeLogs(context.Background(), testLog)
+	require.NoError(t, err)
+
+	err = ltp.Shutdown(context.Background())
+	require.NoError(t, err)
 }

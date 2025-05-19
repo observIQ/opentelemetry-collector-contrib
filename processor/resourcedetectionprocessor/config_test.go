@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/aws/ec2"
@@ -27,13 +28,13 @@ import (
 func TestLoadConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg := confighttp.NewDefaultHTTPClientSettings()
+	cfg := confighttp.NewDefaultClientConfig()
 	cfg.Timeout = 2 * time.Second
 	openshiftConfig := detectorCreateDefaultConfig()
 	openshiftConfig.OpenShiftConfig = openshift.Config{
 		Address: "127.0.0.1:4444",
 		Token:   "some_token",
-		TLSSettings: configtls.TLSClientSetting{
+		TLSSettings: configtls.ClientConfig{
 			Insecure: true,
 		},
 		ResourceAttributes: openshift.CreateDefaultConfig().ResourceAttributes,
@@ -43,6 +44,8 @@ func TestLoadConfig(t *testing.T) {
 	ec2Config.EC2Config = ec2.Config{
 		Tags:               []string{"^tag1$", "^tag2$"},
 		ResourceAttributes: ec2.CreateDefaultConfig().ResourceAttributes,
+		MaxAttempts:        3,
+		MaxBackoff:         20 * time.Second,
 	}
 
 	systemConfig := detectorCreateDefaultConfig()
@@ -69,65 +72,65 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "openshift"),
 			expected: &Config{
-				Detectors:          []string{"openshift"},
-				DetectorConfig:     openshiftConfig,
-				HTTPClientSettings: cfg,
-				Override:           false,
+				Detectors:      []string{"openshift"},
+				DetectorConfig: openshiftConfig,
+				ClientConfig:   cfg,
+				Override:       false,
 			},
 		},
 		{
 			id: component.NewIDWithName(metadata.Type, "gcp"),
 			expected: &Config{
-				Detectors:          []string{"env", "gcp"},
-				HTTPClientSettings: cfg,
-				Override:           false,
-				DetectorConfig:     detectorCreateDefaultConfig(),
+				Detectors:      []string{"env", "gcp"},
+				ClientConfig:   cfg,
+				Override:       false,
+				DetectorConfig: detectorCreateDefaultConfig(),
 			},
 		},
 		{
 			id: component.NewIDWithName(metadata.Type, "ec2"),
 			expected: &Config{
-				Detectors:          []string{"env", "ec2"},
-				DetectorConfig:     ec2Config,
-				HTTPClientSettings: cfg,
-				Override:           false,
+				Detectors:      []string{"env", "ec2"},
+				DetectorConfig: ec2Config,
+				ClientConfig:   cfg,
+				Override:       false,
 			},
 		},
 		{
 			id: component.NewIDWithName(metadata.Type, "system"),
 			expected: &Config{
-				Detectors:          []string{"env", "system"},
-				DetectorConfig:     systemConfig,
-				HTTPClientSettings: cfg,
-				Override:           false,
-				Attributes:         []string{"a", "b"},
+				Detectors:      []string{"env", "system"},
+				DetectorConfig: systemConfig,
+				ClientConfig:   cfg,
+				Override:       false,
+				Attributes:     []string{"a", "b"},
 			},
 		},
 		{
 			id: component.NewIDWithName(metadata.Type, "heroku"),
 			expected: &Config{
-				Detectors:          []string{"env", "heroku"},
-				HTTPClientSettings: cfg,
-				Override:           false,
-				DetectorConfig:     detectorCreateDefaultConfig(),
+				Detectors:      []string{"env", "heroku"},
+				ClientConfig:   cfg,
+				Override:       false,
+				DetectorConfig: detectorCreateDefaultConfig(),
 			},
 		},
 		{
 			id: component.NewIDWithName(metadata.Type, "lambda"),
 			expected: &Config{
-				Detectors:          []string{"env", "lambda"},
-				HTTPClientSettings: cfg,
-				Override:           false,
-				DetectorConfig:     detectorCreateDefaultConfig(),
+				Detectors:      []string{"env", "lambda"},
+				ClientConfig:   cfg,
+				Override:       false,
+				DetectorConfig: detectorCreateDefaultConfig(),
 			},
 		},
 		{
 			id: component.NewIDWithName(metadata.Type, "resourceattributes"),
 			expected: &Config{
-				Detectors:          []string{"system", "ec2"},
-				HTTPClientSettings: cfg,
-				Override:           false,
-				DetectorConfig:     resourceAttributesConfig,
+				Detectors:      []string{"system", "ec2"},
+				ClientConfig:   cfg,
+				Override:       false,
+				DetectorConfig: resourceAttributesConfig,
 			},
 		},
 		{
@@ -145,13 +148,13 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
 			if tt.expected == nil {
-				assert.EqualError(t, component.ValidateConfig(cfg), tt.errorMessage)
+				assert.ErrorContains(t, xconfmap.Validate(cfg), tt.errorMessage)
 				return
 			}
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.EqualExportedValues(t, *tt.expected.(*Config), *cfg.(*Config))
 		})
 	}
@@ -212,7 +215,7 @@ func TestGetConfigFromType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := tt.inputDetectorConfig.GetConfigFromType(tt.detectorType)
-			assert.Equal(t, output, tt.expectedConfig)
+			assert.Equal(t, tt.expectedConfig, output)
 		})
 	}
 }

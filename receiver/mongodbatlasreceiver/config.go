@@ -7,14 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/config/configtls"
-	"go.opentelemetry.io/collector/exporter/exporterhelper"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 	"go.uber.org/multierr"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver/internal/metadata"
@@ -23,25 +24,26 @@ import (
 var _ component.Config = (*Config)(nil)
 
 type Config struct {
-	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
-	PublicKey                               string                        `mapstructure:"public_key"`
-	PrivateKey                              configopaque.String           `mapstructure:"private_key"`
-	Granularity                             string                        `mapstructure:"granularity"`
-	MetricsBuilderConfig                    metadata.MetricsBuilderConfig `mapstructure:",squash"`
-	Projects                                []*ProjectConfig              `mapstructure:"projects"`
-	Alerts                                  AlertConfig                   `mapstructure:"alerts"`
-	Events                                  *EventsConfig                 `mapstructure:"events"`
-	Logs                                    LogConfig                     `mapstructure:"logs"`
-	RetrySettings                           exporterhelper.RetrySettings  `mapstructure:"retry_on_failure"`
-	StorageID                               *component.ID                 `mapstructure:"storage"`
+	scraperhelper.ControllerConfig `mapstructure:",squash"`
+	BaseURL                        string                        `mapstructure:"base_url"`
+	PublicKey                      string                        `mapstructure:"public_key"`
+	PrivateKey                     configopaque.String           `mapstructure:"private_key"`
+	Granularity                    string                        `mapstructure:"granularity"`
+	MetricsBuilderConfig           metadata.MetricsBuilderConfig `mapstructure:",squash"`
+	Projects                       []*ProjectConfig              `mapstructure:"projects"`
+	Alerts                         AlertConfig                   `mapstructure:"alerts"`
+	Events                         *EventsConfig                 `mapstructure:"events"`
+	Logs                           LogConfig                     `mapstructure:"logs"`
+	BackOffConfig                  configretry.BackOffConfig     `mapstructure:"retry_on_failure"`
+	StorageID                      *component.ID                 `mapstructure:"storage"`
 }
 
 type AlertConfig struct {
-	Enabled  bool                        `mapstructure:"enabled"`
-	Endpoint string                      `mapstructure:"endpoint"`
-	Secret   configopaque.String         `mapstructure:"secret"`
-	TLS      *configtls.TLSServerSetting `mapstructure:"tls"`
-	Mode     string                      `mapstructure:"mode"`
+	Enabled  bool                    `mapstructure:"enabled"`
+	Endpoint string                  `mapstructure:"endpoint"`
+	Secret   configopaque.String     `mapstructure:"secret"`
+	TLS      *configtls.ServerConfig `mapstructure:"tls"`
+	Mode     string                  `mapstructure:"mode"`
 
 	// these parameters are only relevant in retrieval mode
 	Projects     []*ProjectConfig `mapstructure:"projects"`
@@ -129,10 +131,17 @@ var (
 
 	// Access Logs Errors
 	errMaxPageSize = errors.New("the maximum value for 'page_size' is 20000")
+
+	// Config Errors
+	errConfigEmptyEndpoint = errors.New("baseurl must not be empty")
 )
 
 func (c *Config) Validate() error {
 	var errs error
+
+	if err := validateEndpoint(c.BaseURL); err != nil {
+		return fmt.Errorf("invalid base_url %q: %w", c.BaseURL, err)
+	}
 
 	for _, project := range c.Projects {
 		if len(project.ExcludeClusters) != 0 && len(project.IncludeClusters) != 0 {
@@ -240,6 +249,26 @@ func (a AlertConfig) validateListenConfig() error {
 func (e EventsConfig) validate() error {
 	if len(e.Projects) == 0 && len(e.Organizations) == 0 {
 		return errNoEvents
+	}
+	return nil
+}
+
+func validateEndpoint(endpoint string) error {
+	if endpoint == "" {
+		return errConfigEmptyEndpoint
+	}
+
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return err
+	}
+	switch u.Scheme {
+	case "http", "https":
+	default:
+		return fmt.Errorf(`invalid scheme %q, expected "http" or "https"`, u.Scheme)
+	}
+	if u.Host == "" {
+		return errors.New("host must not be empty")
 	}
 	return nil
 }

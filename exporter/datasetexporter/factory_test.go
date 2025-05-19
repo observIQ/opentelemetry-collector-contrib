@@ -4,7 +4,7 @@
 package datasetexporter
 
 import (
-	"fmt"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter/internal/metadata"
@@ -28,17 +30,17 @@ func TestCreateDefaultConfig(t *testing.T) {
 		TracesSettings:     newDefaultTracesSettings(),
 		LogsSettings:       newDefaultLogsSettings(),
 		ServerHostSettings: newDefaultServerHostSettings(),
-		RetrySettings:      exporterhelper.NewDefaultRetrySettings(),
-		QueueSettings:      exporterhelper.NewDefaultQueueSettings(),
-		TimeoutSettings:    exporterhelper.NewDefaultTimeoutSettings(),
+		BackOffConfig:      configretry.NewDefaultBackOffConfig(),
+		QueueSettings:      exporterhelper.NewDefaultQueueConfig(),
+		TimeoutSettings:    exporterhelper.NewDefaultTimeoutConfig(),
 	}, cfg, "failed to create default config")
 
-	assert.Nil(t, componenttest.CheckConfigStruct(cfg))
+	assert.NoError(t, componenttest.CheckConfigStruct(cfg))
 }
 
 func TestLoadConfig(t *testing.T) {
 	cm, err := confmaptest.LoadConf(filepath.Join("testdata", "config.yaml"))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	tests := []struct {
 		id       component.ID
@@ -53,9 +55,9 @@ func TestLoadConfig(t *testing.T) {
 				TracesSettings:     newDefaultTracesSettings(),
 				LogsSettings:       newDefaultLogsSettings(),
 				ServerHostSettings: newDefaultServerHostSettings(),
-				RetrySettings:      exporterhelper.NewDefaultRetrySettings(),
-				QueueSettings:      exporterhelper.NewDefaultQueueSettings(),
-				TimeoutSettings:    exporterhelper.NewDefaultTimeoutSettings(),
+				BackOffConfig:      configretry.NewDefaultBackOffConfig(),
+				QueueSettings:      exporterhelper.NewDefaultQueueConfig(),
+				TimeoutSettings:    exporterhelper.NewDefaultTimeoutConfig(),
 			},
 		},
 		{
@@ -65,18 +67,20 @@ func TestLoadConfig(t *testing.T) {
 				APIKey:     "key-lib",
 				BufferSettings: BufferSettings{
 					MaxLifetime:          345 * time.Millisecond,
+					PurgeOlderThan:       bufferPurgeOlderThan,
 					GroupBy:              []string{"attributes.container_id", "attributes.log.file.path"},
 					RetryInitialInterval: bufferRetryInitialInterval,
 					RetryMaxInterval:     bufferRetryMaxInterval,
 					RetryMaxElapsedTime:  bufferRetryMaxElapsedTime,
 					RetryShutdownTimeout: bufferRetryShutdownTimeout,
+					MaxParallelOutgoing:  bufferMaxParallelOutgoing,
 				},
 				TracesSettings:     newDefaultTracesSettings(),
 				LogsSettings:       newDefaultLogsSettings(),
 				ServerHostSettings: newDefaultServerHostSettings(),
-				RetrySettings:      exporterhelper.NewDefaultRetrySettings(),
-				QueueSettings:      exporterhelper.NewDefaultQueueSettings(),
-				TimeoutSettings:    exporterhelper.NewDefaultTimeoutSettings(),
+				BackOffConfig:      configretry.NewDefaultBackOffConfig(),
+				QueueSettings:      exporterhelper.NewDefaultQueueConfig(),
+				TimeoutSettings:    exporterhelper.NewDefaultTimeoutConfig(),
 			},
 		},
 		{
@@ -87,11 +91,13 @@ func TestLoadConfig(t *testing.T) {
 				Debug:      true,
 				BufferSettings: BufferSettings{
 					MaxLifetime:          3456 * time.Millisecond,
+					PurgeOlderThan:       78 * time.Second,
 					GroupBy:              []string{"body.map.kubernetes.pod_id", "body.map.kubernetes.docker_id", "body.map.stream"},
 					RetryInitialInterval: 21 * time.Second,
 					RetryMaxInterval:     22 * time.Second,
 					RetryMaxElapsedTime:  23 * time.Second,
 					RetryShutdownTimeout: 24 * time.Second,
+					MaxParallelOutgoing:  25,
 				},
 				TracesSettings: TracesSettings{
 					exportSettings: exportSettings{
@@ -115,20 +121,21 @@ func TestLoadConfig(t *testing.T) {
 					UseHostName: false,
 					ServerHost:  "server-host",
 				},
-				RetrySettings: exporterhelper.RetrySettings{
+				BackOffConfig: configretry.BackOffConfig{
 					Enabled:             true,
 					InitialInterval:     11 * time.Nanosecond,
-					RandomizationFactor: 11.3,
+					RandomizationFactor: 0.113,
 					Multiplier:          11.6,
 					MaxInterval:         12 * time.Nanosecond,
 					MaxElapsedTime:      13 * time.Nanosecond,
 				},
-				QueueSettings: exporterhelper.QueueSettings{
+				QueueSettings: exporterhelper.QueueBatchConfig{
 					Enabled:      true,
 					NumConsumers: 14,
 					QueueSize:    15,
+					Sizer:        exporterhelper.RequestSizerTypeRequests,
 				},
-				TimeoutSettings: exporterhelper.TimeoutSettings{
+				TimeoutSettings: exporterhelper.TimeoutConfig{
 					Timeout: 16 * time.Nanosecond,
 				},
 			},
@@ -141,10 +148,25 @@ func TestLoadConfig(t *testing.T) {
 			cfg := factory.CreateDefaultConfig()
 
 			sub, err := cm.Sub(tt.id.String())
-			require.Nil(t, err)
-			require.Nil(t, component.UnmarshalConfig(sub, cfg))
-			if assert.Nil(t, component.ValidateConfig(cfg)) {
+			require.NoError(t, err)
+			require.NoError(t, sub.Unmarshal(cfg))
+			if assert.NoError(t, xconfmap.Validate(cfg)) {
 				assert.Equal(t, tt.expected, cfg)
+			}
+		})
+	}
+}
+
+func TestValidateConfigs(t *testing.T) {
+	tests := createExporterTests()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(*testing.T) {
+			err := xconfmap.Validate(tt.config)
+			if tt.expectedError != nil {
+				assert.ErrorContains(t, err, tt.expectedError.Error())
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -157,11 +179,26 @@ type CreateTest struct {
 }
 
 func createExporterTests() []CreateTest {
+	factory := NewFactory()
+	defaultCfg := factory.CreateDefaultConfig().(*Config)
+	defaultCfg.APIKey = "default-api-key"
+	defaultCfg.DatasetURL = "https://app.eu.scalyr.com"
+
 	return []CreateTest{
 		{
 			name:          "broken",
 			config:        &Config{},
-			expectedError: fmt.Errorf("cannot get DataSetExporter: cannot convert config: DatasetURL: ; APIKey: [REDACTED] (0); Debug: false; BufferSettings: {MaxLifetime:0s GroupBy:[] RetryInitialInterval:0s RetryMaxInterval:0s RetryMaxElapsedTime:0s RetryShutdownTimeout:0s}; LogsSettings: {ExportResourceInfo:false ExportResourcePrefix: ExportScopeInfo:false ExportScopePrefix: DecomposeComplexMessageField:false DecomposedComplexMessagePrefix: exportSettings:{ExportSeparator: ExportDistinguishingSuffix:}}; TracesSettings: {exportSettings:{ExportSeparator: ExportDistinguishingSuffix:}}; ServerHostSettings: {UseHostName:false ServerHost:}; RetrySettings: {Enabled:false InitialInterval:0s RandomizationFactor:0 Multiplier:0 MaxInterval:0s MaxElapsedTime:0s}; QueueSettings: {Enabled:false NumConsumers:0 QueueSize:0 StorageID:<nil>}; TimeoutSettings: {Timeout:0s}; config is not valid: api_key is required"),
+			expectedError: errors.New("api_key is required"),
+		},
+		{
+			name:          "missing-url",
+			config:        &Config{APIKey: "AAA"},
+			expectedError: errors.New("dataset_url is required"),
+		},
+		{
+			name:          "missing-key",
+			config:        &Config{DatasetURL: "bbb"},
+			expectedError: errors.New("api_key is required"),
 		},
 		{
 			name: "valid",
@@ -170,6 +207,7 @@ func createExporterTests() []CreateTest {
 				APIKey:     "key-lib",
 				BufferSettings: BufferSettings{
 					MaxLifetime:          12345,
+					PurgeOlderThan:       78901,
 					GroupBy:              []string{"attributes.container_id"},
 					RetryInitialInterval: time.Second,
 					RetryMaxInterval:     time.Minute,
@@ -181,10 +219,15 @@ func createExporterTests() []CreateTest {
 				ServerHostSettings: ServerHostSettings{
 					UseHostName: true,
 				},
-				RetrySettings:   exporterhelper.NewDefaultRetrySettings(),
-				QueueSettings:   exporterhelper.NewDefaultQueueSettings(),
-				TimeoutSettings: exporterhelper.NewDefaultTimeoutSettings(),
+				BackOffConfig:   configretry.NewDefaultBackOffConfig(),
+				QueueSettings:   exporterhelper.NewDefaultQueueConfig(),
+				TimeoutSettings: exporterhelper.NewDefaultTimeoutConfig(),
 			},
+			expectedError: nil,
+		},
+		{
+			name:          "default",
+			config:        defaultCfg,
 			expectedError: nil,
 		},
 	}

@@ -8,10 +8,10 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension"
-	"go.opentelemetry.io/collector/extension/experimental/storage"
+	"go.opentelemetry.io/collector/extension/xextension/storage"
 )
 
-var testStorageType component.Type = "test_storage"
+var testStorageType component.Type = component.MustNewType("test_storage")
 
 // TestStorage is an in memory storage extension designed for testing
 type TestStorage struct {
@@ -54,7 +54,7 @@ func (s *TestStorage) GetClient(ctx context.Context, kind component.Kind, ent co
 	return client, setCreatorID(ctx, client, s.ID)
 }
 
-var nonStorageType component.Type = "non_storage"
+var nonStorageType component.Type = component.MustNewType("non_storage")
 
 // NonStorage is useful for testing expected behaviors that involve
 // non-storage extensions

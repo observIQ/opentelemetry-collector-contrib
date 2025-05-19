@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	defaultGRPCBindEndpoint = "0.0.0.0:3600"
-	defaultHTTPBindEndpoint = "0.0.0.0:3500"
+	defaultGRPCEndpoint = "localhost:3600"
+	defaultHTTPEndpoint = "localhost:3500"
 )
 
 // NewFactory return a new receiver.Factory for loki receiver.
@@ -34,14 +34,14 @@ func NewFactory() receiver.Factory {
 func createDefaultConfig() component.Config {
 	return &Config{
 		Protocols: Protocols{
-			GRPC: &configgrpc.GRPCServerSettings{
-				NetAddr: confignet.NetAddr{
-					Endpoint:  defaultGRPCBindEndpoint,
-					Transport: "tcp",
+			GRPC: &configgrpc.ServerConfig{
+				NetAddr: confignet.AddrConfig{
+					Endpoint:  defaultGRPCEndpoint,
+					Transport: confignet.TransportTypeTCP,
 				},
 			},
-			HTTP: &confighttp.HTTPServerSettings{
-				Endpoint: defaultHTTPBindEndpoint,
+			HTTP: &confighttp.ServerConfig{
+				Endpoint: defaultHTTPEndpoint,
 			},
 		},
 	}
@@ -49,11 +49,10 @@ func createDefaultConfig() component.Config {
 
 func createLogsReceiver(
 	_ context.Context,
-	settings receiver.CreateSettings,
+	settings receiver.Settings,
 	cfg component.Config,
 	consumer consumer.Logs,
 ) (receiver.Logs, error) {
-
 	rCfg := cfg.(*Config)
 	return newLokiReceiver(rCfg, consumer, settings)
 }

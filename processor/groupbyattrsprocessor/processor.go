@@ -6,17 +6,19 @@ package groupbyattrsprocessor // import "github.com/open-telemetry/opentelemetry
 import (
 	"context"
 
-	"go.opencensus.io/stats"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.uber.org/zap"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbyattrsprocessor/internal/metadata"
 )
 
 type groupByAttrsProcessor struct {
-	logger      *zap.Logger
-	groupByKeys []string
+	logger           *zap.Logger
+	groupByKeys      []string
+	telemetryBuilder *metadata.TelemetryBuilder
 }
 
 // ProcessTraces process traces and groups traces by attribute.
@@ -35,12 +37,12 @@ func (gap *groupByAttrsProcessor) processTraces(ctx context.Context, td ptrace.T
 
 				toBeGrouped, requiredAttributes := gap.extractGroupingAttributes(span.Attributes())
 				if toBeGrouped {
-					stats.Record(ctx, mNumGroupedSpans.M(1))
+					gap.telemetryBuilder.ProcessorGroupbyattrsNumGroupedSpans.Add(ctx, 1)
 					// Some attributes are going to be moved from span to resource level,
 					// so we can delete those on the record level
 					deleteAttributes(requiredAttributes, span.Attributes())
 				} else {
-					stats.Record(ctx, mNumNonGroupedSpans.M(1))
+					gap.telemetryBuilder.ProcessorGroupbyattrsNumNonGroupedSpans.Add(ctx, 1)
 				}
 
 				// Lets combine the base resource attributes + the extracted (grouped) attributes
@@ -53,7 +55,7 @@ func (gap *groupByAttrsProcessor) processTraces(ctx context.Context, td ptrace.T
 	}
 
 	// Copy the grouped data into output
-	stats.Record(ctx, mDistSpanGroups.M(int64(tg.traces.ResourceSpans().Len())))
+	gap.telemetryBuilder.ProcessorGroupbyattrsSpanGroups.Record(ctx, int64(tg.traces.ResourceSpans().Len()))
 
 	return tg.traces, nil
 }
@@ -73,12 +75,12 @@ func (gap *groupByAttrsProcessor) processLogs(ctx context.Context, ld plog.Logs)
 
 				toBeGrouped, requiredAttributes := gap.extractGroupingAttributes(log.Attributes())
 				if toBeGrouped {
-					stats.Record(ctx, mNumGroupedLogs.M(1))
+					gap.telemetryBuilder.ProcessorGroupbyattrsNumGroupedLogs.Add(ctx, 1)
 					// Some attributes are going to be moved from log record to resource level,
 					// so we can delete those on the record level
 					deleteAttributes(requiredAttributes, log.Attributes())
 				} else {
-					stats.Record(ctx, mNumNonGroupedLogs.M(1))
+					gap.telemetryBuilder.ProcessorGroupbyattrsNumNonGroupedLogs.Add(ctx, 1)
 				}
 
 				// Lets combine the base resource attributes + the extracted (grouped) attributes
@@ -88,11 +90,10 @@ func (gap *groupByAttrsProcessor) processLogs(ctx context.Context, ld plog.Logs)
 				log.CopyTo(lr)
 			}
 		}
-
 	}
 
 	// Copy the grouped data into output
-	stats.Record(ctx, mDistLogGroups.M(int64(lg.logs.ResourceLogs().Len())))
+	gap.telemetryBuilder.ProcessorGroupbyattrsLogGroups.Record(ctx, int64(lg.logs.ResourceLogs().Len()))
 
 	return lg.logs, nil
 }
@@ -112,7 +113,6 @@ func (gap *groupByAttrsProcessor) processMetrics(ctx context.Context, md pmetric
 
 				//exhaustive:enforce
 				switch metric.Type() {
-
 				case pmetric.MetricTypeGauge:
 					for pointIndex := 0; pointIndex < metric.Gauge().DataPoints().Len(); pointIndex++ {
 						dataPoint := metric.Gauge().DataPoints().At(pointIndex)
@@ -154,16 +154,15 @@ func (gap *groupByAttrsProcessor) processMetrics(ctx context.Context, md pmetric
 		}
 	}
 
-	stats.Record(ctx, mDistMetricGroups.M(int64(mg.metrics.ResourceMetrics().Len())))
+	gap.telemetryBuilder.ProcessorGroupbyattrsMetricGroups.Record(ctx, int64(mg.metrics.ResourceMetrics().Len()))
 
 	return mg.metrics, nil
 }
 
 func deleteAttributes(attrsForRemoval, targetAttrs pcommon.Map) {
-	attrsForRemoval.Range(func(key string, _ pcommon.Value) bool {
+	for key := range attrsForRemoval.All() {
 		targetAttrs.Remove(key)
-		return true
-	})
+	}
 }
 
 // extractGroupingAttributes extracts the keys and values of the specified Attributes
@@ -172,7 +171,6 @@ func deleteAttributes(attrsForRemoval, targetAttrs pcommon.Map) {
 //   - whether any attribute matched (true) or none (false)
 //   - the extracted AttributeMap of matching keys and their corresponding values
 func (gap *groupByAttrsProcessor) extractGroupingAttributes(attrMap pcommon.Map) (bool, pcommon.Map) {
-
 	groupingAttributes := pcommon.NewMap()
 	foundMatch := false
 
@@ -189,7 +187,6 @@ func (gap *groupByAttrsProcessor) extractGroupingAttributes(attrMap pcommon.Map)
 
 // Searches for metric with same name in the specified InstrumentationLibrary and returns it. If nothing is found, create it.
 func getMetricInInstrumentationLibrary(ilm pmetric.ScopeMetrics, searchedMetric pmetric.Metric) pmetric.Metric {
-
 	// Loop through all metrics and try to find the one that matches with the one we search for
 	// (name and type)
 	for i := 0; i < ilm.Metrics().Len(); i++ {
@@ -204,11 +201,11 @@ func getMetricInInstrumentationLibrary(ilm pmetric.ScopeMetrics, searchedMetric 
 	metric.SetDescription(searchedMetric.Description())
 	metric.SetName(searchedMetric.Name())
 	metric.SetUnit(searchedMetric.Unit())
+	searchedMetric.Metadata().CopyTo(metric.Metadata())
 
 	// Move other special type specific values
 	//exhaustive:enforce
 	switch searchedMetric.Type() {
-
 	case pmetric.MetricTypeHistogram:
 		metric.SetEmptyHistogram().SetAggregationTemporality(searchedMetric.Histogram().AggregationTemporality())
 
@@ -240,15 +237,14 @@ func (gap *groupByAttrsProcessor) getGroupedMetricsFromAttributes(
 	metric pmetric.Metric,
 	attributes pcommon.Map,
 ) pmetric.Metric {
-
 	toBeGrouped, requiredAttributes := gap.extractGroupingAttributes(attributes)
 	if toBeGrouped {
-		stats.Record(ctx, mNumGroupedMetrics.M(1))
+		gap.telemetryBuilder.ProcessorGroupbyattrsNumGroupedMetrics.Add(ctx, 1)
 		// These attributes are going to be moved from datapoint to resource level,
 		// so we can delete those on the datapoint
 		deleteAttributes(requiredAttributes, attributes)
 	} else {
-		stats.Record(ctx, mNumNonGroupedMetrics.M(1))
+		gap.telemetryBuilder.ProcessorGroupbyattrsNumNonGroupedMetrics.Add(ctx, 1)
 	}
 
 	// Get the ResourceMetrics matching with these attributes
@@ -259,5 +255,4 @@ func (gap *groupByAttrsProcessor) getGroupedMetricsFromAttributes(
 
 	// Return the metric in this resource
 	return getMetricInInstrumentationLibrary(groupedInstrumentationLibrary, metric)
-
 }

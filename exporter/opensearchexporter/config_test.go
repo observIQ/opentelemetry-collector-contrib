@@ -14,8 +14,9 @@ import (
 	"go.opentelemetry.io/collector/config/configauth"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
-	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/opensearchexporter/internal/metadata"
 )
@@ -45,21 +46,28 @@ func TestLoadConfig(t *testing.T) {
 			configValidateAssert: assert.NoError,
 		},
 		{
+			id:       component.NewIDWithName(metadata.Type, "default"),
+			expected: withDefaultConfig(),
+			configValidateAssert: func(t assert.TestingT, err error, _ ...any) bool {
+				return assert.ErrorContains(t, err, "endpoint must be specified")
+			},
+		},
+		{
 			id: component.NewIDWithName(metadata.Type, "trace"),
 			expected: &Config{
 				Dataset:   "ngnix",
 				Namespace: "eu",
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Endpoint: sampleEndpoint,
-					Timeout:  2 * time.Minute,
-					Headers: map[string]configopaque.String{
+				ClientConfig: withDefaultHTTPClientConfig(func(config *confighttp.ClientConfig) {
+					config.Endpoint = sampleEndpoint
+					config.Timeout = 2 * time.Minute
+					config.Headers = map[string]configopaque.String{
 						"myheader": "test",
-					},
-					MaxIdleConns:    &maxIdleConns,
-					IdleConnTimeout: &idleConnTimeout,
-					Auth:            &configauth.Authentication{AuthenticatorID: component.NewID("sample_basic_auth")},
-				},
-				RetrySettings: exporterhelper.RetrySettings{
+					}
+					config.MaxIdleConns = maxIdleConns
+					config.IdleConnTimeout = idleConnTimeout
+					config.Auth = &configauth.Config{AuthenticatorID: component.MustNewID("sample_basic_auth")}
+				}),
+				BackOffConfig: configretry.BackOffConfig{
 					Enabled:             true,
 					InitialInterval:     100 * time.Millisecond,
 					MaxInterval:         30 * time.Second,
@@ -81,7 +89,7 @@ func TestLoadConfig(t *testing.T) {
 				config.Dataset = ""
 				config.Namespace = "eu"
 			}),
-			configValidateAssert: func(t assert.TestingT, err error, i ...any) bool {
+			configValidateAssert: func(t assert.TestingT, err error, _ ...any) bool {
 				return assert.ErrorContains(t, err, errDatasetNoValue.Error())
 			},
 		},
@@ -92,7 +100,7 @@ func TestLoadConfig(t *testing.T) {
 				config.Dataset = "ngnix"
 				config.Namespace = ""
 			}),
-			configValidateAssert: func(t assert.TestingT, err error, i ...any) bool {
+			configValidateAssert: func(t assert.TestingT, err error, _ ...any) bool {
 				return assert.ErrorContains(t, err, errNamespaceNoValue.Error())
 			},
 		},
@@ -102,7 +110,7 @@ func TestLoadConfig(t *testing.T) {
 				config.Endpoint = sampleEndpoint
 				config.BulkAction = "delete"
 			}),
-			configValidateAssert: func(t assert.TestingT, err error, i ...any) bool {
+			configValidateAssert: func(t assert.TestingT, err error, _ ...any) bool {
 				return assert.ErrorContains(t, err, errBulkActionInvalid.Error())
 			},
 		},
@@ -115,9 +123,9 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			vv := component.ValidateConfig(cfg)
+			vv := xconfmap.Validate(cfg)
 			tt.configValidateAssert(t, vv)
 			assert.Equal(t, tt.expected, cfg)
 		})
@@ -130,6 +138,14 @@ func withDefaultConfig(fns ...func(*Config)) *Config {
 	cfg := newDefaultConfig().(*Config)
 	for _, fn := range fns {
 		fn(cfg)
+	}
+	return cfg
+}
+
+func withDefaultHTTPClientConfig(fns ...func(config *confighttp.ClientConfig)) confighttp.ClientConfig {
+	cfg := confighttp.NewDefaultClientConfig()
+	for _, fn := range fns {
+		fn(&cfg)
 	}
 	return cfg
 }

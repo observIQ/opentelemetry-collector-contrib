@@ -5,9 +5,9 @@ status:
   stability:
     beta: [metrics]
     development: [logs]
-  distributions: [contrib, splunk, observiq, sumo, liatrio]
+  distributions: [contrib, k8s]
   codeowners:
-    active: [dmitryax, TylerHelmuth, povilasv]
+    active: [dmitryax, TylerHelmuth, povilasv, ChrsMark]
 
 sem_conv_version: 1.18.0
 
@@ -147,6 +147,21 @@ resource_attributes:
     type: string
     enabled: true
 
+  k8s.hpa.scaletargetref.kind:
+    description: The kind of the target resource to scale for the HorizontalPodAutoscaler.
+    type: string
+    enabled: false
+
+  k8s.hpa.scaletargetref.name:
+    description: The name of the target resource to scale for the HorizontalPodAutoscaler.
+    type: string
+    enabled: false
+
+  k8s.hpa.scaletargetref.apiversion:
+    description: The API version of the target resource to scale for the HorizontalPodAutoscaler.
+    type: string
+    enabled: false
+
   k8s.job.name:
     description: The k8s pod name.
     type: string
@@ -162,12 +177,25 @@ resource_attributes:
     type: string
     enabled: false
 
-  k8s.kubeproxy.version:
-    description: The version of Kube Proxy running on the node.
+  container.runtime:
+    description: The container runtime used by Kubernetes Node.
     type: string
     enabled: false
-    warnings:
-      if_configured: k8s.kubeproxy.version resource attribute is deprecated and will be removed soon.
+
+  container.runtime.version:
+    description: The version of container runtime used by Kubernetes Node.
+    type: string
+    enabled: false
+
+  os.description:
+    description: The os description used by Kubernetes Node.
+    type: string
+    enabled: false
+
+  os.type:
+    description: The os type used by Kubernetes Node.
+    type: string
+    enabled: false
 
   openshift.clusterquota.uid:
     description: The k8s ClusterResourceQuota uid.
@@ -179,19 +207,21 @@ resource_attributes:
     type: string
     enabled: true
 
+  k8s.container.status.last_terminated_reason:
+    description: Last terminated reason of a container.
+    type: string
+    enabled: false
+
 attributes:
   k8s.namespace.name:
     description: The k8s namespace name.
     type: string
-    enabled: true
   resource:
     description: the name of the resource on which the quota is applied
     type: string
-    enabled: true
   condition:
     description: "the name of Kubernetes Node condition. Example: Ready, Memory, PID, DiskPressure"
     type: string
-    enabled: true
 
 metrics:
   k8s.container.cpu_request:
@@ -497,3 +527,10 @@ metrics:
 
   # k8s.node.allocatable_* metrics (k8s.node.allocatable_cpu, k8s.node.allocatable_memory, etc) are controlled
   # by allocatable_types_to_report config option. By default, none of them are reported.
+
+tests:
+  config:
+  skip_lifecycle: true
+  goleak:
+    skip: true
+

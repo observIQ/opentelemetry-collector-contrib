@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build !linux
-// +build !linux
 
 package cadvisor // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscontainerinsightreceiver/internal/cadvisor"
 
@@ -22,8 +21,7 @@ type HostInfo interface {
 }
 
 // Cadvisor is a dummy struct for windows
-type Cadvisor struct {
-}
+type Cadvisor struct{}
 
 type Decorator interface {
 	Decorate(*extractors.CAdvisorMetric) *extractors.CAdvisorMetric
@@ -35,13 +33,13 @@ type Option func(*Cadvisor)
 
 // WithDecorator constructs an option for configuring the metric decorator
 func WithDecorator(_ any) Option {
-	return func(c *Cadvisor) {
+	return func(*Cadvisor) {
 		// do nothing
 	}
 }
 
 func WithECSInfoCreator(_ any) Option {
-	return func(c *Cadvisor) {
+	return func(*Cadvisor) {
 		// do nothing
 	}
 }

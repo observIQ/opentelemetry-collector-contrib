@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/filter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
 )
 
-// AttributeAssertType specifies the a value assert_type attribute.
+// AttributeAssertType specifies the value assert_type attribute.
 type AttributeAssertType int
 
 const (
@@ -45,7 +46,7 @@ var MapAttributeAssertType = map[string]AttributeAssertType{
 	"user":    AttributeAssertTypeUser,
 }
 
-// AttributeBtreeCounterType specifies the a value btree_counter_type attribute.
+// AttributeBtreeCounterType specifies the value btree_counter_type attribute.
 type AttributeBtreeCounterType int
 
 const (
@@ -75,7 +76,7 @@ var MapAttributeBtreeCounterType = map[string]AttributeBtreeCounterType{
 	"misses":   AttributeBtreeCounterTypeMisses,
 }
 
-// AttributeCacheDirection specifies the a value cache_direction attribute.
+// AttributeCacheDirection specifies the value cache_direction attribute.
 type AttributeCacheDirection int
 
 const (
@@ -101,7 +102,33 @@ var MapAttributeCacheDirection = map[string]AttributeCacheDirection{
 	"written_from": AttributeCacheDirectionWrittenFrom,
 }
 
-// AttributeCacheStatus specifies the a value cache_status attribute.
+// AttributeCacheRatioType specifies the value cache_ratio_type attribute.
+type AttributeCacheRatioType int
+
+const (
+	_ AttributeCacheRatioType = iota
+	AttributeCacheRatioTypeCacheFill
+	AttributeCacheRatioTypeDirtyFill
+)
+
+// String returns the string representation of the AttributeCacheRatioType.
+func (av AttributeCacheRatioType) String() string {
+	switch av {
+	case AttributeCacheRatioTypeCacheFill:
+		return "cache_fill"
+	case AttributeCacheRatioTypeDirtyFill:
+		return "dirty_fill"
+	}
+	return ""
+}
+
+// MapAttributeCacheRatioType is a helper map of string to AttributeCacheRatioType attribute value.
+var MapAttributeCacheRatioType = map[string]AttributeCacheRatioType{
+	"cache_fill": AttributeCacheRatioTypeCacheFill,
+	"dirty_fill": AttributeCacheRatioTypeDirtyFill,
+}
+
+// AttributeCacheStatus specifies the value cache_status attribute.
 type AttributeCacheStatus int
 
 const (
@@ -127,7 +154,7 @@ var MapAttributeCacheStatus = map[string]AttributeCacheStatus{
 	"used":  AttributeCacheStatusUsed,
 }
 
-// AttributeClusterRole specifies the a value cluster_role attribute.
+// AttributeClusterRole specifies the value cluster_role attribute.
 type AttributeClusterRole int
 
 const (
@@ -153,7 +180,7 @@ var MapAttributeClusterRole = map[string]AttributeClusterRole{
 	"replica": AttributeClusterRoleReplica,
 }
 
-// AttributeCPUState specifies the a value cpu_state attribute.
+// AttributeCPUState specifies the value cpu_state attribute.
 type AttributeCPUState int
 
 const (
@@ -203,7 +230,7 @@ var MapAttributeCPUState = map[string]AttributeCPUState{
 	"steal":   AttributeCPUStateSteal,
 }
 
-// AttributeCursorState specifies the a value cursor_state attribute.
+// AttributeCursorState specifies the value cursor_state attribute.
 type AttributeCursorState int
 
 const (
@@ -229,7 +256,7 @@ var MapAttributeCursorState = map[string]AttributeCursorState{
 	"open":      AttributeCursorStateOpen,
 }
 
-// AttributeDirection specifies the a value direction attribute.
+// AttributeDirection specifies the value direction attribute.
 type AttributeDirection int
 
 const (
@@ -255,7 +282,7 @@ var MapAttributeDirection = map[string]AttributeDirection{
 	"transmit": AttributeDirectionTransmit,
 }
 
-// AttributeDiskDirection specifies the a value disk_direction attribute.
+// AttributeDiskDirection specifies the value disk_direction attribute.
 type AttributeDiskDirection int
 
 const (
@@ -285,7 +312,7 @@ var MapAttributeDiskDirection = map[string]AttributeDiskDirection{
 	"total": AttributeDiskDirectionTotal,
 }
 
-// AttributeDiskStatus specifies the a value disk_status attribute.
+// AttributeDiskStatus specifies the value disk_status attribute.
 type AttributeDiskStatus int
 
 const (
@@ -311,7 +338,7 @@ var MapAttributeDiskStatus = map[string]AttributeDiskStatus{
 	"used": AttributeDiskStatusUsed,
 }
 
-// AttributeDocumentStatus specifies the a value document_status attribute.
+// AttributeDocumentStatus specifies the value document_status attribute.
 type AttributeDocumentStatus int
 
 const (
@@ -345,7 +372,7 @@ var MapAttributeDocumentStatus = map[string]AttributeDocumentStatus{
 	"deleted":  AttributeDocumentStatusDeleted,
 }
 
-// AttributeExecutionType specifies the a value execution_type attribute.
+// AttributeExecutionType specifies the value execution_type attribute.
 type AttributeExecutionType int
 
 const (
@@ -375,7 +402,7 @@ var MapAttributeExecutionType = map[string]AttributeExecutionType{
 	"commands": AttributeExecutionTypeCommands,
 }
 
-// AttributeGlobalLockState specifies the a value global_lock_state attribute.
+// AttributeGlobalLockState specifies the value global_lock_state attribute.
 type AttributeGlobalLockState int
 
 const (
@@ -405,7 +432,7 @@ var MapAttributeGlobalLockState = map[string]AttributeGlobalLockState{
 	"current_queue_writers": AttributeGlobalLockStateCurrentQueueWriters,
 }
 
-// AttributeMemoryIssueType specifies the a value memory_issue_type attribute.
+// AttributeMemoryIssueType specifies the value memory_issue_type attribute.
 type AttributeMemoryIssueType int
 
 const (
@@ -435,7 +462,7 @@ var MapAttributeMemoryIssueType = map[string]AttributeMemoryIssueType{
 	"exceptions_thrown":             AttributeMemoryIssueTypeExceptionsThrown,
 }
 
-// AttributeMemoryState specifies the a value memory_state attribute.
+// AttributeMemoryState specifies the value memory_state attribute.
 type AttributeMemoryState int
 
 const (
@@ -481,7 +508,7 @@ var MapAttributeMemoryState = map[string]AttributeMemoryState{
 	"used":     AttributeMemoryStateUsed,
 }
 
-// AttributeMemoryStatus specifies the a value memory_status attribute.
+// AttributeMemoryStatus specifies the value memory_status attribute.
 type AttributeMemoryStatus int
 
 const (
@@ -523,7 +550,7 @@ var MapAttributeMemoryStatus = map[string]AttributeMemoryStatus{
 	"used":      AttributeMemoryStatusUsed,
 }
 
-// AttributeObjectType specifies the a value object_type attribute.
+// AttributeObjectType specifies the value object_type attribute.
 type AttributeObjectType int
 
 const (
@@ -569,7 +596,7 @@ var MapAttributeObjectType = map[string]AttributeObjectType{
 	"data":       AttributeObjectTypeData,
 }
 
-// AttributeOperation specifies the a value operation attribute.
+// AttributeOperation specifies the value operation attribute.
 type AttributeOperation int
 
 const (
@@ -581,6 +608,7 @@ const (
 	AttributeOperationGetmore
 	AttributeOperationInsert
 	AttributeOperationScanAndOrder
+	AttributeOperationTTLDeleted
 )
 
 // String returns the string representation of the AttributeOperation.
@@ -600,6 +628,8 @@ func (av AttributeOperation) String() string {
 		return "insert"
 	case AttributeOperationScanAndOrder:
 		return "scan_and_order"
+	case AttributeOperationTTLDeleted:
+		return "ttl_deleted"
 	}
 	return ""
 }
@@ -613,9 +643,10 @@ var MapAttributeOperation = map[string]AttributeOperation{
 	"getmore":        AttributeOperationGetmore,
 	"insert":         AttributeOperationInsert,
 	"scan_and_order": AttributeOperationScanAndOrder,
+	"ttl_deleted":    AttributeOperationTTLDeleted,
 }
 
-// AttributeOplogType specifies the a value oplog_type attribute.
+// AttributeOplogType specifies the value oplog_type attribute.
 type AttributeOplogType int
 
 const (
@@ -645,7 +676,7 @@ var MapAttributeOplogType = map[string]AttributeOplogType{
 	"master_lag_time_diff":  AttributeOplogTypeMasterLagTimeDiff,
 }
 
-// AttributeScannedType specifies the a value scanned_type attribute.
+// AttributeScannedType specifies the value scanned_type attribute.
 type AttributeScannedType int
 
 const (
@@ -671,7 +702,7 @@ var MapAttributeScannedType = map[string]AttributeScannedType{
 	"objects":     AttributeScannedTypeObjects,
 }
 
-// AttributeStorageStatus specifies the a value storage_status attribute.
+// AttributeStorageStatus specifies the value storage_status attribute.
 type AttributeStorageStatus int
 
 const (
@@ -705,7 +736,7 @@ var MapAttributeStorageStatus = map[string]AttributeStorageStatus{
 	"data_size_wo_system": AttributeStorageStatusDataSizeWoSystem,
 }
 
-// AttributeTicketType specifies the a value ticket_type attribute.
+// AttributeTicketType specifies the value ticket_type attribute.
 type AttributeTicketType int
 
 const (
@@ -729,6 +760,276 @@ func (av AttributeTicketType) String() string {
 var MapAttributeTicketType = map[string]AttributeTicketType{
 	"available_reads":  AttributeTicketTypeAvailableReads,
 	"available_writes": AttributeTicketTypeAvailableWrites,
+}
+
+var MetricsInfo = metricsInfo{
+	MongodbatlasDbCounts: metricInfo{
+		Name: "mongodbatlas.db.counts",
+	},
+	MongodbatlasDbSize: metricInfo{
+		Name: "mongodbatlas.db.size",
+	},
+	MongodbatlasDiskPartitionIopsAverage: metricInfo{
+		Name: "mongodbatlas.disk.partition.iops.average",
+	},
+	MongodbatlasDiskPartitionIopsMax: metricInfo{
+		Name: "mongodbatlas.disk.partition.iops.max",
+	},
+	MongodbatlasDiskPartitionLatencyAverage: metricInfo{
+		Name: "mongodbatlas.disk.partition.latency.average",
+	},
+	MongodbatlasDiskPartitionLatencyMax: metricInfo{
+		Name: "mongodbatlas.disk.partition.latency.max",
+	},
+	MongodbatlasDiskPartitionQueueDepth: metricInfo{
+		Name: "mongodbatlas.disk.partition.queue.depth",
+	},
+	MongodbatlasDiskPartitionSpaceAverage: metricInfo{
+		Name: "mongodbatlas.disk.partition.space.average",
+	},
+	MongodbatlasDiskPartitionSpaceMax: metricInfo{
+		Name: "mongodbatlas.disk.partition.space.max",
+	},
+	MongodbatlasDiskPartitionThroughput: metricInfo{
+		Name: "mongodbatlas.disk.partition.throughput",
+	},
+	MongodbatlasDiskPartitionUsageAverage: metricInfo{
+		Name: "mongodbatlas.disk.partition.usage.average",
+	},
+	MongodbatlasDiskPartitionUsageMax: metricInfo{
+		Name: "mongodbatlas.disk.partition.usage.max",
+	},
+	MongodbatlasDiskPartitionUtilizationAverage: metricInfo{
+		Name: "mongodbatlas.disk.partition.utilization.average",
+	},
+	MongodbatlasDiskPartitionUtilizationMax: metricInfo{
+		Name: "mongodbatlas.disk.partition.utilization.max",
+	},
+	MongodbatlasProcessAsserts: metricInfo{
+		Name: "mongodbatlas.process.asserts",
+	},
+	MongodbatlasProcessBackgroundFlush: metricInfo{
+		Name: "mongodbatlas.process.background_flush",
+	},
+	MongodbatlasProcessCacheIo: metricInfo{
+		Name: "mongodbatlas.process.cache.io",
+	},
+	MongodbatlasProcessCacheRatio: metricInfo{
+		Name: "mongodbatlas.process.cache.ratio",
+	},
+	MongodbatlasProcessCacheSize: metricInfo{
+		Name: "mongodbatlas.process.cache.size",
+	},
+	MongodbatlasProcessConnections: metricInfo{
+		Name: "mongodbatlas.process.connections",
+	},
+	MongodbatlasProcessCPUChildrenNormalizedUsageAverage: metricInfo{
+		Name: "mongodbatlas.process.cpu.children.normalized.usage.average",
+	},
+	MongodbatlasProcessCPUChildrenNormalizedUsageMax: metricInfo{
+		Name: "mongodbatlas.process.cpu.children.normalized.usage.max",
+	},
+	MongodbatlasProcessCPUChildrenUsageAverage: metricInfo{
+		Name: "mongodbatlas.process.cpu.children.usage.average",
+	},
+	MongodbatlasProcessCPUChildrenUsageMax: metricInfo{
+		Name: "mongodbatlas.process.cpu.children.usage.max",
+	},
+	MongodbatlasProcessCPUNormalizedUsageAverage: metricInfo{
+		Name: "mongodbatlas.process.cpu.normalized.usage.average",
+	},
+	MongodbatlasProcessCPUNormalizedUsageMax: metricInfo{
+		Name: "mongodbatlas.process.cpu.normalized.usage.max",
+	},
+	MongodbatlasProcessCPUUsageAverage: metricInfo{
+		Name: "mongodbatlas.process.cpu.usage.average",
+	},
+	MongodbatlasProcessCPUUsageMax: metricInfo{
+		Name: "mongodbatlas.process.cpu.usage.max",
+	},
+	MongodbatlasProcessCursors: metricInfo{
+		Name: "mongodbatlas.process.cursors",
+	},
+	MongodbatlasProcessDbDocumentRate: metricInfo{
+		Name: "mongodbatlas.process.db.document.rate",
+	},
+	MongodbatlasProcessDbOperationsRate: metricInfo{
+		Name: "mongodbatlas.process.db.operations.rate",
+	},
+	MongodbatlasProcessDbOperationsTime: metricInfo{
+		Name: "mongodbatlas.process.db.operations.time",
+	},
+	MongodbatlasProcessDbQueryExecutorScanned: metricInfo{
+		Name: "mongodbatlas.process.db.query_executor.scanned",
+	},
+	MongodbatlasProcessDbQueryTargetingScannedPerReturned: metricInfo{
+		Name: "mongodbatlas.process.db.query_targeting.scanned_per_returned",
+	},
+	MongodbatlasProcessDbStorage: metricInfo{
+		Name: "mongodbatlas.process.db.storage",
+	},
+	MongodbatlasProcessGlobalLock: metricInfo{
+		Name: "mongodbatlas.process.global_lock",
+	},
+	MongodbatlasProcessIndexBtreeMissRatio: metricInfo{
+		Name: "mongodbatlas.process.index.btree_miss_ratio",
+	},
+	MongodbatlasProcessIndexCounters: metricInfo{
+		Name: "mongodbatlas.process.index.counters",
+	},
+	MongodbatlasProcessJournalingCommits: metricInfo{
+		Name: "mongodbatlas.process.journaling.commits",
+	},
+	MongodbatlasProcessJournalingDataFiles: metricInfo{
+		Name: "mongodbatlas.process.journaling.data_files",
+	},
+	MongodbatlasProcessJournalingWritten: metricInfo{
+		Name: "mongodbatlas.process.journaling.written",
+	},
+	MongodbatlasProcessMemoryUsage: metricInfo{
+		Name: "mongodbatlas.process.memory.usage",
+	},
+	MongodbatlasProcessNetworkIo: metricInfo{
+		Name: "mongodbatlas.process.network.io",
+	},
+	MongodbatlasProcessNetworkRequests: metricInfo{
+		Name: "mongodbatlas.process.network.requests",
+	},
+	MongodbatlasProcessOplogRate: metricInfo{
+		Name: "mongodbatlas.process.oplog.rate",
+	},
+	MongodbatlasProcessOplogTime: metricInfo{
+		Name: "mongodbatlas.process.oplog.time",
+	},
+	MongodbatlasProcessPageFaults: metricInfo{
+		Name: "mongodbatlas.process.page_faults",
+	},
+	MongodbatlasProcessRestarts: metricInfo{
+		Name: "mongodbatlas.process.restarts",
+	},
+	MongodbatlasProcessTickets: metricInfo{
+		Name: "mongodbatlas.process.tickets",
+	},
+	MongodbatlasSystemCPUNormalizedUsageAverage: metricInfo{
+		Name: "mongodbatlas.system.cpu.normalized.usage.average",
+	},
+	MongodbatlasSystemCPUNormalizedUsageMax: metricInfo{
+		Name: "mongodbatlas.system.cpu.normalized.usage.max",
+	},
+	MongodbatlasSystemCPUUsageAverage: metricInfo{
+		Name: "mongodbatlas.system.cpu.usage.average",
+	},
+	MongodbatlasSystemCPUUsageMax: metricInfo{
+		Name: "mongodbatlas.system.cpu.usage.max",
+	},
+	MongodbatlasSystemFtsCPUNormalizedUsage: metricInfo{
+		Name: "mongodbatlas.system.fts.cpu.normalized.usage",
+	},
+	MongodbatlasSystemFtsCPUUsage: metricInfo{
+		Name: "mongodbatlas.system.fts.cpu.usage",
+	},
+	MongodbatlasSystemFtsDiskUsed: metricInfo{
+		Name: "mongodbatlas.system.fts.disk.used",
+	},
+	MongodbatlasSystemFtsMemoryUsage: metricInfo{
+		Name: "mongodbatlas.system.fts.memory.usage",
+	},
+	MongodbatlasSystemMemoryUsageAverage: metricInfo{
+		Name: "mongodbatlas.system.memory.usage.average",
+	},
+	MongodbatlasSystemMemoryUsageMax: metricInfo{
+		Name: "mongodbatlas.system.memory.usage.max",
+	},
+	MongodbatlasSystemNetworkIoAverage: metricInfo{
+		Name: "mongodbatlas.system.network.io.average",
+	},
+	MongodbatlasSystemNetworkIoMax: metricInfo{
+		Name: "mongodbatlas.system.network.io.max",
+	},
+	MongodbatlasSystemPagingIoAverage: metricInfo{
+		Name: "mongodbatlas.system.paging.io.average",
+	},
+	MongodbatlasSystemPagingIoMax: metricInfo{
+		Name: "mongodbatlas.system.paging.io.max",
+	},
+	MongodbatlasSystemPagingUsageAverage: metricInfo{
+		Name: "mongodbatlas.system.paging.usage.average",
+	},
+	MongodbatlasSystemPagingUsageMax: metricInfo{
+		Name: "mongodbatlas.system.paging.usage.max",
+	},
+}
+
+type metricsInfo struct {
+	MongodbatlasDbCounts                                  metricInfo
+	MongodbatlasDbSize                                    metricInfo
+	MongodbatlasDiskPartitionIopsAverage                  metricInfo
+	MongodbatlasDiskPartitionIopsMax                      metricInfo
+	MongodbatlasDiskPartitionLatencyAverage               metricInfo
+	MongodbatlasDiskPartitionLatencyMax                   metricInfo
+	MongodbatlasDiskPartitionQueueDepth                   metricInfo
+	MongodbatlasDiskPartitionSpaceAverage                 metricInfo
+	MongodbatlasDiskPartitionSpaceMax                     metricInfo
+	MongodbatlasDiskPartitionThroughput                   metricInfo
+	MongodbatlasDiskPartitionUsageAverage                 metricInfo
+	MongodbatlasDiskPartitionUsageMax                     metricInfo
+	MongodbatlasDiskPartitionUtilizationAverage           metricInfo
+	MongodbatlasDiskPartitionUtilizationMax               metricInfo
+	MongodbatlasProcessAsserts                            metricInfo
+	MongodbatlasProcessBackgroundFlush                    metricInfo
+	MongodbatlasProcessCacheIo                            metricInfo
+	MongodbatlasProcessCacheRatio                         metricInfo
+	MongodbatlasProcessCacheSize                          metricInfo
+	MongodbatlasProcessConnections                        metricInfo
+	MongodbatlasProcessCPUChildrenNormalizedUsageAverage  metricInfo
+	MongodbatlasProcessCPUChildrenNormalizedUsageMax      metricInfo
+	MongodbatlasProcessCPUChildrenUsageAverage            metricInfo
+	MongodbatlasProcessCPUChildrenUsageMax                metricInfo
+	MongodbatlasProcessCPUNormalizedUsageAverage          metricInfo
+	MongodbatlasProcessCPUNormalizedUsageMax              metricInfo
+	MongodbatlasProcessCPUUsageAverage                    metricInfo
+	MongodbatlasProcessCPUUsageMax                        metricInfo
+	MongodbatlasProcessCursors                            metricInfo
+	MongodbatlasProcessDbDocumentRate                     metricInfo
+	MongodbatlasProcessDbOperationsRate                   metricInfo
+	MongodbatlasProcessDbOperationsTime                   metricInfo
+	MongodbatlasProcessDbQueryExecutorScanned             metricInfo
+	MongodbatlasProcessDbQueryTargetingScannedPerReturned metricInfo
+	MongodbatlasProcessDbStorage                          metricInfo
+	MongodbatlasProcessGlobalLock                         metricInfo
+	MongodbatlasProcessIndexBtreeMissRatio                metricInfo
+	MongodbatlasProcessIndexCounters                      metricInfo
+	MongodbatlasProcessJournalingCommits                  metricInfo
+	MongodbatlasProcessJournalingDataFiles                metricInfo
+	MongodbatlasProcessJournalingWritten                  metricInfo
+	MongodbatlasProcessMemoryUsage                        metricInfo
+	MongodbatlasProcessNetworkIo                          metricInfo
+	MongodbatlasProcessNetworkRequests                    metricInfo
+	MongodbatlasProcessOplogRate                          metricInfo
+	MongodbatlasProcessOplogTime                          metricInfo
+	MongodbatlasProcessPageFaults                         metricInfo
+	MongodbatlasProcessRestarts                           metricInfo
+	MongodbatlasProcessTickets                            metricInfo
+	MongodbatlasSystemCPUNormalizedUsageAverage           metricInfo
+	MongodbatlasSystemCPUNormalizedUsageMax               metricInfo
+	MongodbatlasSystemCPUUsageAverage                     metricInfo
+	MongodbatlasSystemCPUUsageMax                         metricInfo
+	MongodbatlasSystemFtsCPUNormalizedUsage               metricInfo
+	MongodbatlasSystemFtsCPUUsage                         metricInfo
+	MongodbatlasSystemFtsDiskUsed                         metricInfo
+	MongodbatlasSystemFtsMemoryUsage                      metricInfo
+	MongodbatlasSystemMemoryUsageAverage                  metricInfo
+	MongodbatlasSystemMemoryUsageMax                      metricInfo
+	MongodbatlasSystemNetworkIoAverage                    metricInfo
+	MongodbatlasSystemNetworkIoMax                        metricInfo
+	MongodbatlasSystemPagingIoAverage                     metricInfo
+	MongodbatlasSystemPagingIoMax                         metricInfo
+	MongodbatlasSystemPagingUsageAverage                  metricInfo
+	MongodbatlasSystemPagingUsageMax                      metricInfo
+}
+
+type metricInfo struct {
+	Name string
 }
 
 type metricMongodbatlasDbCounts struct {
@@ -1037,6 +1338,55 @@ func newMetricMongodbatlasDiskPartitionLatencyMax(cfg MetricConfig) metricMongod
 	return m
 }
 
+type metricMongodbatlasDiskPartitionQueueDepth struct {
+	data     pmetric.Metric // data buffer for generated metric.
+	config   MetricConfig   // metric config provided by user.
+	capacity int            // max observed number of data points added to the metric.
+}
+
+// init fills mongodbatlas.disk.partition.queue.depth metric with initial data.
+func (m *metricMongodbatlasDiskPartitionQueueDepth) init() {
+	m.data.SetName("mongodbatlas.disk.partition.queue.depth")
+	m.data.SetDescription("Disk queue depth")
+	m.data.SetUnit("1")
+	m.data.SetEmptyGauge()
+}
+
+func (m *metricMongodbatlasDiskPartitionQueueDepth) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val float64) {
+	if !m.config.Enabled {
+		return
+	}
+	dp := m.data.Gauge().DataPoints().AppendEmpty()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	dp.SetDoubleValue(val)
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricMongodbatlasDiskPartitionQueueDepth) updateCapacity() {
+	if m.data.Gauge().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Gauge().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricMongodbatlasDiskPartitionQueueDepth) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricMongodbatlasDiskPartitionQueueDepth(cfg MetricConfig) metricMongodbatlasDiskPartitionQueueDepth {
+	m := metricMongodbatlasDiskPartitionQueueDepth{config: cfg}
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
 type metricMongodbatlasDiskPartitionSpaceAverage struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	config   MetricConfig   // metric config provided by user.
@@ -1132,6 +1482,57 @@ func (m *metricMongodbatlasDiskPartitionSpaceMax) emit(metrics pmetric.MetricSli
 
 func newMetricMongodbatlasDiskPartitionSpaceMax(cfg MetricConfig) metricMongodbatlasDiskPartitionSpaceMax {
 	m := metricMongodbatlasDiskPartitionSpaceMax{config: cfg}
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
+type metricMongodbatlasDiskPartitionThroughput struct {
+	data     pmetric.Metric // data buffer for generated metric.
+	config   MetricConfig   // metric config provided by user.
+	capacity int            // max observed number of data points added to the metric.
+}
+
+// init fills mongodbatlas.disk.partition.throughput metric with initial data.
+func (m *metricMongodbatlasDiskPartitionThroughput) init() {
+	m.data.SetName("mongodbatlas.disk.partition.throughput")
+	m.data.SetDescription("Disk throughput")
+	m.data.SetUnit("By/s")
+	m.data.SetEmptyGauge()
+	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+func (m *metricMongodbatlasDiskPartitionThroughput) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val float64, diskDirectionAttributeValue string) {
+	if !m.config.Enabled {
+		return
+	}
+	dp := m.data.Gauge().DataPoints().AppendEmpty()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	dp.SetDoubleValue(val)
+	dp.Attributes().PutStr("disk_direction", diskDirectionAttributeValue)
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricMongodbatlasDiskPartitionThroughput) updateCapacity() {
+	if m.data.Gauge().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Gauge().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricMongodbatlasDiskPartitionThroughput) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricMongodbatlasDiskPartitionThroughput(cfg MetricConfig) metricMongodbatlasDiskPartitionThroughput {
+	m := metricMongodbatlasDiskPartitionThroughput{config: cfg}
 	if cfg.Enabled {
 		m.data = pmetric.NewMetric()
 		m.init()
@@ -1483,6 +1884,57 @@ func (m *metricMongodbatlasProcessCacheIo) emit(metrics pmetric.MetricSlice) {
 
 func newMetricMongodbatlasProcessCacheIo(cfg MetricConfig) metricMongodbatlasProcessCacheIo {
 	m := metricMongodbatlasProcessCacheIo{config: cfg}
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
+type metricMongodbatlasProcessCacheRatio struct {
+	data     pmetric.Metric // data buffer for generated metric.
+	config   MetricConfig   // metric config provided by user.
+	capacity int            // max observed number of data points added to the metric.
+}
+
+// init fills mongodbatlas.process.cache.ratio metric with initial data.
+func (m *metricMongodbatlasProcessCacheRatio) init() {
+	m.data.SetName("mongodbatlas.process.cache.ratio")
+	m.data.SetDescription("Cache ratios represented as (%)")
+	m.data.SetUnit("%")
+	m.data.SetEmptyGauge()
+	m.data.Gauge().DataPoints().EnsureCapacity(m.capacity)
+}
+
+func (m *metricMongodbatlasProcessCacheRatio) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val float64, cacheRatioTypeAttributeValue string) {
+	if !m.config.Enabled {
+		return
+	}
+	dp := m.data.Gauge().DataPoints().AppendEmpty()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	dp.SetDoubleValue(val)
+	dp.Attributes().PutStr("cache_ratio_type", cacheRatioTypeAttributeValue)
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricMongodbatlasProcessCacheRatio) updateCapacity() {
+	if m.data.Gauge().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Gauge().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricMongodbatlasProcessCacheRatio) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricMongodbatlasProcessCacheRatio(cfg MetricConfig) metricMongodbatlasProcessCacheRatio {
+	m := metricMongodbatlasProcessCacheRatio{config: cfg}
 	if cfg.Enabled {
 		m.data = pmetric.NewMetric()
 		m.init()
@@ -3888,14 +4340,18 @@ type MetricsBuilder struct {
 	metricsCapacity                                             int                  // maximum observed number of metrics per resource.
 	metricsBuffer                                               pmetric.Metrics      // accumulates metrics data before emitting.
 	buildInfo                                                   component.BuildInfo  // contains version information.
+	resourceAttributeIncludeFilter                              map[string]filter.Filter
+	resourceAttributeExcludeFilter                              map[string]filter.Filter
 	metricMongodbatlasDbCounts                                  metricMongodbatlasDbCounts
 	metricMongodbatlasDbSize                                    metricMongodbatlasDbSize
 	metricMongodbatlasDiskPartitionIopsAverage                  metricMongodbatlasDiskPartitionIopsAverage
 	metricMongodbatlasDiskPartitionIopsMax                      metricMongodbatlasDiskPartitionIopsMax
 	metricMongodbatlasDiskPartitionLatencyAverage               metricMongodbatlasDiskPartitionLatencyAverage
 	metricMongodbatlasDiskPartitionLatencyMax                   metricMongodbatlasDiskPartitionLatencyMax
+	metricMongodbatlasDiskPartitionQueueDepth                   metricMongodbatlasDiskPartitionQueueDepth
 	metricMongodbatlasDiskPartitionSpaceAverage                 metricMongodbatlasDiskPartitionSpaceAverage
 	metricMongodbatlasDiskPartitionSpaceMax                     metricMongodbatlasDiskPartitionSpaceMax
+	metricMongodbatlasDiskPartitionThroughput                   metricMongodbatlasDiskPartitionThroughput
 	metricMongodbatlasDiskPartitionUsageAverage                 metricMongodbatlasDiskPartitionUsageAverage
 	metricMongodbatlasDiskPartitionUsageMax                     metricMongodbatlasDiskPartitionUsageMax
 	metricMongodbatlasDiskPartitionUtilizationAverage           metricMongodbatlasDiskPartitionUtilizationAverage
@@ -3903,6 +4359,7 @@ type MetricsBuilder struct {
 	metricMongodbatlasProcessAsserts                            metricMongodbatlasProcessAsserts
 	metricMongodbatlasProcessBackgroundFlush                    metricMongodbatlasProcessBackgroundFlush
 	metricMongodbatlasProcessCacheIo                            metricMongodbatlasProcessCacheIo
+	metricMongodbatlasProcessCacheRatio                         metricMongodbatlasProcessCacheRatio
 	metricMongodbatlasProcessCacheSize                          metricMongodbatlasProcessCacheSize
 	metricMongodbatlasProcessConnections                        metricMongodbatlasProcessConnections
 	metricMongodbatlasProcessCPUChildrenNormalizedUsageAverage  metricMongodbatlasProcessCPUChildrenNormalizedUsageAverage
@@ -3952,17 +4409,24 @@ type MetricsBuilder struct {
 	metricMongodbatlasSystemPagingUsageMax                      metricMongodbatlasSystemPagingUsageMax
 }
 
-// metricBuilderOption applies changes to default metrics builder.
-type metricBuilderOption func(*MetricsBuilder)
-
-// WithStartTime sets startTime on the metrics builder.
-func WithStartTime(startTime pcommon.Timestamp) metricBuilderOption {
-	return func(mb *MetricsBuilder) {
-		mb.startTime = startTime
-	}
+// MetricBuilderOption applies changes to default metrics builder.
+type MetricBuilderOption interface {
+	apply(*MetricsBuilder)
 }
 
-func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSettings, options ...metricBuilderOption) *MetricsBuilder {
+type metricBuilderOptionFunc func(mb *MetricsBuilder)
+
+func (mbof metricBuilderOptionFunc) apply(mb *MetricsBuilder) {
+	mbof(mb)
+}
+
+// WithStartTime sets startTime on the metrics builder.
+func WithStartTime(startTime pcommon.Timestamp) MetricBuilderOption {
+	return metricBuilderOptionFunc(func(mb *MetricsBuilder) {
+		mb.startTime = startTime
+	})
+}
+func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.Settings, options ...MetricBuilderOption) *MetricsBuilder {
 	mb := &MetricsBuilder{
 		config:                     mbc,
 		startTime:                  pcommon.NewTimestampFromTime(time.Now()),
@@ -3974,8 +4438,10 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricMongodbatlasDiskPartitionIopsMax:                      newMetricMongodbatlasDiskPartitionIopsMax(mbc.Metrics.MongodbatlasDiskPartitionIopsMax),
 		metricMongodbatlasDiskPartitionLatencyAverage:               newMetricMongodbatlasDiskPartitionLatencyAverage(mbc.Metrics.MongodbatlasDiskPartitionLatencyAverage),
 		metricMongodbatlasDiskPartitionLatencyMax:                   newMetricMongodbatlasDiskPartitionLatencyMax(mbc.Metrics.MongodbatlasDiskPartitionLatencyMax),
+		metricMongodbatlasDiskPartitionQueueDepth:                   newMetricMongodbatlasDiskPartitionQueueDepth(mbc.Metrics.MongodbatlasDiskPartitionQueueDepth),
 		metricMongodbatlasDiskPartitionSpaceAverage:                 newMetricMongodbatlasDiskPartitionSpaceAverage(mbc.Metrics.MongodbatlasDiskPartitionSpaceAverage),
 		metricMongodbatlasDiskPartitionSpaceMax:                     newMetricMongodbatlasDiskPartitionSpaceMax(mbc.Metrics.MongodbatlasDiskPartitionSpaceMax),
+		metricMongodbatlasDiskPartitionThroughput:                   newMetricMongodbatlasDiskPartitionThroughput(mbc.Metrics.MongodbatlasDiskPartitionThroughput),
 		metricMongodbatlasDiskPartitionUsageAverage:                 newMetricMongodbatlasDiskPartitionUsageAverage(mbc.Metrics.MongodbatlasDiskPartitionUsageAverage),
 		metricMongodbatlasDiskPartitionUsageMax:                     newMetricMongodbatlasDiskPartitionUsageMax(mbc.Metrics.MongodbatlasDiskPartitionUsageMax),
 		metricMongodbatlasDiskPartitionUtilizationAverage:           newMetricMongodbatlasDiskPartitionUtilizationAverage(mbc.Metrics.MongodbatlasDiskPartitionUtilizationAverage),
@@ -3983,6 +4449,7 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricMongodbatlasProcessAsserts:                            newMetricMongodbatlasProcessAsserts(mbc.Metrics.MongodbatlasProcessAsserts),
 		metricMongodbatlasProcessBackgroundFlush:                    newMetricMongodbatlasProcessBackgroundFlush(mbc.Metrics.MongodbatlasProcessBackgroundFlush),
 		metricMongodbatlasProcessCacheIo:                            newMetricMongodbatlasProcessCacheIo(mbc.Metrics.MongodbatlasProcessCacheIo),
+		metricMongodbatlasProcessCacheRatio:                         newMetricMongodbatlasProcessCacheRatio(mbc.Metrics.MongodbatlasProcessCacheRatio),
 		metricMongodbatlasProcessCacheSize:                          newMetricMongodbatlasProcessCacheSize(mbc.Metrics.MongodbatlasProcessCacheSize),
 		metricMongodbatlasProcessConnections:                        newMetricMongodbatlasProcessConnections(mbc.Metrics.MongodbatlasProcessConnections),
 		metricMongodbatlasProcessCPUChildrenNormalizedUsageAverage:  newMetricMongodbatlasProcessCPUChildrenNormalizedUsageAverage(mbc.Metrics.MongodbatlasProcessCPUChildrenNormalizedUsageAverage),
@@ -4030,9 +4497,90 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricMongodbatlasSystemPagingIoMax:                         newMetricMongodbatlasSystemPagingIoMax(mbc.Metrics.MongodbatlasSystemPagingIoMax),
 		metricMongodbatlasSystemPagingUsageAverage:                  newMetricMongodbatlasSystemPagingUsageAverage(mbc.Metrics.MongodbatlasSystemPagingUsageAverage),
 		metricMongodbatlasSystemPagingUsageMax:                      newMetricMongodbatlasSystemPagingUsageMax(mbc.Metrics.MongodbatlasSystemPagingUsageMax),
+		resourceAttributeIncludeFilter:                              make(map[string]filter.Filter),
+		resourceAttributeExcludeFilter:                              make(map[string]filter.Filter),
 	}
+	if mbc.ResourceAttributes.MongodbAtlasClusterName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.cluster.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasClusterName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasClusterName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.cluster.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasClusterName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasDbName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.db.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasDbName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasDbName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.db.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasDbName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasDiskPartition.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.disk.partition"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasDiskPartition.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasDiskPartition.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.disk.partition"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasDiskPartition.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasHostName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.host.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasHostName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasHostName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.host.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasHostName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasOrgName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.org_name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasOrgName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasOrgName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.org_name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasOrgName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProcessID.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.process.id"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProcessID.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProcessID.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.process.id"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProcessID.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProcessPort.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.process.port"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProcessPort.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProcessPort.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.process.port"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProcessPort.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProcessTypeName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.process.type_name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProcessTypeName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProcessTypeName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.process.type_name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProcessTypeName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProjectID.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.project.id"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProjectID.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProjectID.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.project.id"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProjectID.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProjectName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.project.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProjectName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProjectName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.project.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProjectName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProviderName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.provider.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProviderName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasProviderName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.provider.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasProviderName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasRegionName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.region.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasRegionName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasRegionName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.region.name"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasRegionName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasUserAlias.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["mongodb_atlas.user.alias"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasUserAlias.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.MongodbAtlasUserAlias.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["mongodb_atlas.user.alias"] = filter.CreateFilter(mbc.ResourceAttributes.MongodbAtlasUserAlias.MetricsExclude)
+	}
+
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 	return mb
 }
@@ -4050,20 +4598,28 @@ func (mb *MetricsBuilder) updateCapacity(rm pmetric.ResourceMetrics) {
 }
 
 // ResourceMetricsOption applies changes to provided resource metrics.
-type ResourceMetricsOption func(pmetric.ResourceMetrics)
+type ResourceMetricsOption interface {
+	apply(pmetric.ResourceMetrics)
+}
+
+type resourceMetricsOptionFunc func(pmetric.ResourceMetrics)
+
+func (rmof resourceMetricsOptionFunc) apply(rm pmetric.ResourceMetrics) {
+	rmof(rm)
+}
 
 // WithResource sets the provided resource on the emitted ResourceMetrics.
 // It's recommended to use ResourceBuilder to create the resource.
 func WithResource(res pcommon.Resource) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		res.CopyTo(rm.Resource())
-	}
+	})
 }
 
 // WithStartTimeOverride overrides start time for all the resource metrics data points.
 // This option should be only used if different start time has to be set on metrics coming from different resources.
 func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		var dps pmetric.NumberDataPointSlice
 		metrics := rm.ScopeMetrics().At(0).Metrics()
 		for i := 0; i < metrics.Len(); i++ {
@@ -4077,7 +4633,7 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 				dps.At(j).SetStartTimestamp(start)
 			}
 		}
-	}
+	})
 }
 
 // EmitForResource saves all the generated metrics under a new resource and updates the internal state to be ready for
@@ -4085,10 +4641,10 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 // needs to emit metrics from several resources. Otherwise calling this function is not required,
 // just `Emit` function can be called instead.
 // Resource attributes should be provided as ResourceMetricsOption arguments.
-func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
+func (mb *MetricsBuilder) EmitForResource(options ...ResourceMetricsOption) {
 	rm := pmetric.NewResourceMetrics()
 	ils := rm.ScopeMetrics().AppendEmpty()
-	ils.Scope().SetName("otelcol/mongodbatlasreceiver")
+	ils.Scope().SetName(ScopeName)
 	ils.Scope().SetVersion(mb.buildInfo.Version)
 	ils.Metrics().EnsureCapacity(mb.metricsCapacity)
 	mb.metricMongodbatlasDbCounts.emit(ils.Metrics())
@@ -4097,8 +4653,10 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricMongodbatlasDiskPartitionIopsMax.emit(ils.Metrics())
 	mb.metricMongodbatlasDiskPartitionLatencyAverage.emit(ils.Metrics())
 	mb.metricMongodbatlasDiskPartitionLatencyMax.emit(ils.Metrics())
+	mb.metricMongodbatlasDiskPartitionQueueDepth.emit(ils.Metrics())
 	mb.metricMongodbatlasDiskPartitionSpaceAverage.emit(ils.Metrics())
 	mb.metricMongodbatlasDiskPartitionSpaceMax.emit(ils.Metrics())
+	mb.metricMongodbatlasDiskPartitionThroughput.emit(ils.Metrics())
 	mb.metricMongodbatlasDiskPartitionUsageAverage.emit(ils.Metrics())
 	mb.metricMongodbatlasDiskPartitionUsageMax.emit(ils.Metrics())
 	mb.metricMongodbatlasDiskPartitionUtilizationAverage.emit(ils.Metrics())
@@ -4106,6 +4664,7 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricMongodbatlasProcessAsserts.emit(ils.Metrics())
 	mb.metricMongodbatlasProcessBackgroundFlush.emit(ils.Metrics())
 	mb.metricMongodbatlasProcessCacheIo.emit(ils.Metrics())
+	mb.metricMongodbatlasProcessCacheRatio.emit(ils.Metrics())
 	mb.metricMongodbatlasProcessCacheSize.emit(ils.Metrics())
 	mb.metricMongodbatlasProcessConnections.emit(ils.Metrics())
 	mb.metricMongodbatlasProcessCPUChildrenNormalizedUsageAverage.emit(ils.Metrics())
@@ -4154,9 +4713,20 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricMongodbatlasSystemPagingUsageAverage.emit(ils.Metrics())
 	mb.metricMongodbatlasSystemPagingUsageMax.emit(ils.Metrics())
 
-	for _, op := range rmo {
-		op(rm)
+	for _, op := range options {
+		op.apply(rm)
 	}
+	for attr, filter := range mb.resourceAttributeIncludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && !filter.Matches(val.AsString()) {
+			return
+		}
+	}
+	for attr, filter := range mb.resourceAttributeExcludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && filter.Matches(val.AsString()) {
+			return
+		}
+	}
+
 	if ils.Metrics().Len() > 0 {
 		mb.updateCapacity(rm)
 		rm.MoveTo(mb.metricsBuffer.ResourceMetrics().AppendEmpty())
@@ -4166,8 +4736,8 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 // Emit returns all the metrics accumulated by the metrics builder and updates the internal state to be ready for
 // recording another set of metrics. This function will be responsible for applying all the transformations required to
 // produce metric representation defined in metadata and user config, e.g. delta or cumulative.
-func (mb *MetricsBuilder) Emit(rmo ...ResourceMetricsOption) pmetric.Metrics {
-	mb.EmitForResource(rmo...)
+func (mb *MetricsBuilder) Emit(options ...ResourceMetricsOption) pmetric.Metrics {
+	mb.EmitForResource(options...)
 	metrics := mb.metricsBuffer
 	mb.metricsBuffer = pmetric.NewMetrics()
 	return metrics
@@ -4203,6 +4773,11 @@ func (mb *MetricsBuilder) RecordMongodbatlasDiskPartitionLatencyMaxDataPoint(ts 
 	mb.metricMongodbatlasDiskPartitionLatencyMax.recordDataPoint(mb.startTime, ts, val, diskDirectionAttributeValue.String())
 }
 
+// RecordMongodbatlasDiskPartitionQueueDepthDataPoint adds a data point to mongodbatlas.disk.partition.queue.depth metric.
+func (mb *MetricsBuilder) RecordMongodbatlasDiskPartitionQueueDepthDataPoint(ts pcommon.Timestamp, val float64) {
+	mb.metricMongodbatlasDiskPartitionQueueDepth.recordDataPoint(mb.startTime, ts, val)
+}
+
 // RecordMongodbatlasDiskPartitionSpaceAverageDataPoint adds a data point to mongodbatlas.disk.partition.space.average metric.
 func (mb *MetricsBuilder) RecordMongodbatlasDiskPartitionSpaceAverageDataPoint(ts pcommon.Timestamp, val float64, diskStatusAttributeValue AttributeDiskStatus) {
 	mb.metricMongodbatlasDiskPartitionSpaceAverage.recordDataPoint(mb.startTime, ts, val, diskStatusAttributeValue.String())
@@ -4211,6 +4786,11 @@ func (mb *MetricsBuilder) RecordMongodbatlasDiskPartitionSpaceAverageDataPoint(t
 // RecordMongodbatlasDiskPartitionSpaceMaxDataPoint adds a data point to mongodbatlas.disk.partition.space.max metric.
 func (mb *MetricsBuilder) RecordMongodbatlasDiskPartitionSpaceMaxDataPoint(ts pcommon.Timestamp, val float64, diskStatusAttributeValue AttributeDiskStatus) {
 	mb.metricMongodbatlasDiskPartitionSpaceMax.recordDataPoint(mb.startTime, ts, val, diskStatusAttributeValue.String())
+}
+
+// RecordMongodbatlasDiskPartitionThroughputDataPoint adds a data point to mongodbatlas.disk.partition.throughput metric.
+func (mb *MetricsBuilder) RecordMongodbatlasDiskPartitionThroughputDataPoint(ts pcommon.Timestamp, val float64, diskDirectionAttributeValue AttributeDiskDirection) {
+	mb.metricMongodbatlasDiskPartitionThroughput.recordDataPoint(mb.startTime, ts, val, diskDirectionAttributeValue.String())
 }
 
 // RecordMongodbatlasDiskPartitionUsageAverageDataPoint adds a data point to mongodbatlas.disk.partition.usage.average metric.
@@ -4246,6 +4826,11 @@ func (mb *MetricsBuilder) RecordMongodbatlasProcessBackgroundFlushDataPoint(ts p
 // RecordMongodbatlasProcessCacheIoDataPoint adds a data point to mongodbatlas.process.cache.io metric.
 func (mb *MetricsBuilder) RecordMongodbatlasProcessCacheIoDataPoint(ts pcommon.Timestamp, val float64, cacheDirectionAttributeValue AttributeCacheDirection) {
 	mb.metricMongodbatlasProcessCacheIo.recordDataPoint(mb.startTime, ts, val, cacheDirectionAttributeValue.String())
+}
+
+// RecordMongodbatlasProcessCacheRatioDataPoint adds a data point to mongodbatlas.process.cache.ratio metric.
+func (mb *MetricsBuilder) RecordMongodbatlasProcessCacheRatioDataPoint(ts pcommon.Timestamp, val float64, cacheRatioTypeAttributeValue AttributeCacheRatioType) {
+	mb.metricMongodbatlasProcessCacheRatio.recordDataPoint(mb.startTime, ts, val, cacheRatioTypeAttributeValue.String())
 }
 
 // RecordMongodbatlasProcessCacheSizeDataPoint adds a data point to mongodbatlas.process.cache.size metric.
@@ -4485,9 +5070,9 @@ func (mb *MetricsBuilder) RecordMongodbatlasSystemPagingUsageMaxDataPoint(ts pco
 
 // Reset resets metrics builder to its initial state. It should be used when external metrics source is restarted,
 // and metrics builder should update its startTime and reset it's internal state accordingly.
-func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
+func (mb *MetricsBuilder) Reset(options ...MetricBuilderOption) {
 	mb.startTime = pcommon.NewTimestampFromTime(time.Now())
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 }

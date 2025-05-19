@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
+
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
 
@@ -38,6 +38,7 @@ func TestResourceAttributesConfig(t *testing.T) {
 				HostName:           ResourceAttributeConfig{Enabled: true},
 				OsDescription:      ResourceAttributeConfig{Enabled: true},
 				OsType:             ResourceAttributeConfig{Enabled: true},
+				OsVersion:          ResourceAttributeConfig{Enabled: true},
 			},
 		},
 		{
@@ -56,15 +57,15 @@ func TestResourceAttributesConfig(t *testing.T) {
 				HostName:           ResourceAttributeConfig{Enabled: false},
 				OsDescription:      ResourceAttributeConfig{Enabled: false},
 				OsType:             ResourceAttributeConfig{Enabled: false},
+				OsVersion:          ResourceAttributeConfig{Enabled: false},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadResourceAttributesConfig(t, tt.name)
-			if diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(ResourceAttributeConfig{})); diff != "" {
-				t.Errorf("Config mismatch (-expected +actual):\n%s", diff)
-			}
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(ResourceAttributeConfig{}))
+			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}
 }
@@ -77,6 +78,6 @@ func loadResourceAttributesConfig(t *testing.T, name string) ResourceAttributesC
 	sub, err = sub.Sub("resource_attributes")
 	require.NoError(t, err)
 	cfg := DefaultResourceAttributesConfig()
-	require.NoError(t, component.UnmarshalConfig(sub, &cfg))
+	require.NoError(t, sub.Unmarshal(&cfg))
 	return cfg
 }

@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/oracledbreceiver/internal/metadata"
 )
@@ -31,12 +31,12 @@ func NewFactory() receiver.Factory {
 }
 
 func createDefaultConfig() component.Config {
-	cfg := scraperhelper.NewDefaultScraperControllerSettings(metadata.Type)
+	cfg := scraperhelper.NewDefaultControllerConfig()
 	cfg.CollectionInterval = 10 * time.Second
 
 	return &Config{
-		ScraperControllerSettings: cfg,
-		MetricsBuilderConfig:      metadata.DefaultMetricsBuilderConfig(),
+		ControllerConfig:     cfg,
+		MetricsBuilderConfig: metadata.DefaultMetricsBuilderConfig(),
 	}
 }
 
@@ -44,8 +44,8 @@ type sqlOpenerFunc func(dataSourceName string) (*sql.DB, error)
 
 func createReceiverFunc(sqlOpenerFunc sqlOpenerFunc, clientProviderFunc clientProviderFunc) receiver.CreateMetricsFunc {
 	return func(
-		ctx context.Context,
-		settings receiver.CreateSettings,
+		_ context.Context,
+		settings receiver.Settings,
 		cfg component.Config,
 		consumer consumer.Metrics,
 	) (receiver.Metrics, error) {
@@ -57,16 +57,16 @@ func createReceiverFunc(sqlOpenerFunc sqlOpenerFunc, clientProviderFunc clientPr
 			return nil, err
 		}
 
-		mp, err := newScraper(settings.ID, metricsBuilder, sqlCfg.MetricsBuilderConfig, sqlCfg.ScraperControllerSettings, settings.TelemetrySettings.Logger, func() (*sql.DB, error) {
+		mp, err := newScraper(metricsBuilder, sqlCfg.MetricsBuilderConfig, sqlCfg.ControllerConfig, settings.Logger, func() (*sql.DB, error) {
 			return sqlOpenerFunc(getDataSource(*sqlCfg))
 		}, clientProviderFunc, instanceName)
 		if err != nil {
 			return nil, err
 		}
-		opt := scraperhelper.AddScraper(mp)
+		opt := scraperhelper.AddScraper(metadata.Type, mp)
 
-		return scraperhelper.NewScraperControllerReceiver(
-			&sqlCfg.ScraperControllerSettings,
+		return scraperhelper.NewMetricsController(
+			&sqlCfg.ControllerConfig,
 			settings,
 			consumer,
 			opt,

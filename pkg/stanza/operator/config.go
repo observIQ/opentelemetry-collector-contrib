@@ -5,10 +5,11 @@ package operator // import "github.com/open-telemetry/opentelemetry-collector-co
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap"
-	"go.uber.org/zap"
 )
 
 // Config is the configuration of an operator
@@ -25,7 +26,7 @@ func NewConfig(b Builder) Config {
 type Builder interface {
 	ID() string
 	Type() string
-	Build(*zap.SugaredLogger) (Operator, error)
+	Build(component.TelemetrySettings) (Operator, error)
 	SetID(string)
 }
 
@@ -40,7 +41,7 @@ func (c *Config) UnmarshalJSON(bytes []byte) error {
 	}
 
 	if typeUnmarshaller.Type == "" {
-		return fmt.Errorf("missing required field 'type'")
+		return errors.New("missing required field 'type'")
 	}
 
 	builderFunc, ok := DefaultRegistry.Lookup(typeUnmarshaller.Type)
@@ -67,7 +68,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(any) error) error {
 
 	typeInterface, ok := rawConfig["type"]
 	if !ok {
-		return fmt.Errorf("missing required field 'type'")
+		return errors.New("missing required field 'type'")
 	}
 
 	typeString, ok := typeInterface.(string)
@@ -91,7 +92,7 @@ func (c *Config) UnmarshalYAML(unmarshal func(any) error) error {
 
 func (c *Config) Unmarshal(component *confmap.Conf) error {
 	if !component.IsSet("type") {
-		return fmt.Errorf("missing required field 'type'")
+		return errors.New("missing required field 'type'")
 	}
 
 	typeInterface := component.Get("type")
@@ -107,7 +108,7 @@ func (c *Config) Unmarshal(component *confmap.Conf) error {
 	}
 
 	builder := builderFunc()
-	if err := component.Unmarshal(builder, confmap.WithErrorUnused()); err != nil {
+	if err := component.Unmarshal(builder, confmap.WithIgnoreUnused()); err != nil {
 		return fmt.Errorf("unmarshal to %s: %w", typeString, err)
 	}
 

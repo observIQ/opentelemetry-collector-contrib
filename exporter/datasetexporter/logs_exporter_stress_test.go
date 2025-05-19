@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build integration
-// +build integration
 
 package datasetexporter
 
@@ -10,7 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,15 +20,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/component/componenttest"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter/internal/metadata"
 )
 
 func TestConsumeLogsManyLogsShouldSucceed(t *testing.T) {
 	const maxDelay = 200 * time.Millisecond
-	createSettings := exportertest.NewNopCreateSettings()
+	createSettings := exportertest.NewNopSettings(metadata.Type)
 
 	const maxBatchCount = 20
 	const logsPerBatch = 10000
@@ -50,7 +52,7 @@ func TestConsumeLogsManyLogsShouldSucceed(t *testing.T) {
 
 		for _, ev := range cer.Events {
 			processedEvents.Add(1)
-			key, found := ev.Attrs["body.str"]
+			key, found := ev.Attrs["key"]
 			assert.True(t, found)
 			mutex.Lock()
 			sKey := key.(string)
@@ -80,11 +82,19 @@ func TestConsumeLogsManyLogsShouldSucceed(t *testing.T) {
 		BufferSettings: BufferSettings{
 			MaxLifetime:          maxDelay,
 			GroupBy:              []string{"attributes.container_id"},
+			RetryInitialInterval: maxDelay,
+			RetryMaxInterval:     10 * maxDelay,
+			RetryMaxElapsedTime:  50 * maxDelay,
 			RetryShutdownTimeout: time.Minute,
+			PurgeOlderThan:       100 * maxDelay,
+			MaxParallelOutgoing:  bufferMaxParallelOutgoing,
 		},
-		RetrySettings:   exporterhelper.NewDefaultRetrySettings(),
-		QueueSettings:   exporterhelper.NewDefaultQueueSettings(),
-		TimeoutSettings: exporterhelper.NewDefaultTimeoutSettings(),
+		BackOffConfig:   configretry.NewDefaultBackOffConfig(),
+		QueueSettings:   exporterhelper.NewDefaultQueueConfig(),
+		TimeoutSettings: exporterhelper.NewDefaultTimeoutConfig(),
+		ServerHostSettings: ServerHostSettings{
+			UseHostName: true,
+		},
 	}
 
 	logs, err := createLogsExporter(context.Background(), createSettings, config)
@@ -103,11 +113,11 @@ func TestConsumeLogsManyLogsShouldSucceed(t *testing.T) {
 				log.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
 				log.Body().SetStr(key)
 				log.Attributes().PutStr("key", key)
-				log.Attributes().PutStr("p1", strings.Repeat("A", rand.Intn(2000)))
+				log.Attributes().PutStr("p1", strings.Repeat("A", rand.IntN(2000)))
 				expectedKeys[key] = 1
 			}
 			err = logs.ConsumeLogs(context.Background(), batch)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			time.Sleep(time.Duration(float64(maxDelay.Nanoseconds()) * 0.7))
 		}
 
@@ -115,7 +125,7 @@ func TestConsumeLogsManyLogsShouldSucceed(t *testing.T) {
 
 		time.Sleep(time.Second)
 		err = logs.Shutdown(context.Background())
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		lastProcessed := uint64(0)
 		sameNumber := 0
 		for {
@@ -136,7 +146,7 @@ func TestConsumeLogsManyLogsShouldSucceed(t *testing.T) {
 
 	assert.True(t, wasSuccessful.Load())
 
-	assert.Equal(t, seenKeys, expectedKeys)
+	assert.Equal(t, expectedKeys, seenKeys)
 	assert.Equal(t, expectedLogs, processedEvents.Load(), "processed items")
 	assert.Equal(t, expectedLogs, uint64(len(seenKeys)), "unique items")
 }

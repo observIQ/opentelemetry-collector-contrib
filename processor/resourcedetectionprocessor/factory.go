@@ -12,8 +12,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/processor"
 	"go.opentelemetry.io/collector/processor/processorhelper"
+	"go.opentelemetry.io/collector/processor/processorhelper/xprocessorhelper"
+	"go.opentelemetry.io/collector/processor/xprocessor"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/aws/ec2"
@@ -25,10 +28,12 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/azure/aks"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/consul"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/docker"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/dynatrace"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/env"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/gcp"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/heroku"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/k8snode"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/kubeadm"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/openshift"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal/system"
@@ -63,6 +68,8 @@ func NewFactory() processor.Factory {
 		system.TypeStr:           system.NewDetector,
 		openshift.TypeStr:        openshift.NewDetector,
 		k8snode.TypeStr:          k8snode.NewDetector,
+		kubeadm.TypeStr:          kubeadm.NewDetector,
+		dynatrace.TypeStr:        dynatrace.NewDetector,
 	})
 
 	f := &factory{
@@ -70,12 +77,13 @@ func NewFactory() processor.Factory {
 		providers:               map[component.ID]*internal.ResourceProvider{},
 	}
 
-	return processor.NewFactory(
+	return xprocessor.NewFactory(
 		metadata.Type,
 		createDefaultConfig,
-		processor.WithTraces(f.createTracesProcessor, metadata.TracesStability),
-		processor.WithMetrics(f.createMetricsProcessor, metadata.MetricsStability),
-		processor.WithLogs(f.createLogsProcessor, metadata.LogsStability))
+		xprocessor.WithTraces(f.createTracesProcessor, metadata.TracesStability),
+		xprocessor.WithMetrics(f.createMetricsProcessor, metadata.MetricsStability),
+		xprocessor.WithLogs(f.createLogsProcessor, metadata.LogsStability),
+		xprocessor.WithProfiles(f.createProfilesProcessor, metadata.ProfilesStability))
 }
 
 // Type gets the type of the Option config created by this factory.
@@ -85,25 +93,25 @@ func (*factory) Type() component.Type {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		Detectors:          []string{env.TypeStr},
-		HTTPClientSettings: defaultHTTPClientSettings(),
-		Override:           true,
-		Attributes:         nil,
-		DetectorConfig:     detectorCreateDefaultConfig(),
+		Detectors:      []string{env.TypeStr},
+		ClientConfig:   defaultClientConfig(),
+		Override:       true,
+		Attributes:     nil,
+		DetectorConfig: detectorCreateDefaultConfig(),
 		// TODO: Once issue(https://github.com/open-telemetry/opentelemetry-collector/issues/4001) gets resolved,
 		//		 Set the default value of 'hostname_source' here instead of 'system' detector
 	}
 }
 
-func defaultHTTPClientSettings() confighttp.HTTPClientSettings {
-	httpClientSettings := confighttp.NewDefaultHTTPClientSettings()
+func defaultClientConfig() confighttp.ClientConfig {
+	httpClientSettings := confighttp.NewDefaultClientConfig()
 	httpClientSettings.Timeout = 5 * time.Second
 	return httpClientSettings
 }
 
 func (f *factory) createTracesProcessor(
 	ctx context.Context,
-	set processor.CreateSettings,
+	set processor.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Traces,
 ) (processor.Traces, error) {
@@ -112,7 +120,7 @@ func (f *factory) createTracesProcessor(
 		return nil, err
 	}
 
-	return processorhelper.NewTracesProcessor(
+	return processorhelper.NewTraces(
 		ctx,
 		set,
 		cfg,
@@ -124,7 +132,7 @@ func (f *factory) createTracesProcessor(
 
 func (f *factory) createMetricsProcessor(
 	ctx context.Context,
-	set processor.CreateSettings,
+	set processor.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Metrics,
 ) (processor.Metrics, error) {
@@ -133,7 +141,7 @@ func (f *factory) createMetricsProcessor(
 		return nil, err
 	}
 
-	return processorhelper.NewMetricsProcessor(
+	return processorhelper.NewMetrics(
 		ctx,
 		set,
 		cfg,
@@ -145,7 +153,7 @@ func (f *factory) createMetricsProcessor(
 
 func (f *factory) createLogsProcessor(
 	ctx context.Context,
-	set processor.CreateSettings,
+	set processor.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Logs,
 ) (processor.Logs, error) {
@@ -154,7 +162,7 @@ func (f *factory) createLogsProcessor(
 		return nil, err
 	}
 
-	return processorhelper.NewLogsProcessor(
+	return processorhelper.NewLogs(
 		ctx,
 		set,
 		cfg,
@@ -164,15 +172,36 @@ func (f *factory) createLogsProcessor(
 		processorhelper.WithStart(rdp.Start))
 }
 
+func (f *factory) createProfilesProcessor(
+	ctx context.Context,
+	set processor.Settings,
+	cfg component.Config,
+	nextConsumer xconsumer.Profiles,
+) (xprocessor.Profiles, error) {
+	rdp, err := f.getResourceDetectionProcessor(set, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return xprocessorhelper.NewProfiles(
+		ctx,
+		set,
+		cfg,
+		nextConsumer,
+		rdp.processProfiles,
+		xprocessorhelper.WithCapabilities(consumerCapabilities),
+		xprocessorhelper.WithStart(rdp.Start))
+}
+
 func (f *factory) getResourceDetectionProcessor(
-	params processor.CreateSettings,
+	params processor.Settings,
 	cfg component.Config,
 ) (*resourceDetectionProcessor, error) {
 	oCfg := cfg.(*Config)
 	if oCfg.Attributes != nil {
 		params.Logger.Warn("You are using deprecated `attributes` option that will be removed soon; use `resource_attributes` instead, details on configuration: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/resourcedetectionprocessor#migration-from-attributes-to-resource_attributes")
 	}
-	provider, err := f.getResourceProvider(params, oCfg.HTTPClientSettings.Timeout, oCfg.Detectors, oCfg.DetectorConfig, oCfg.Attributes)
+	provider, err := f.getResourceProvider(params, oCfg.Timeout, oCfg.Detectors, oCfg.DetectorConfig, oCfg.Attributes)
 	if err != nil {
 		return nil, err
 	}
@@ -180,13 +209,13 @@ func (f *factory) getResourceDetectionProcessor(
 	return &resourceDetectionProcessor{
 		provider:           provider,
 		override:           oCfg.Override,
-		httpClientSettings: oCfg.HTTPClientSettings,
+		httpClientSettings: oCfg.ClientConfig,
 		telemetrySettings:  params.TelemetrySettings,
 	}, nil
 }
 
 func (f *factory) getResourceProvider(
-	params processor.CreateSettings,
+	params processor.Settings,
 	timeout time.Duration,
 	configuredDetectors []string,
 	detectorConfigs DetectorConfig,

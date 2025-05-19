@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build integration
-// +build integration
 
 package apachereceiver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,7 +43,7 @@ func TestIntegration(t *testing.T) {
 		scraperinttest.WithCustomConfig(
 			func(t *testing.T, cfg component.Config, ci *scraperinttest.ContainerInfo) {
 				rCfg := cfg.(*Config)
-				rCfg.ScraperControllerSettings.CollectionInterval = 100 * time.Millisecond
+				rCfg.ControllerConfig.CollectionInterval = 100 * time.Millisecond
 				rCfg.Endpoint = fmt.Sprintf("http://%s:%s/server-status?auto", ci.Host(t), ci.MappedPort(t, apachePort))
 			}),
 		scraperinttest.WithCompareOptions(
@@ -79,7 +79,7 @@ func (ws waitStrategy) WaitUntilReady(ctx context.Context, st wait.StrategyTarge
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(5 * time.Second):
-			return fmt.Errorf("server startup problem")
+			return errors.New("server startup problem")
 		case <-time.After(100 * time.Millisecond):
 			resp, err := http.Get(fmt.Sprintf("http://%s:%s/server-status?auto", hostname, port.Port()))
 			if err != nil {

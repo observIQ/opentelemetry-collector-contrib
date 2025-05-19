@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
@@ -30,7 +30,6 @@ import (
 type cwlExporter struct {
 	Config           *Config
 	logger           *zap.Logger
-	retryCount       int
 	collectorID      string
 	svcStructuredLog *cwlogs.Client
 	pusherFactory    cwlogs.MultiStreamPusherFactory
@@ -47,7 +46,7 @@ type emfMetadata struct {
 	LogStreamName string       `json:"log_stream_name,omitempty"`
 }
 
-func newCwLogsPusher(expConfig *Config, params exp.CreateSettings) (*cwlExporter, error) {
+func newCwLogsPusher(expConfig *Config, params exp.Settings) (*cwlExporter, error) {
 	if expConfig == nil {
 		return nil, errors.New("awscloudwatchlogs exporter config is nil")
 	}
@@ -55,15 +54,14 @@ func newCwLogsPusher(expConfig *Config, params exp.CreateSettings) (*cwlExporter
 	expConfig.logger = params.Logger
 
 	// create AWS session
-	awsConfig, session, err := awsutil.GetAWSConfigSession(params.Logger, &awsutil.Conn{}, &expConfig.AWSSessionSettings)
+	awsConfig, err := awsutil.GetAWSConfig(params.Logger, &expConfig.AWSSessionSettings)
 	if err != nil {
 		return nil, err
 	}
 
 	// create CWLogs client with aws session config
-	svcStructuredLog := cwlogs.NewClient(params.Logger, awsConfig, params.BuildInfo, expConfig.LogGroupName, expConfig.LogRetention, expConfig.Tags, session, metadata.Type)
+	svcStructuredLog := cwlogs.NewClient(params.Logger, awsConfig, params.BuildInfo, expConfig.LogGroupName, expConfig.LogRetention, expConfig.Tags, metadata.Type.String())
 	collectorIdentifier, err := uuid.NewRandom()
-
 	if err != nil {
 		return nil, err
 	}
@@ -75,45 +73,42 @@ func newCwLogsPusher(expConfig *Config, params exp.CreateSettings) (*cwlExporter
 		svcStructuredLog: svcStructuredLog,
 		Config:           expConfig,
 		logger:           params.Logger,
-		retryCount:       *awsConfig.MaxRetries,
 		collectorID:      collectorIdentifier.String(),
 		pusherFactory:    multiStreamPusherFactory,
 	}
 	return logsExporter, nil
 }
 
-func newCwLogsExporter(config component.Config, params exp.CreateSettings) (exp.Logs, error) {
+func newCwLogsExporter(config component.Config, params exp.Settings) (exp.Logs, error) {
 	expConfig := config.(*Config)
 	logsPusher, err := newCwLogsPusher(expConfig, params)
 	if err != nil {
 		return nil, err
 	}
-	return exporterhelper.NewLogsExporter(
+	return exporterhelper.NewLogs(
 		context.TODO(),
 		params,
 		config,
 		logsPusher.consumeLogs,
 		exporterhelper.WithQueue(expConfig.QueueSettings),
-		exporterhelper.WithRetry(expConfig.RetrySettings),
+		exporterhelper.WithRetry(expConfig.BackOffConfig),
 		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
 		exporterhelper.WithShutdown(logsPusher.shutdown),
 	)
 }
 
-func (e *cwlExporter) consumeLogs(_ context.Context, ld plog.Logs) error {
+func (e *cwlExporter) consumeLogs(ctx context.Context, ld plog.Logs) error {
 	pusher := e.pusherFactory.CreateMultiStreamPusher()
 	var errs error
 
-	err := pushLogsToCWLogs(e.logger, ld, e.Config, pusher)
-
+	err := pushLogsToCWLogs(ctx, e.logger, ld, e.Config, pusher)
 	if err != nil {
-		errs = errors.Join(errs, fmt.Errorf("Error pushing logs: %w", err))
+		errs = errors.Join(errs, fmt.Errorf("error pushing logs: %w", err))
 	}
 
-	err = pusher.ForceFlush()
-
+	err = pusher.ForceFlush(ctx)
 	if err != nil {
-		errs = errors.Join(errs, fmt.Errorf("Error flushing logs: %w", err))
+		errs = errors.Join(errs, fmt.Errorf("error flushing logs: %w", err))
 	}
 
 	return errs
@@ -123,7 +118,7 @@ func (e *cwlExporter) shutdown(_ context.Context) error {
 	return nil
 }
 
-func pushLogsToCWLogs(logger *zap.Logger, ld plog.Logs, config *Config, pusher cwlogs.Pusher) error {
+func pushLogsToCWLogs(ctx context.Context, logger *zap.Logger, ld plog.Logs, config *Config, pusher cwlogs.Pusher) error {
 	n := ld.ResourceLogs().Len()
 
 	if n == 0 {
@@ -140,14 +135,15 @@ func pushLogsToCWLogs(logger *zap.Logger, ld plog.Logs, config *Config, pusher c
 		sls := rl.ScopeLogs()
 		for j := 0; j < sls.Len(); j++ {
 			sl := sls.At(j)
+			scope := sl.Scope()
 			logs := sl.LogRecords()
 			for k := 0; k < logs.Len(); k++ {
 				log := logs.At(k)
-				event, err := logToCWLog(resourceAttrs, log, config)
+				event, err := logToCWLog(resourceAttrs, scope, log, config)
 				if err != nil {
 					logger.Debug("Failed to convert to CloudWatch Log", zap.Error(err))
 				} else {
-					err := pusher.AddLogEntry(event)
+					err := pusher.AddLogEntry(ctx, event)
 					if err != nil {
 						errs = errors.Join(errs, err)
 					}
@@ -159,23 +155,30 @@ func pushLogsToCWLogs(logger *zap.Logger, ld plog.Logs, config *Config, pusher c
 	return errs
 }
 
-type cwLogBody struct {
-	Body                   any            `json:"body,omitempty"`
-	SeverityNumber         int32          `json:"severity_number,omitempty"`
-	SeverityText           string         `json:"severity_text,omitempty"`
-	DroppedAttributesCount uint32         `json:"dropped_attributes_count,omitempty"`
-	Flags                  uint32         `json:"flags,omitempty"`
-	TraceID                string         `json:"trace_id,omitempty"`
-	SpanID                 string         `json:"span_id,omitempty"`
-	Attributes             map[string]any `json:"attributes,omitempty"`
-	Resource               map[string]any `json:"resource,omitempty"`
+type scopeCwLogBody struct {
+	Name       string         `json:"name,omitempty"`
+	Version    string         `json:"version,omitempty"`
+	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
-func logToCWLog(resourceAttrs map[string]any, log plog.LogRecord, config *Config) (*cwlogs.Event, error) {
+type cwLogBody struct {
+	Body                   any             `json:"body,omitempty"`
+	SeverityNumber         int32           `json:"severity_number,omitempty"`
+	SeverityText           string          `json:"severity_text,omitempty"`
+	DroppedAttributesCount uint32          `json:"dropped_attributes_count,omitempty"`
+	Flags                  uint32          `json:"flags,omitempty"`
+	TraceID                string          `json:"trace_id,omitempty"`
+	SpanID                 string          `json:"span_id,omitempty"`
+	Attributes             map[string]any  `json:"attributes,omitempty"`
+	Scope                  *scopeCwLogBody `json:"scope,omitempty"`
+	Resource               map[string]any  `json:"resource,omitempty"`
+}
+
+func logToCWLog(resourceAttrs map[string]any, scope pcommon.InstrumentationScope, log plog.LogRecord, config *Config) (*cwlogs.Event, error) {
 	// TODO(jbd): Benchmark and improve the allocations.
 	// Evaluate go.elastic.co/fastjson as a replacement for encoding/json.
-	logGroupName := config.LogGroupName
-	logStreamName := config.LogStreamName
+	// Replace loggroup and logstream with resource attribute
+	logGroupName, logStreamName, _ := getLogInfo(resourceAttrs, config)
 
 	var bodyJSON []byte
 	var err error
@@ -214,6 +217,16 @@ func logToCWLog(resourceAttrs map[string]any, log plog.LogRecord, config *Config
 		body.Attributes = attrsValue(log.Attributes())
 		body.Resource = resourceAttrs
 
+		// scope should have a name at least
+		if scope.Name() != "" {
+			scopeBody := &scopeCwLogBody{
+				Name:       scope.Name(),
+				Version:    scope.Version(),
+				Attributes: attrsValue(scope.Attributes()),
+			}
+			body.Scope = scopeBody
+		}
+
 		bodyJSON, err = json.Marshal(body)
 		if err != nil {
 			return &cwlogs.Event{}, err
@@ -221,7 +234,7 @@ func logToCWLog(resourceAttrs map[string]any, log plog.LogRecord, config *Config
 	}
 
 	return &cwlogs.Event{
-		InputLogEvent: &cloudwatchlogs.InputLogEvent{
+		InputLogEvent: types.InputLogEvent{
 			Timestamp: aws.Int64(int64(log.Timestamp()) / int64(time.Millisecond)), // in milliseconds
 			Message:   aws.String(string(bodyJSON)),
 		},
@@ -238,9 +251,8 @@ func attrsValue(attrs pcommon.Map) map[string]any {
 		return nil
 	}
 	out := make(map[string]any, attrs.Len())
-	attrs.Range(func(k string, v pcommon.Value) bool {
+	for k, v := range attrs.All() {
 		out[k] = v.AsRaw()
-		return true
-	})
+	}
 	return out
 }

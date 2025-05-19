@@ -11,10 +11,12 @@ import (
 // boolExpressionEvaluator is a function that returns the result.
 type boolExpressionEvaluator[K any] func(ctx context.Context, tCtx K) (bool, error)
 
+// BoolExpr represents a condition in OTTL
 type BoolExpr[K any] struct {
 	boolExpressionEvaluator[K]
 }
 
+// Eval evaluates an OTTL condition
 func (e BoolExpr[K]) Eval(ctx context.Context, tCtx K) (bool, error) {
 	return e.boolExpressionEvaluator(ctx, tCtx)
 }
@@ -94,7 +96,6 @@ func (p *Parser[K]) newComparisonEvaluator(comparison *comparison) (BoolExpr[K],
 		}
 		return p.compare(a, b, comparison.Op), nil
 	}}, nil
-
 }
 
 func (p *Parser[K]) newBoolExpr(expr *booleanExpression) (BoolExpr[K], error) {

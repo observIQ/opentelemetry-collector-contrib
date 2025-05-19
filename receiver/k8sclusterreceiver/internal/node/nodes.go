@@ -5,25 +5,26 @@ package node // import "github.com/open-telemetry/opentelemetry-collector-contri
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/iancoleman/strcase"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
-	conventions "go.opentelemetry.io/collector/semconv/v1.18.0"
+	conventions "go.opentelemetry.io/otel/semconv/v1.18.0"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/maps"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/experimentalmetricmetadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver/internal/metadata"
-	imetadata "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver/internal/metadata"
 )
 
 const (
-	// Keys for node metadata.
-	nodeCreationTime = "node.creation_timestamp"
+	// Keys for node metadata and entity attributes. These are NOT used by resource attributes.
+	nodeCreationTime       = "node.creation_timestamp"
+	k8sNodeConditionPrefix = "k8s.node.condition"
 )
 
 // Transform transforms the node to remove the fields that we don't use to reduce RAM utilization.
@@ -34,8 +35,10 @@ func Transform(node *corev1.Node) *corev1.Node {
 		Status: corev1.NodeStatus{
 			Allocatable: node.Status.Allocatable,
 			NodeInfo: corev1.NodeSystemInfo{
-				KubeletVersion:   node.Status.NodeInfo.KubeletVersion,
-				KubeProxyVersion: node.Status.NodeInfo.KubeProxyVersion,
+				KubeletVersion:          node.Status.NodeInfo.KubeletVersion,
+				ContainerRuntimeVersion: node.Status.NodeInfo.ContainerRuntimeVersion,
+				OSImage:                 node.Status.NodeInfo.OSImage,
+				OperatingSystem:         node.Status.NodeInfo.OperatingSystem,
 			},
 		},
 	}
@@ -48,7 +51,7 @@ func Transform(node *corev1.Node) *corev1.Node {
 	return newNode
 }
 
-func RecordMetrics(mb *imetadata.MetricsBuilder, node *corev1.Node, ts pcommon.Timestamp) {
+func RecordMetrics(mb *metadata.MetricsBuilder, node *corev1.Node, ts pcommon.Timestamp) {
 	for _, c := range node.Status.Conditions {
 		mb.RecordK8sNodeConditionDataPoint(ts, nodeConditionValues[c.Status], string(c.Type))
 	}
@@ -56,13 +59,13 @@ func RecordMetrics(mb *imetadata.MetricsBuilder, node *corev1.Node, ts pcommon.T
 	rb.SetK8sNodeUID(string(node.UID))
 	rb.SetK8sNodeName(node.Name)
 	rb.SetK8sKubeletVersion(node.Status.NodeInfo.KubeletVersion)
-	rb.SetK8sKubeproxyVersion(node.Status.NodeInfo.KubeProxyVersion)
 
-	mb.EmitForResource(imetadata.WithResource(rb.Emit()))
+	mb.EmitForResource(metadata.WithResource(rb.Emit()))
 }
 
-func CustomMetrics(set receiver.CreateSettings, rb *metadata.ResourceBuilder, node *corev1.Node, nodeConditionTypesToReport,
-	allocatableTypesToReport []string, ts pcommon.Timestamp) pmetric.ResourceMetrics {
+func CustomMetrics(set receiver.Settings, rb *metadata.ResourceBuilder, node *corev1.Node, nodeConditionTypesToReport,
+	allocatableTypesToReport []string, ts pcommon.Timestamp,
+) pmetric.ResourceMetrics {
 	rm := pmetric.NewResourceMetrics()
 
 	sm := rm.ScopeMetrics().AppendEmpty()
@@ -104,13 +107,23 @@ func CustomMetrics(set receiver.CreateSettings, rb *metadata.ResourceBuilder, no
 
 	// TODO: Generate a schema URL for the node metrics in the metadata package and use them here.
 	rm.SetSchemaUrl(conventions.SchemaURL)
-	sm.Scope().SetName("otelcol/k8sclusterreceiver")
+	sm.Scope().SetName("github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver")
 	sm.Scope().SetVersion(set.BuildInfo.Version)
 
 	rb.SetK8sNodeUID(string(node.UID))
 	rb.SetK8sNodeName(node.Name)
 	rb.SetK8sKubeletVersion(node.Status.NodeInfo.KubeletVersion)
-	rb.SetK8sKubeproxyVersion(node.Status.NodeInfo.KubeProxyVersion)
+	rb.SetOsType(node.Status.NodeInfo.OperatingSystem)
+
+	runtime, version := getContainerRuntimeInfo(node.Status.NodeInfo.ContainerRuntimeVersion)
+	if runtime != "" {
+		rb.SetContainerRuntime(runtime)
+	}
+	if version != "" {
+		rb.SetContainerRuntimeVersion(version)
+	}
+
+	rb.SetOsDescription(node.Status.NodeInfo.OSImage)
 	rb.Emit().MoveTo(rm.Resource())
 	return rm
 }
@@ -135,22 +148,51 @@ func nodeConditionValue(node *corev1.Node, condType corev1.NodeConditionType) in
 func GetMetadata(node *corev1.Node) map[experimentalmetricmetadata.ResourceID]*metadata.KubernetesMetadata {
 	meta := maps.MergeStringMaps(map[string]string{}, node.Labels)
 
-	meta[conventions.AttributeK8SNodeName] = node.Name
+	meta[string(conventions.K8SNodeNameKey)] = node.Name
 	meta[nodeCreationTime] = node.GetCreationTimestamp().Format(time.RFC3339)
+
+	// Node can have many additional conditions (gke has 18 on v1.29). Bad thresholds/implementations
+	// of custom conditions can cause value to oscillate between true/false frequently. So, only sending the node
+	// pressure conditions that are set by kubelet to avoid noise.
+	// https://pkg.go.dev/k8s.io/api/core/v1#NodeConditionType
+	kubeletConditions := map[corev1.NodeConditionType]struct{}{
+		corev1.NodeReady:              {},
+		corev1.NodeMemoryPressure:     {},
+		corev1.NodeDiskPressure:       {},
+		corev1.NodePIDPressure:        {},
+		corev1.NodeNetworkUnavailable: {},
+	}
+
+	for _, c := range node.Status.Conditions {
+		if _, ok := kubeletConditions[c.Type]; ok {
+			meta[fmt.Sprintf("%s_%s", k8sNodeConditionPrefix, strcase.ToSnake(string(c.Type)))] = strings.ToLower(string(c.Status))
+		}
+	}
 
 	nodeID := experimentalmetricmetadata.ResourceID(node.UID)
 	return map[experimentalmetricmetadata.ResourceID]*metadata.KubernetesMetadata{
 		nodeID: {
 			EntityType:    "k8s.node",
-			ResourceIDKey: conventions.AttributeK8SNodeUID,
+			ResourceIDKey: string(conventions.K8SNodeUIDKey),
 			ResourceID:    nodeID,
 			Metadata:      meta,
 		},
 	}
 }
 
+func getContainerRuntimeInfo(rawInfo string) (runtime string, version string) {
+	// Kubelet reports container runtime version in the following format:
+	// <runtime-name>://<version>
+	parts := strings.Split(rawInfo, "://")
+
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return "", ""
+}
+
 func getNodeConditionMetric(nodeConditionTypeValue string) string {
-	return fmt.Sprintf("k8s.node.condition_%s", strcase.ToSnake(nodeConditionTypeValue))
+	return "k8s.node.condition_" + strcase.ToSnake(nodeConditionTypeValue)
 }
 
 func getNodeAllocatableUnit(res corev1.ResourceName) string {
@@ -176,5 +218,5 @@ func setNodeAllocatableValue(dp pmetric.NumberDataPoint, res corev1.ResourceName
 }
 
 func getNodeAllocatableMetric(nodeAllocatableTypeValue string) string {
-	return fmt.Sprintf("k8s.node.allocatable_%s", strcase.ToSnake(nodeAllocatableTypeValue))
+	return "k8s.node.allocatable_" + strcase.ToSnake(nodeAllocatableTypeValue)
 }

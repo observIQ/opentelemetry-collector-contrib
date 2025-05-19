@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
@@ -29,6 +30,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/plogtest"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/cloudflarereceiver/internal/metadata"
 )
 
 func TestPayloadToLogRecord(t *testing.T) {
@@ -48,7 +50,7 @@ func TestPayloadToLogRecord(t *testing.T) {
 				logs := plog.NewLogs()
 				rl := logs.ResourceLogs().AppendEmpty()
 				sl := rl.ScopeLogs().AppendEmpty()
-				sl.Scope().SetName(receiverScopeName)
+				sl.Scope().SetName("github.com/open-telemetry/opentelemetry-collector-contrib/receiver/cloudflarereceiver")
 
 				for idx, line := range strings.Split(payload, "\n") {
 					lr := sl.LogRecords().AppendEmpty()
@@ -86,7 +88,7 @@ func TestPayloadToLogRecord(t *testing.T) {
 				}))
 
 				sl := rl.ScopeLogs().AppendEmpty()
-				sl.Scope().SetName(receiverScopeName)
+				sl.Scope().SetName("github.com/open-telemetry/opentelemetry-collector-contrib/receiver/cloudflarereceiver")
 				lr := sl.LogRecords().AppendEmpty()
 
 				require.NoError(t, lr.Attributes().FromRaw(map[string]any{
@@ -115,7 +117,7 @@ func TestPayloadToLogRecord(t *testing.T) {
 			recv := newReceiver(t, &Config{
 				Logs: LogsConfig{
 					Endpoint:       "localhost:0",
-					TLS:            &configtls.TLSServerSetting{},
+					TLS:            &configtls.ServerConfig{},
 					TimestampField: "EdgeStartTimestamp",
 					Attributes: map[string]string{
 						"ClientIP": "http_request.client_ip",
@@ -132,7 +134,7 @@ func TestPayloadToLogRecord(t *testing.T) {
 			if tc.expectedErr != "" {
 				require.Error(t, err)
 				require.Nil(t, logs)
-				require.Contains(t, err.Error(), tc.expectedErr)
+				require.ErrorContains(t, err, tc.expectedErr)
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, logs)
@@ -191,11 +193,12 @@ func TestHandleRequest(t *testing.T) {
 		expectedStatusCode int
 		logExpected        bool
 		consumerFailure    bool
+		permanentFailure   bool // indicates a permanent error
 	}{
 		{
 			name: "No secret provided",
 			request: &http.Request{
-				Method: "POST",
+				Method: http.MethodPost,
 				URL:    &url.URL{},
 				Body:   io.NopCloser(bytes.NewBufferString(`{"ClientIP": "127.0.0.1"}`)),
 			},
@@ -206,7 +209,7 @@ func TestHandleRequest(t *testing.T) {
 		{
 			name: "Invalid payload",
 			request: &http.Request{
-				Method: "POST",
+				Method: http.MethodPost,
 				URL:    &url.URL{},
 				Body:   io.NopCloser(bytes.NewBufferString(`{"ClientIP": "127.0.0.1"`)),
 				Header: map[string][]string{
@@ -220,7 +223,7 @@ func TestHandleRequest(t *testing.T) {
 		{
 			name: "Consumer fails",
 			request: &http.Request{
-				Method: "POST",
+				Method: http.MethodPost,
 				URL:    &url.URL{},
 				Body:   io.NopCloser(bytes.NewBufferString(`{"ClientIP": "127.0.0.1"}`)),
 				Header: map[string][]string{
@@ -229,12 +232,27 @@ func TestHandleRequest(t *testing.T) {
 			},
 			logExpected:        false,
 			consumerFailure:    true,
-			expectedStatusCode: http.StatusInternalServerError,
+			expectedStatusCode: http.StatusServiceUnavailable,
+		},
+		{
+			name: "Consumer fails - permanent error",
+			request: &http.Request{
+				Method: http.MethodPost,
+				URL:    &url.URL{},
+				Body:   io.NopCloser(bytes.NewBufferString(`{"ClientIP": "127.0.0.1"}`)),
+				Header: map[string][]string{
+					textproto.CanonicalMIMEHeaderKey(secretHeaderName): {"abc123"},
+				},
+			},
+			logExpected:        false,
+			consumerFailure:    true,
+			permanentFailure:   true,
+			expectedStatusCode: http.StatusBadRequest,
 		},
 		{
 			name: "Request succeeds",
 			request: &http.Request{
-				Method: "POST",
+				Method: http.MethodPost,
 				URL:    &url.URL{},
 				Body:   io.NopCloser(bytes.NewBufferString(`{"ClientIP": "127.0.0.1", "MyTimestamp": "2023-03-03T05:29:06Z"}`)),
 				Header: map[string][]string{
@@ -248,7 +266,7 @@ func TestHandleRequest(t *testing.T) {
 		{
 			name: "Request succeeds with gzip",
 			request: &http.Request{
-				Method: "POST",
+				Method: http.MethodPost,
 				URL:    &url.URL{},
 				Body:   io.NopCloser(bytes.NewBufferString(gzippedMessage(`{"ClientIP": "127.0.0.1", "MyTimestamp": "2023-03-03T05:29:06Z"}`))),
 				Header: map[string][]string{
@@ -264,7 +282,7 @@ func TestHandleRequest(t *testing.T) {
 		{
 			name: "Request fails to unzip gzip",
 			request: &http.Request{
-				Method: "POST",
+				Method: http.MethodPost,
 				URL:    &url.URL{},
 				Body:   io.NopCloser(bytes.NewBufferString(`thisisnotvalidzippedcontent`)),
 				Header: map[string][]string{
@@ -280,7 +298,7 @@ func TestHandleRequest(t *testing.T) {
 		{
 			name: "test message passes",
 			request: &http.Request{
-				Method: "POST",
+				Method: http.MethodPost,
 				URL:    &url.URL{},
 				Body:   io.NopCloser(bytes.NewBufferString(`test`)),
 				Header: map[string][]string{
@@ -298,6 +316,9 @@ func TestHandleRequest(t *testing.T) {
 			var consumer consumer.Logs
 			if tc.consumerFailure {
 				consumer = consumertest.NewErr(errors.New("consumer failed"))
+				if tc.permanentFailure {
+					consumer = consumertest.NewErr(consumererror.NewPermanent(errors.New("consumer failed")))
+				}
 			} else {
 				consumer = &consumertest.LogsSink{}
 			}
@@ -310,7 +331,7 @@ func TestHandleRequest(t *testing.T) {
 					Attributes: map[string]string{
 						"ClientIP": "http_request.client_ip",
 					},
-					TLS: &configtls.TLSServerSetting{},
+					TLS: &configtls.ServerConfig{},
 				},
 			},
 				consumer,
@@ -332,6 +353,90 @@ func TestHandleRequest(t *testing.T) {
 	}
 }
 
+func TestEmptyAttributes(t *testing.T) {
+	now := time.Time{}
+
+	testCases := []struct {
+		name       string
+		payload    string
+		attributes map[string]string
+	}{
+		{
+			name: "Empty Attributes Map",
+			payload: `{ "ClientIP": "89.163.253.200", "ClientRequestHost": "www.theburritobot0.com", "ClientRequestMethod": "GET", "ClientRequestURI": "/static/img/testimonial-hipster.png", "EdgeEndTimestamp": "2023-03-03T05:30:05Z", "EdgeResponseBytes": "69045", "EdgeResponseStatus": "200", "EdgeStartTimestamp": "2023-03-03T05:29:05Z", "RayID": "3a6050bcbe121a87" }
+{ "ClientIP" : "89.163.253.201", "ClientRequestHost": "www.theburritobot1.com", "ClientRequestMethod": "GET", "ClientRequestURI": "/static/img/testimonial-hipster.png", "EdgeEndTimestamp": "2023-03-03T05:30:05Z", "EdgeResponseBytes": "69045", "EdgeResponseStatus": "200", "EdgeStartTimestamp": "2023-03-03T05:29:05Z", "RayID": "3a6050bcbe121a87" }`,
+			attributes: map[string]string{},
+		},
+		{
+			name: "nil Attributes",
+			payload: `{ "ClientIP": "89.163.253.200", "ClientRequestHost": "www.theburritobot0.com", "ClientRequestMethod": "GET", "ClientRequestURI": "/static/img/testimonial-hipster.png", "EdgeEndTimestamp": "2023-03-03T05:30:05Z", "EdgeResponseBytes": "69045", "EdgeResponseStatus": "200", "EdgeStartTimestamp": "2023-03-03T05:29:05Z", "RayID": "3a6050bcbe121a87" }
+{ "ClientIP" : "89.163.253.201", "ClientRequestHost": "www.theburritobot1.com", "ClientRequestMethod": "GET", "ClientRequestURI": "/static/img/testimonial-hipster.png", "EdgeEndTimestamp": "2023-03-03T05:30:05Z", "EdgeResponseBytes": "69045", "EdgeResponseStatus": "200", "EdgeStartTimestamp": "2023-03-03T05:29:05Z", "RayID": "3a6050bcbe121a87" }`,
+			attributes: nil,
+		},
+	}
+
+	expectedLogs := func(t *testing.T, payload string) plog.Logs {
+		logs := plog.NewLogs()
+		rl := logs.ResourceLogs().AppendEmpty()
+		sl := rl.ScopeLogs().AppendEmpty()
+		sl.Scope().SetName("github.com/open-telemetry/opentelemetry-collector-contrib/receiver/cloudflarereceiver")
+
+		for idx, line := range strings.Split(payload, "\n") {
+			lr := sl.LogRecords().AppendEmpty()
+
+			require.NoError(t, lr.Attributes().FromRaw(map[string]any{
+				"ClientIP":            fmt.Sprintf("89.163.253.%d", 200+idx),
+				"ClientRequestHost":   fmt.Sprintf("www.theburritobot%d.com", idx),
+				"ClientRequestMethod": "GET",
+				"ClientRequestURI":    "/static/img/testimonial-hipster.png",
+				"EdgeEndTimestamp":    "2023-03-03T05:30:05Z",
+				"EdgeResponseBytes":   "69045",
+				"EdgeResponseStatus":  "200",
+				"EdgeStartTimestamp":  "2023-03-03T05:29:05Z",
+				"RayID":               "3a6050bcbe121a87",
+			}))
+
+			lr.SetObservedTimestamp(pcommon.NewTimestampFromTime(now))
+			ts, err := time.Parse(time.RFC3339, "2023-03-03T05:29:05Z")
+			require.NoError(t, err)
+			lr.SetTimestamp(pcommon.NewTimestampFromTime(ts))
+			lr.SetSeverityNumber(plog.SeverityNumberInfo)
+			lr.SetSeverityText(plog.SeverityNumberInfo.String())
+
+			var log map[string]any
+			err = json.Unmarshal([]byte(line), &log)
+			require.NoError(t, err)
+
+			payloadToExpectedBody(t, line, lr)
+		}
+
+		return logs
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			recv := newReceiver(t, &Config{
+				Logs: LogsConfig{
+					Endpoint:       "localhost:0",
+					TLS:            &configtls.ServerConfig{},
+					TimestampField: "EdgeStartTimestamp",
+					Attributes:     tc.attributes,
+				},
+			},
+				&consumertest.LogsSink{},
+			)
+			var logs plog.Logs
+			rawLogs, err := parsePayload([]byte(tc.payload))
+			if err == nil {
+				logs = recv.processLogs(pcommon.NewTimestampFromTime(time.Now()), rawLogs)
+			}
+			require.NoError(t, err)
+			require.NotNil(t, logs)
+			require.NoError(t, plogtest.CompareLogs(expectedLogs(t, tc.payload), logs, plogtest.IgnoreObservedTimestamp()))
+		})
+	}
+}
+
 func gzippedMessage(message string) string {
 	var b bytes.Buffer
 	w := gzip.NewWriter(&b)
@@ -344,7 +449,7 @@ func gzippedMessage(message string) string {
 }
 
 func newReceiver(t *testing.T, cfg *Config, nextConsumer consumer.Logs) *logsReceiver {
-	set := receivertest.NewNopCreateSettings()
+	set := receivertest.NewNopSettings(metadata.Type)
 	set.Logger = zaptest.NewLogger(t)
 	r, err := newLogsReceiver(set, cfg, nextConsumer)
 	require.NoError(t, err)

@@ -36,7 +36,7 @@ const (
 type FromTranslator struct{}
 
 // FromMetrics converts pmetric.Metrics to SignalFx proto data points.
-func (ft *FromTranslator) FromMetrics(md pmetric.Metrics, dropHistogramBuckets bool) ([]*sfxpb.DataPoint, error) {
+func (ft *FromTranslator) FromMetrics(md pmetric.Metrics, dropHistogramBuckets bool, processHistograms bool) ([]*sfxpb.DataPoint, error) {
 	var sfxDataPoints []*sfxpb.DataPoint
 
 	rms := md.ResourceMetrics()
@@ -47,7 +47,7 @@ func (ft *FromTranslator) FromMetrics(md pmetric.Metrics, dropHistogramBuckets b
 		for j := 0; j < rm.ScopeMetrics().Len(); j++ {
 			ilm := rm.ScopeMetrics().At(j)
 			for k := 0; k < ilm.Metrics().Len(); k++ {
-				sfxDataPoints = append(sfxDataPoints, ft.FromMetric(ilm.Metrics().At(k), extraDimensions, dropHistogramBuckets)...)
+				sfxDataPoints = append(sfxDataPoints, ft.FromMetric(ilm.Metrics().At(k), extraDimensions, dropHistogramBuckets, processHistograms)...)
 			}
 		}
 	}
@@ -57,7 +57,7 @@ func (ft *FromTranslator) FromMetrics(md pmetric.Metrics, dropHistogramBuckets b
 
 // FromMetric converts pmetric.Metric to SignalFx proto data points.
 // TODO: Remove this and change signalfxexporter to us FromMetrics.
-func (ft *FromTranslator) FromMetric(m pmetric.Metric, extraDimensions []*sfxpb.Dimension, dropHistogramBuckets bool) []*sfxpb.DataPoint {
+func (ft *FromTranslator) FromMetric(m pmetric.Metric, extraDimensions []*sfxpb.Dimension, dropHistogramBuckets bool, processHistograms bool) []*sfxpb.DataPoint {
 	var dps []*sfxpb.DataPoint
 
 	mt := fromMetricTypeToMetricType(m)
@@ -68,7 +68,9 @@ func (ft *FromTranslator) FromMetric(m pmetric.Metric, extraDimensions []*sfxpb.
 	case pmetric.MetricTypeSum:
 		dps = convertNumberDataPoints(m.Sum().DataPoints(), m.Name(), mt, extraDimensions)
 	case pmetric.MetricTypeHistogram:
-		dps = convertHistogram(m.Histogram().DataPoints(), m.Name(), mt, extraDimensions, dropHistogramBuckets)
+		if processHistograms {
+			dps = convertHistogram(m.Histogram().DataPoints(), m.Name(), mt, extraDimensions, dropHistogramBuckets)
+		}
 	case pmetric.MetricTypeSummary:
 		dps = convertSummaryDataPoints(m.Summary().DataPoints(), m.Name(), extraDimensions)
 	case pmetric.MetricTypeExponentialHistogram:
@@ -168,15 +170,15 @@ func convertHistogram(in pmetric.HistogramDataPointSlice, name string, mt *sfxpb
 		if histDP.HasMin() {
 			// Min is always a gauge.
 			minDP := dps.appendPoint(name+"_min", &sfxMetricTypeGauge, ts, dims)
-			min := histDP.Min()
-			minDP.Value.DoubleValue = &min
+			minVal := histDP.Min()
+			minDP.Value.DoubleValue = &minVal
 		}
 
 		if histDP.HasMax() {
 			// Max is always a gauge.
 			maxDP := dps.appendPoint(name+"_max", &sfxMetricTypeGauge, ts, dims)
-			max := histDP.Max()
-			maxDP.Value.DoubleValue = &max
+			maxVal := histDP.Max()
+			maxDP.Value.DoubleValue = &maxVal
 		}
 
 		// Drop Histogram Buckets if flag is set.
@@ -263,13 +265,12 @@ func attributesToDimensions(attributes pcommon.Map, extraDims []*sfxpb.Dimension
 	}
 	dimensionsValue := make([]sfxpb.Dimension, attributes.Len())
 	pos := 0
-	attributes.Range(func(k string, v pcommon.Value) bool {
+	for k, v := range attributes.All() {
 		dimensionsValue[pos].Key = k
 		dimensionsValue[pos].Value = v.AsString()
 		dimensions = append(dimensions, &dimensionsValue[pos])
 		pos++
-		return true
-	})
+	}
 	return dimensions
 }
 

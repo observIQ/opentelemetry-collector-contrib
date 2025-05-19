@@ -6,8 +6,12 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type      = component.MustNewType("remotetap")
+	ScopeName = "github.com/open-telemetry/opentelemetry-collector-contrib/processor/remotetapprocessor"
+)
+
 const (
-	Type             = "remotetap"
 	LogsStability    = component.StabilityLevelAlpha
 	MetricsStability = component.StabilityLevelAlpha
 	TracesStability  = component.StabilityLevelAlpha

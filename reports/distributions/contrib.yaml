@@ -7,35 +7,39 @@ components:
         - datadog
         - exceptions
         - failover
+        - grafanacloud
+        - otlpjson
+        - roundrobin
         - routing
         - servicegraph
+        - signaltometrics
         - spanmetrics
+        - sum
     exporter:
-        - alertmanager
         - alibabacloud_logservice
         - awscloudwatchlogs
         - awsemf
         - awskinesis
         - awss3
         - awsxray
+        - azureblob
         - azuredataexplorer
         - azuremonitor
+        - bmchelix
         - carbon
         - cassandra
         - clickhouse
         - coralogix
         - datadog
         - dataset
-        - dynatrace
+        - doris
         - elasticsearch
-        - f5cloud
         - file
         - googlecloud
         - googlecloudpubsub
         - googlemanagedprometheus
         - honeycombmarker
         - influxdb
-        - instana
         - kafka
         - loadbalancing
         - logicmonitor
@@ -43,49 +47,64 @@ components:
         - loki
         - mezmo
         - opencensus
+        - opensearch
+        - otelarrow
         - prometheus
         - prometheusremotewrite
         - pulsar
+        - rabbitmq
         - sapm
         - sentry
         - signalfx
-        - skywalking
         - splunk_hec
+        - stef
         - sumologic
         - syslog
-        - tanzuobservability
         - tencentcloud_logservice
         - zipkin
     extension:
+        - ack
         - asapclient
+        - awscloudwatchmetricstreams_encoding
         - awsproxy
+        - azureauth
         - basicauth
         - bearertokenauth
+        - cgroupruntime
         - db_storage
         - docker_observer
         - ecs_observer
         - ecs_task_observer
         - file_storage
+        - googlecloudlogentry_encoding
         - headers_setter
         - health_check
         - host_observer
         - http_forwarder
         - jaegerremotesampling
         - k8s_observer
+        - kafkatopics_observer
         - oauth2client
         - oidc
+        - opamp
         - pprof
+        - redis_storage
         - sigv4auth
     processor:
         - attributes
         - cumulativetodelta
-        - datadog
+        - datadogsemantics
+        - deltatocumulative
         - deltatorate
-        - experimental_metricsgeneration
         - filter
+        - geoip
         - groupbyattrs
         - groupbytrace
+        - interval
         - k8sattributes
+        - logdedup
+        - metricsgeneration
+        - metricstarttime
         - metricstransform
         - probabilistic_sampler
         - redaction
@@ -93,22 +112,25 @@ components:
         - resource
         - resourcedetection
         - routing
-        - servicegraph
         - span
-        - spanmetrics
         - sumologic
         - tail_sampling
         - transform
+    provider:
+        - aes
+        - googlesecretmanager
+        - s3
+        - secretsmanager
     receiver:
         - active_directory_ds
         - aerospike
         - apache
         - apachespark
         - awscloudwatch
-        - awscloudwatchmetrics
         - awscontainerinsightreceiver
         - awsecscontainermetrics
         - awsfirehose
+        - awss3
         - awsxray
         - azureblob
         - azureeventhub
@@ -123,12 +145,15 @@ components:
         - datadog
         - docker_stats
         - elasticsearch
+        - envoyals
         - expvar
-        - file
         - filelog
         - filestats
         - flinkmetrics
         - fluentforward
+        - github
+        - googlecloudmonitoring
+        - googlecloudpubsub
         - googlecloudspanner
         - haproxy
         - hostmetrics
@@ -144,16 +169,20 @@ components:
         - kafka
         - kafkametrics
         - kubeletstats
+        - libhoney
         - loki
         - memcached
         - mongodb
         - mongodbatlas
         - mysql
         - namedpipe
+        - netflow
         - nginx
         - nsxt
+        - ntp
         - opencensus
         - oracledb
+        - otelarrow
         - otlpjsonfile
         - podman_stats
         - postgresql
@@ -166,7 +195,6 @@ components:
         - receiver_creator
         - redis
         - riak
-        - saphana
         - sapm
         - signalfx
         - skywalking
@@ -174,15 +202,34 @@ components:
         - snowflake
         - solace
         - splunk_hec
+        - splunkenterprise
         - sqlquery
         - sqlserver
         - sshcheck
         - statsd
+        - stef
         - syslog
+        - tcpcheck
         - tcplog
+        - tlscheck
         - udplog
         - vcenter
         - wavefront
+        - webhookevent
+        - windowseventlog
         - windowsperfcounters
+        - windowsservice
         - zipkin
+        - zookeeper
+    scraper:
+        - cpu
+        - disk
+        - filesystem
+        - load
+        - memory
+        - network
+        - paging
+        - process
+        - processes
+        - system
         - zookeeper

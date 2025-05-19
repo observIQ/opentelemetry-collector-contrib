@@ -5,6 +5,7 @@ package ottlfuncs // import "github.com/open-telemetry/opentelemetry-collector-c
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -26,7 +27,7 @@ func createLimitFunction[K any](_ ottl.FunctionContext, oArgs ottl.Arguments) (o
 	args, ok := oArgs.(*LimitArguments[K])
 
 	if !ok {
-		return nil, fmt.Errorf("LimitFactory args must be of type *LimitArguments[K]")
+		return nil, errors.New("LimitFactory args must be of type *LimitArguments[K]")
 	}
 
 	return limit(args.Target, args.Limit, args.PriorityKeys)
@@ -64,7 +65,7 @@ func limit[K any](target ottl.PMapGetter[K], limit int64, priorityKeys []string)
 			}
 		}
 
-		val.RemoveIf(func(key string, value pcommon.Value) bool {
+		val.RemoveIf(func(key string, _ pcommon.Value) bool {
 			if _, ok := keep[key]; ok {
 				return false
 			}

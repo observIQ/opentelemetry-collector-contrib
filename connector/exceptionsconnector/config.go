@@ -6,7 +6,7 @@ package exceptionsconnector // import "github.com/open-telemetry/opentelemetry-c
 import (
 	"fmt"
 
-	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 )
 
 // Dimension defines the dimension name and optional default value if the Dimension is missing from a span attribute.
@@ -15,18 +15,27 @@ type Dimension struct {
 	Default *string `mapstructure:"default"`
 }
 
+type Exemplars struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
 // Config defines the configuration options for exceptionsconnector
 type Config struct {
 	// Dimensions defines the list of additional dimensions on top of the provided:
 	// - service.name
+	// - span.name
 	// - span.kind
 	// - status.code
 	// The dimensions will be fetched from the span's attributes. Examples of some conventionally used attributes:
 	// https://github.com/open-telemetry/opentelemetry-collector/blob/main/model/semconv/opentelemetry.go.
 	Dimensions []Dimension `mapstructure:"dimensions"`
+	// Exemplars defines the configuration for exemplars.
+	Exemplars Exemplars `mapstructure:"exemplars"`
+	// prevent unkeyed literal initialization
+	_ struct{}
 }
 
-var _ component.ConfigValidator = (*Config)(nil)
+var _ xconfmap.Validator = (*Config)(nil)
 
 // Validate checks if the connector configuration is valid
 func (c Config) Validate() error {
@@ -40,7 +49,7 @@ func (c Config) Validate() error {
 // validateDimensions checks duplicates for reserved dimensions and additional dimensions.
 func validateDimensions(dimensions []Dimension) error {
 	labelNames := make(map[string]struct{})
-	for _, key := range []string{serviceNameKey, spanKindKey, statusCodeKey} {
+	for _, key := range []string{serviceNameKey, spanKindKey, spanNameKey, statusCodeKey} {
 		labelNames[key] = struct{}{}
 	}
 

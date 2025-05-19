@@ -12,6 +12,7 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"gopkg.in/yaml.v3"
 )
@@ -37,13 +38,13 @@ func ReadMetrics(filePath string) (pmetric.Metrics, error) {
 }
 
 // WriteMetrics writes a pmetric.Metrics to the specified file in YAML format.
-func WriteMetrics(t *testing.T, filePath string, metrics pmetric.Metrics) error {
-	if err := writeMetrics(filePath, metrics); err != nil {
+func WriteMetrics(tb testing.TB, filePath string, metrics pmetric.Metrics, opts ...WriteMetricsOption) error {
+	if err := WriteMetricsToFile(filePath, metrics, opts...); err != nil {
 		return err
 	}
-	t.Logf("Golden file successfully written to %s.", filePath)
-	t.Log("NOTE: The WriteMetrics call must be removed in order to pass the test.")
-	t.Fail()
+	tb.Logf("Golden file successfully written to %s.", filePath)
+	tb.Log("NOTE: The WriteMetrics call must be removed in order to pass the test.")
+	tb.Fail()
 	return nil
 }
 
@@ -67,15 +68,27 @@ func MarshalMetricsYAML(metrics pmetric.Metrics) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// writeMetrics writes a pmetric.Metrics to the specified file in YAML format.
-func writeMetrics(filePath string, metrics pmetric.Metrics) error {
+// WriteMetricsToFile writes a pmetric.Metrics to the specified file in YAML format.
+// Prefer using WriteMetrics in tests.
+func WriteMetricsToFile(filePath string, metrics pmetric.Metrics, opts ...WriteMetricsOption) error {
+	optsStruct := writeMetricsOptions{
+		normalizeTimestamps: true,
+	}
+
+	for _, opt := range opts {
+		opt(&optsStruct)
+	}
+
 	sortMetrics(metrics)
-	normalizeTimestamps(metrics)
+	if optsStruct.normalizeTimestamps {
+		normalizeTimestamps(metrics)
+	}
+
 	b, err := MarshalMetricsYAML(metrics)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, b, 0600)
+	return os.WriteFile(filePath, b, 0o600)
 }
 
 // ReadLogs reads a plog.Logs from the specified YAML or JSON file.
@@ -99,18 +112,19 @@ func ReadLogs(filePath string) (plog.Logs, error) {
 }
 
 // WriteLogs writes a plog.Logs to the specified file in YAML format.
-func WriteLogs(t *testing.T, filePath string, logs plog.Logs) error {
-	if err := writeLogs(filePath, logs); err != nil {
+func WriteLogs(tb testing.TB, filePath string, logs plog.Logs) error {
+	if err := WriteLogsToFile(filePath, logs); err != nil {
 		return err
 	}
-	t.Logf("Golden file successfully written to %s.", filePath)
-	t.Log("NOTE: The WriteLogs call must be removed in order to pass the test.")
-	t.Fail()
+	tb.Logf("Golden file successfully written to %s.", filePath)
+	tb.Log("NOTE: The WriteLogs call must be removed in order to pass the test.")
+	tb.Fail()
 	return nil
 }
 
-// writeLogs writes a plog.Logs to the specified file in YAML format.
-func writeLogs(filePath string, logs plog.Logs) error {
+// WriteLogsToFile writes a plog.Logs to the specified file in YAML format.
+// Prefer using WriteLogs in tests.
+func WriteLogsToFile(filePath string, logs plog.Logs) error {
 	unmarshaler := &plog.JSONMarshaler{}
 	fileBytes, err := unmarshaler.MarshalLogs(logs)
 	if err != nil {
@@ -126,7 +140,7 @@ func writeLogs(filePath string, logs plog.Logs) error {
 	if err := enc.Encode(jsonVal); err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, b.Bytes(), 0600)
+	return os.WriteFile(filePath, b.Bytes(), 0o600)
 }
 
 // ReadTraces reads a ptrace.Traces from the specified YAML or JSON file.
@@ -150,18 +164,19 @@ func ReadTraces(filePath string) (ptrace.Traces, error) {
 }
 
 // WriteTraces writes a ptrace.Traces to the specified file in YAML format.
-func WriteTraces(t *testing.T, filePath string, traces ptrace.Traces) error {
-	if err := writeTraces(filePath, traces); err != nil {
+func WriteTraces(tb testing.TB, filePath string, traces ptrace.Traces) error {
+	if err := WriteTracesToFile(filePath, traces); err != nil {
 		return err
 	}
-	t.Logf("Golden file successfully written to %s.", filePath)
-	t.Log("NOTE: The WriteTraces call must be removed in order to pass the test.")
-	t.Fail()
+	tb.Logf("Golden file successfully written to %s.", filePath)
+	tb.Log("NOTE: The WriteTraces call must be removed in order to pass the test.")
+	tb.Fail()
 	return nil
 }
 
-// writeTraces writes a ptrace.Traces to the specified file
-func writeTraces(filePath string, traces ptrace.Traces) error {
+// WriteTracesToFile writes a ptrace.Traces to the specified file
+// Prefer using WriteTraces in tests.
+func WriteTracesToFile(filePath string, traces ptrace.Traces) error {
 	unmarshaler := &ptrace.JSONMarshaler{}
 	fileBytes, err := unmarshaler.MarshalTraces(traces)
 	if err != nil {
@@ -177,5 +192,57 @@ func writeTraces(filePath string, traces ptrace.Traces) error {
 	if err := enc.Encode(jsonVal); err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, b.Bytes(), 0600)
+	return os.WriteFile(filePath, b.Bytes(), 0o600)
+}
+
+// ReadProfiles reads a pprofile.Profiles from the specified YAML or JSON file.
+func ReadProfiles(filePath string) (pprofile.Profiles, error) {
+	b, err := os.ReadFile(filePath)
+	if err != nil {
+		return pprofile.Profiles{}, err
+	}
+	if strings.HasSuffix(filePath, ".yaml") || strings.HasSuffix(filePath, ".yml") {
+		var m map[string]any
+		if err = yaml.Unmarshal(b, &m); err != nil {
+			return pprofile.Profiles{}, err
+		}
+		b, err = json.Marshal(m)
+		if err != nil {
+			return pprofile.Profiles{}, err
+		}
+	}
+	unmarshaler := pprofile.JSONUnmarshaler{}
+	return unmarshaler.UnmarshalProfiles(b)
+}
+
+// WriteProfiles writes a pprofile.Profiles to the specified file in YAML format.
+func WriteProfiles(tb testing.TB, filePath string, profiles pprofile.Profiles) error {
+	if err := WriteProfilesToFile(filePath, profiles); err != nil {
+		return err
+	}
+	tb.Logf("Golden file successfully written to %s.", filePath)
+	tb.Log("NOTE: The WriteProfiles call must be removed in order to pass the test.")
+	tb.Fail()
+	return nil
+}
+
+// WriteProfilesToFile writes a pprofile.Profiles to the specified file in YAML format.
+// Prefer using WriteProfiles in tests.
+func WriteProfilesToFile(filePath string, profiles pprofile.Profiles) error {
+	unmarshaler := &pprofile.JSONMarshaler{}
+	fileBytes, err := unmarshaler.MarshalProfiles(profiles)
+	if err != nil {
+		return err
+	}
+	var jsonVal map[string]any
+	if err = json.Unmarshal(fileBytes, &jsonVal); err != nil {
+		return err
+	}
+	b := &bytes.Buffer{}
+	enc := yaml.NewEncoder(b)
+	enc.SetIndent(2)
+	if err := enc.Encode(jsonVal); err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, b.Bytes(), 0o600)
 }

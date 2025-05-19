@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.uber.org/zap"
 
@@ -16,7 +17,7 @@ import (
 
 // Config represent a configuration for the CloudWatch logs exporter.
 type Config struct {
-	exporterhelper.RetrySettings `mapstructure:"retry_on_failure"`
+	configretry.BackOffConfig `mapstructure:"retry_on_failure"`
 
 	// LogGroupName is the name of CloudWatch log group which defines group of log streams
 	// that share the same retention, monitoring, and access control settings.
@@ -34,15 +35,15 @@ type Config struct {
 
 	// LogRetention is the option to set the log retention policy for the CloudWatch Log Group. Defaults to Never Expire if not specified or set to 0
 	// Possible values are 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 2192, 2557, 2922, 3288, or 3653
-	LogRetention int64 `mapstructure:"log_retention"`
+	LogRetention int32 `mapstructure:"log_retention"`
 
-	// Tags is the option to set tags for the CloudWatch Log Group.  If specified, please add add at least 1 and at most 50 tags.  Input is a string to string map like so: { 'key': 'value' }
+	// Tags is the option to set tags for the CloudWatch Log Group.  If specified, please add at least 1 and at most 50 tags.  Input is a string to string map like so: { 'key': 'value' }
 	// Keys must be between 1-128 characters and follow the regex pattern: ^([\p{L}\p{Z}\p{N}_.:/=+\-@]+)$
 	// Values must be between 1-256 characters and follow the regex pattern: ^([\p{L}\p{Z}\p{N}_.:/=+\-@]*)$
-	Tags map[string]*string `mapstructure:"tags"`
+	Tags map[string]string `mapstructure:"tags"`
 
 	// Queue settings frm the exporterhelper
-	exporterhelper.QueueSettings `mapstructure:"sending_queue"`
+	QueueSettings exporterhelper.QueueBatchConfig `mapstructure:"sending_queue"`
 
 	logger *zap.Logger
 
@@ -64,6 +65,13 @@ func (config *Config) Validate() error {
 		return errors.New("'log_stream_name' must be set")
 	}
 
+	if isPatternValid, invalidPattern := (isPatternValid(config.LogGroupName)); !isPatternValid {
+		return errors.New("'log_group_name' has an invalid pattern between curly brackets: " + invalidPattern)
+	}
+	if isPatternValid, invalidPattern := (isPatternValid(config.LogStreamName)); !isPatternValid {
+		return errors.New("'log_stream_name'  has an invalid pattern between curly brackets: " + invalidPattern)
+	}
+
 	if err := config.QueueSettings.Validate(); err != nil {
 		return err
 	}
@@ -72,7 +80,6 @@ func (config *Config) Validate() error {
 		return retErr
 	}
 	return cwlogs.ValidateTagsInput(config.Tags)
-
 }
 
 // TODO(jbd): Add ARN role to config.

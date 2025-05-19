@@ -16,7 +16,7 @@ import (
 const (
 	defaultEncoding     = "otlp_proto"
 	defaultTraceTopic   = "otlp_spans"
-	defaultMeticsTopic  = "otlp_metrics"
+	defaultMetricsTopic = "otlp_metrics"
 	defaultLogsTopic    = "otlp_logs"
 	defaultConsumerName = ""
 	defaultSubscription = "otlp_subscription"
@@ -55,7 +55,6 @@ func withLogsUnmarshalers(logsUnmarshalers ...LogsUnmarshaler) FactoryOption {
 
 // NewFactory creates Pulsar receiver factory.
 func NewFactory(options ...FactoryOption) receiver.Factory {
-
 	f := &pulsarReceiverFactory{
 		tracesUnmarshalers:  defaultTracesUnmarshalers(),
 		metricsUnmarshalers: defaultMetricsUnmarshalers(),
@@ -81,7 +80,7 @@ type pulsarReceiverFactory struct {
 
 func (f *pulsarReceiverFactory) createTracesReceiver(
 	_ context.Context,
-	set receiver.CreateSettings,
+	set receiver.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Traces,
 ) (receiver.Traces, error) {
@@ -98,13 +97,13 @@ func (f *pulsarReceiverFactory) createTracesReceiver(
 
 func (f *pulsarReceiverFactory) createMetricsReceiver(
 	_ context.Context,
-	set receiver.CreateSettings,
+	set receiver.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Metrics,
 ) (receiver.Metrics, error) {
 	c := *(cfg.(*Config))
 	if len(c.Topic) == 0 {
-		c.Topic = defaultMeticsTopic
+		c.Topic = defaultMetricsTopic
 	}
 	r, err := newMetricsReceiver(c, set, f.metricsUnmarshalers, nextConsumer)
 	if err != nil {
@@ -115,7 +114,7 @@ func (f *pulsarReceiverFactory) createMetricsReceiver(
 
 func (f *pulsarReceiverFactory) createLogsReceiver(
 	_ context.Context,
-	set receiver.CreateSettings,
+	set receiver.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Logs,
 ) (receiver.Logs, error) {

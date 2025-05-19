@@ -6,6 +6,7 @@ package syslogexporter // import "github.com/open-telemetry/opentelemetry-collec
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -13,10 +14,13 @@ import (
 )
 
 type rfc5424Formatter struct {
+	octetCounting bool
 }
 
-func newRFC5424Formatter() *rfc5424Formatter {
-	return &rfc5424Formatter{}
+func newRFC5424Formatter(octetCounting bool) *rfc5424Formatter {
+	return &rfc5424Formatter{
+		octetCounting: octetCounting,
+	}
 }
 
 func (f *rfc5424Formatter) format(logRecord plog.LogRecord) string {
@@ -30,6 +34,11 @@ func (f *rfc5424Formatter) format(logRecord plog.LogRecord) string {
 	structuredData := f.formatStructuredData(logRecord)
 	messageString := f.formatMessage(logRecord)
 	formatted := fmt.Sprintf("<%s>%s %s %s %s %s %s %s%s\n", priorityString, versionString, timestampString, hostnameString, appnameString, pidString, messageIDString, structuredData, messageString)
+
+	if f.octetCounting {
+		formatted = fmt.Sprintf("%d %s", len(formatted), formatted)
+	}
+
 	return formatted
 }
 
@@ -70,9 +79,9 @@ func (f *rfc5424Formatter) formatStructuredData(logRecord plog.LogRecord) string
 		return emptyValue
 	}
 
-	sdElements := []string{}
+	var sdBuilder strings.Builder
 	for key, val := range structuredDataAttributeValue.Map().AsRaw() {
-		sdElements = append(sdElements, key)
+		sdElements := []string{key}
 		vval, ok := val.(map[string]any)
 		if !ok {
 			continue
@@ -84,9 +93,9 @@ func (f *rfc5424Formatter) formatStructuredData(logRecord plog.LogRecord) string
 			}
 			sdElements = append(sdElements, fmt.Sprintf("%s=\"%s\"", k, vv))
 		}
+		sdBuilder.WriteString(fmt.Sprint(sdElements))
 	}
-	return fmt.Sprint(sdElements)
-
+	return sdBuilder.String()
 }
 
 func (f *rfc5424Formatter) formatMessage(logRecord plog.LogRecord) string {

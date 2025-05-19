@@ -6,9 +6,14 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type      = component.MustNewType("coralogix")
+	ScopeName = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/coralogixexporter"
+)
+
 const (
-	Type             = "coralogix"
-	TracesStability  = component.StabilityLevelBeta
-	MetricsStability = component.StabilityLevelBeta
-	LogsStability    = component.StabilityLevelBeta
+	ProfilesStability = component.StabilityLevelAlpha
+	TracesStability   = component.StabilityLevelBeta
+	MetricsStability  = component.StabilityLevelBeta
+	LogsStability     = component.StabilityLevelBeta
 )

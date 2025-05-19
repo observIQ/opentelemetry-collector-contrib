@@ -7,8 +7,9 @@ import (
 	"context"
 	"fmt"
 
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pipeline"
+	"go.opentelemetry.io/collector/processor"
 	"go.opentelemetry.io/collector/processor/processorhelper"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -21,18 +22,26 @@ import (
 )
 
 type filterLogProcessor struct {
-	skipExpr expr.BoolExpr[ottllog.TransformContext]
-	logger   *zap.Logger
+	skipExpr  expr.BoolExpr[ottllog.TransformContext]
+	telemetry *filterTelemetry
+	logger    *zap.Logger
 }
 
-func newFilterLogsProcessor(set component.TelemetrySettings, cfg *Config) (*filterLogProcessor, error) {
+func newFilterLogsProcessor(set processor.Settings, cfg *Config) (*filterLogProcessor, error) {
 	flp := &filterLogProcessor{
 		logger: set.Logger,
 	}
+
+	fpt, err := newFilterTelemetry(set, pipeline.SignalLogs)
+	if err != nil {
+		return nil, fmt.Errorf("error creating filter processor telemetry: %w", err)
+	}
+	flp.telemetry = fpt
+
 	if cfg.Logs.LogConditions != nil {
-		skipExpr, err := filterottl.NewBoolExprForLog(cfg.Logs.LogConditions, filterottl.StandardLogFuncs(), cfg.ErrorMode, set)
-		if err != nil {
-			return nil, err
+		skipExpr, errBoolExpr := filterottl.NewBoolExprForLog(cfg.Logs.LogConditions, filterottl.StandardLogFuncs(), cfg.ErrorMode, set.TelemetrySettings)
+		if errBoolExpr != nil {
+			return nil, errBoolExpr
 		}
 		flp.skipExpr = skipExpr
 		return flp, nil
@@ -61,6 +70,8 @@ func (flp *filterLogProcessor) processLogs(ctx context.Context, ld plog.Logs) (p
 		return ld, nil
 	}
 
+	logCountBeforeFilters := ld.LogRecordCount()
+
 	var errors error
 	ld.ResourceLogs().RemoveIf(func(rl plog.ResourceLogs) bool {
 		resource := rl.Resource()
@@ -68,7 +79,7 @@ func (flp *filterLogProcessor) processLogs(ctx context.Context, ld plog.Logs) (p
 			scope := sl.Scope()
 			lrs := sl.LogRecords()
 			lrs.RemoveIf(func(lr plog.LogRecord) bool {
-				skip, err := flp.skipExpr.Eval(ctx, ottllog.NewTransformContext(lr, scope, resource))
+				skip, err := flp.skipExpr.Eval(ctx, ottllog.NewTransformContext(lr, scope, resource, sl, rl))
 				if err != nil {
 					errors = multierr.Append(errors, err)
 					return false
@@ -80,6 +91,9 @@ func (flp *filterLogProcessor) processLogs(ctx context.Context, ld plog.Logs) (p
 		})
 		return rl.ScopeLogs().Len() == 0
 	})
+
+	logCountAfterFilters := ld.LogRecordCount()
+	flp.telemetry.record(ctx, int64(logCountBeforeFilters-logCountAfterFilters))
 
 	if errors != nil {
 		flp.logger.Error("failed processing logs", zap.Error(errors))

@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/splunk"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sapmreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/testbed/testbed"
 )
@@ -33,14 +32,13 @@ func NewSapmDataReceiver(port int, compression string) *SapmDataReceiver {
 // Start the receiver.
 func (sr *SapmDataReceiver) Start(tc consumer.Traces, _ consumer.Metrics, _ consumer.Logs) error {
 	sapmCfg := sapmreceiver.Config{
-		HTTPServerSettings: confighttp.HTTPServerSettings{
+		ServerConfig: confighttp.ServerConfig{
 			Endpoint: fmt.Sprintf("127.0.0.1:%d", sr.Port),
 		},
-		AccessTokenPassthroughConfig: splunk.AccessTokenPassthroughConfig{AccessTokenPassthrough: true},
 	}
 	var err error
-	params := receivertest.NewNopCreateSettings()
-	sr.receiver, err = sapmreceiver.NewFactory().CreateTracesReceiver(context.Background(), params, &sapmCfg, tc)
+	params := receivertest.NewNopSettings(sapmreceiver.NewFactory().Type())
+	sr.receiver, err = sapmreceiver.NewFactory().CreateTraces(context.Background(), params, &sapmCfg, tc)
 	if err != nil {
 		return err
 	}
@@ -58,10 +56,8 @@ func (sr *SapmDataReceiver) Stop() error {
 
 // GenConfigYAMLStr returns exporter config for the agent.
 func (sr *SapmDataReceiver) GenConfigYAMLStr() string {
-	disableCompression := false
-	if sr.compression == "" {
-		disableCompression = true
-	}
+	disableCompression := sr.compression == ""
+
 	// Note that this generates an exporter config for agent.
 	return fmt.Sprintf(`
   sapm:

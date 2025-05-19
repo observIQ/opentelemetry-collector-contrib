@@ -4,15 +4,6 @@ status:
   class: receiver
   stability:
     beta: [traces]
-  distributions:
-  - core
-  - contrib
-  - aws
-  - grafana
-  - observiq
-  - redhat
-  - splunk
-  - sumo
-  - liatrio
+  distributions: [core, contrib, k8s]
   codeowners:
-    active: [MovieStoreGuy, astencel-sumo, crobert-1]
+    active: [MovieStoreGuy, andrzej-stencel, crobert-1]

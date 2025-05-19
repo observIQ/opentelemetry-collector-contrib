@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/pdata/plog"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/honeycombmarkerexporter/internal/metadata"
 )
 
 func TestExportMarkers(t *testing.T) {
@@ -123,17 +125,21 @@ func TestExportMarkers(t *testing.T) {
 				decodedBody := map[string]any{}
 				err := json.NewDecoder(req.Body).Decode(&decodedBody)
 
-				require.NoError(t, err)
+				assert.NoError(t, err)
 
-				assert.Equal(t, len(decodedBody), len(tt.attributeMap))
+				assert.Len(t, decodedBody, len(tt.attributeMap))
 
 				for attr := range tt.attributeMap {
-					assert.Equal(t, decodedBody[attr], tt.attributeMap[attr])
+					assert.Equal(t, tt.attributeMap[attr], decodedBody[attr])
 				}
 				assert.Contains(t, req.URL.Path, tt.expectedURL)
 
-				apiKey := req.Header.Get("X-Honeycomb-Team")
-				assert.Equal(t, apiKey, string(tt.config.APIKey))
+				apiKey := req.Header.Get(honeycombTeam)
+				assert.Equal(t, string(tt.config.APIKey), apiKey)
+
+				userAgent := req.Header.Get(userAgentHeaderKey)
+				assert.NotEmpty(t, userAgent)
+				assert.Contains(t, userAgent, "OpenTelemetry Collector")
 
 				rw.WriteHeader(http.StatusAccepted)
 			}))
@@ -143,7 +149,7 @@ func TestExportMarkers(t *testing.T) {
 			config.APIURL = markerServer.URL
 
 			f := NewFactory()
-			exp, err := f.CreateLogsExporter(context.Background(), exportertest.NewNopCreateSettings(), &config)
+			exp, err := f.CreateLogs(context.Background(), exportertest.NewNopSettings(metadata.Type), &config)
 			require.NoError(t, err)
 
 			err = exp.Start(context.Background(), componenttest.NewNopHost())
@@ -222,7 +228,7 @@ func TestExportMarkers_Error(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			markerServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+			markerServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 				rw.WriteHeader(tt.responseCode)
 			}))
 			defer markerServer.Close()
@@ -231,7 +237,7 @@ func TestExportMarkers_Error(t *testing.T) {
 			config.APIURL = markerServer.URL
 
 			f := NewFactory()
-			exp, err := f.CreateLogsExporter(context.Background(), exportertest.NewNopCreateSettings(), &config)
+			exp, err := f.CreateLogs(context.Background(), exportertest.NewNopSettings(metadata.Type), &config)
 			require.NoError(t, err)
 
 			err = exp.Start(context.Background(), componenttest.NewNopHost())
@@ -272,7 +278,7 @@ func TestExportMarkers_NoAPICall(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			markerServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+			markerServer := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 				assert.Fail(t, "should not call the markers api")
 				rw.WriteHeader(http.StatusBadRequest) // 400
 			}))
@@ -282,7 +288,7 @@ func TestExportMarkers_NoAPICall(t *testing.T) {
 			config.APIURL = markerServer.URL
 
 			f := NewFactory()
-			exp, err := f.CreateLogsExporter(context.Background(), exportertest.NewNopCreateSettings(), &config)
+			exp, err := f.CreateLogs(context.Background(), exportertest.NewNopSettings(metadata.Type), &config)
 			require.NoError(t, err)
 
 			err = exp.Start(context.Background(), componenttest.NewNopHost())

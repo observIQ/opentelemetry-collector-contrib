@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/collector/processor/processorhelper"
 	"go.opentelemetry.io/collector/processor/processortest"
 	"go.uber.org/zap"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstransformprocessor/internal/metadata"
 )
 
 func TestMetricsTransformProcessor(t *testing.T) {
@@ -27,9 +29,9 @@ func TestMetricsTransformProcessor(t *testing.T) {
 				logger:     zap.NewExample(),
 			}
 
-			mtp, err := processorhelper.NewMetricsProcessor(
+			mtp, err := processorhelper.NewMetrics(
 				context.Background(),
-				processortest.NewNopCreateSettings(),
+				processortest.NewNopSettings(metadata.Type),
 				&Config{},
 				next,
 				p.processMetrics,
@@ -37,7 +39,7 @@ func TestMetricsTransformProcessor(t *testing.T) {
 			require.NoError(t, err)
 
 			caps := mtp.Capabilities()
-			assert.Equal(t, true, caps.MutatesData)
+			assert.True(t, caps.MutatesData)
 
 			// process
 			inMetrics := pmetric.NewMetrics()
@@ -50,7 +52,7 @@ func TestMetricsTransformProcessor(t *testing.T) {
 
 			// get and check results
 			got := next.AllMetrics()
-			require.Equal(t, 1, len(got))
+			require.Len(t, got, 1)
 			gotMetricsSlice := pmetric.NewMetricSlice()
 			if got[0].ResourceMetrics().Len() > 0 {
 				gotMetricsSlice = got[0].ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics()
@@ -114,13 +116,11 @@ func lessAttributes(a, b pcommon.Map) bool {
 	}
 
 	var res bool
-	a.Range(func(k string, v pcommon.Value) bool {
+	for k, v := range a.All() {
 		bv, ok := b.Get(k)
 		if !ok || v.Str() < bv.Str() {
-			res = true
-			return false
+			return true
 		}
-		return true
-	})
+	}
 	return res
 }

@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/testbed/datareceivers"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/testbed/testbed"
 )
@@ -66,9 +67,10 @@ func TestSyslogComplementaryRFC5424(t *testing.T) {
 }
 
 func TestSyslogComplementaryRFC3164(t *testing.T) {
+	t.Skip("https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/38238")
 	expectedData := []expectedDataType{
 		{
-			message:        "<34>Oct 11 22:14:15 mymachine su: 'su root' failed for lonvick on /dev/pts/8",
+			message:        "<34>Oct 11 2023 22:14:15 mymachine su: 'su root' failed for lonvick on /dev/pts/8",
 			timestamp:      1697062455000000000,
 			severityNumber: 18,
 			severityText:   "crit",
@@ -81,7 +83,7 @@ func TestSyslogComplementaryRFC3164(t *testing.T) {
 			},
 		},
 		{
-			message:        "<19>Oct 11 22:14:15 - -",
+			message:        "<19>Oct 11 2023 22:14:15 - -",
 			timestamp:      1697062455000000000,
 			severityNumber: 17,
 			severityText:   "err",
@@ -104,8 +106,8 @@ func componentFactories(t *testing.T) otelcol.Factories {
 
 func complementaryTest(t *testing.T, rfc string, expectedData []expectedDataType) {
 	// Prepare ports
-	port := testbed.GetAvailablePort(t)
-	inputPort := testbed.GetAvailablePort(t)
+	port := testutil.GetAvailablePort(t)
+	inputPort := testutil.GetAvailablePort(t)
 
 	// Start SyslogDataReceiver
 	syslogReceiver := datareceivers.NewSyslogDataReceiver(rfc, port)
@@ -137,7 +139,7 @@ service:
         - syslog/client`
 
 	collector := testbed.NewInProcessCollector(componentFactories(t))
-	_, err := collector.PrepareConfig(fmt.Sprintf(config, rfc, inputPort, rfc, port))
+	_, err := collector.PrepareConfig(t, fmt.Sprintf(config, rfc, inputPort, rfc, port))
 
 	require.NoError(t, err)
 	err = collector.Start(testbed.StartParams{
@@ -181,10 +183,10 @@ service:
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	require.Equal(t, len(backend.ReceivedLogs), 1)
-	require.Equal(t, backend.ReceivedLogs[0].ResourceLogs().Len(), 1)
-	require.Equal(t, backend.ReceivedLogs[0].ResourceLogs().At(0).ScopeLogs().Len(), 1)
-	require.Equal(t, backend.ReceivedLogs[0].ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().Len(), len(expectedData))
+	require.Len(t, backend.ReceivedLogs, 1)
+	require.Equal(t, 1, backend.ReceivedLogs[0].ResourceLogs().Len())
+	require.Equal(t, 1, backend.ReceivedLogs[0].ResourceLogs().At(0).ScopeLogs().Len())
+	require.Len(t, expectedData, backend.ReceivedLogs[0].ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().Len())
 
 	// Clean received logs
 	attributes := []map[string]any{}

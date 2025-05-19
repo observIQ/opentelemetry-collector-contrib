@@ -9,19 +9,21 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/config/confighttp"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	conventions "go.opentelemetry.io/otel/semconv/v1.26.0"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter/internal/apm/correlations"
 )
 
 // DefaultConfig returns default configuration correlation values.
 func DefaultConfig() *Config {
+	clientConfig := confighttp.NewDefaultClientConfig()
+	clientConfig.Timeout = 5 * time.Second
 	return &Config{
-		HTTPClientSettings:  confighttp.HTTPClientSettings{Timeout: 5 * time.Second},
+		ClientConfig:        clientConfig,
 		StaleServiceTimeout: 5 * time.Minute,
 		SyncAttributes: map[string]string{
-			conventions.AttributeK8SPodUID:   conventions.AttributeK8SPodUID,
-			conventions.AttributeContainerID: conventions.AttributeContainerID,
+			string(conventions.K8SPodUIDKey):   string(conventions.K8SPodUIDKey),
+			string(conventions.ContainerIDKey): string(conventions.ContainerIDKey),
 		},
 		Config: correlations.Config{
 			MaxRequests:     20,
@@ -36,8 +38,8 @@ func DefaultConfig() *Config {
 
 // Config defines configuration for correlation via traces.
 type Config struct {
-	confighttp.HTTPClientSettings `mapstructure:",squash"`
-	correlations.Config           `mapstructure:",squash"`
+	confighttp.ClientConfig `mapstructure:",squash"`
+	correlations.Config     `mapstructure:",squash"`
 
 	// How long to wait after a trace span's service name is last seen before
 	// uncorrelating that service.
@@ -47,11 +49,11 @@ type Config struct {
 }
 
 func (c *Config) validate() error {
-	if c.HTTPClientSettings.Endpoint == "" {
+	if c.Endpoint == "" {
 		return errors.New("`correlation.endpoint` not specified")
 	}
 
-	_, err := url.Parse(c.HTTPClientSettings.Endpoint)
+	_, err := url.Parse(c.Endpoint)
 	if err != nil {
 		return err
 	}

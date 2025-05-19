@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scrapererror"
+	"go.opentelemetry.io/collector/scraper/scrapererror"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/couchdbreceiver/internal/metadata"
@@ -26,7 +26,7 @@ type couchdbScraper struct {
 	mb       *metadata.MetricsBuilder
 }
 
-func newCouchdbScraper(settings receiver.CreateSettings, config *Config) *couchdbScraper {
+func newCouchdbScraper(settings receiver.Settings, config *Config) *couchdbScraper {
 	return &couchdbScraper{
 		settings: settings.TelemetrySettings,
 		config:   config,
@@ -34,8 +34,8 @@ func newCouchdbScraper(settings receiver.CreateSettings, config *Config) *couchd
 	}
 }
 
-func (c *couchdbScraper) start(_ context.Context, host component.Host) error {
-	httpClient, err := newCouchDBClient(c.config, host, c.settings)
+func (c *couchdbScraper) start(ctx context.Context, host component.Host) error {
+	httpClient, err := newCouchDBClient(ctx, c.config, host, c.settings)
 	if err != nil {
 		return fmt.Errorf("failed to start: %w", err)
 	}

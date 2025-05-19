@@ -4,6 +4,11 @@ status:
   class: extension
   stability:
     beta: [extension]
-  distributions: [contrib, observiq, sumo]
+  distributions: [contrib, k8s]
   codeowners:
-    active: [jpkrohling]
+    seeking_new: true
+    emeritus: [jpkrohling]
+
+tests:
+  config:
+  skip_lifecycle: true

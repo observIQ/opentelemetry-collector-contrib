@@ -53,7 +53,7 @@ func TestMetadataErrorCases(t *testing.T) {
 						},
 					},
 				},
-			}, nil),
+			}, NodeInfo{}, nil),
 			testScenario: func(acc metricDataAccumulator) {
 				now := metav1.Now()
 				podStats := stats.PodStats{
@@ -79,7 +79,7 @@ func TestMetadataErrorCases(t *testing.T) {
 			metricGroupsToCollect: map[MetricGroup]bool{
 				VolumeMetricGroup: true,
 			},
-			metadata: NewMetadata([]MetadataLabel{MetadataLabelVolumeType}, nil, nil),
+			metadata: NewMetadata([]MetadataLabel{MetadataLabelVolumeType}, nil, NodeInfo{}, nil),
 			testScenario: func(acc metricDataAccumulator) {
 				podStats := stats.PodStats{
 					PodRef: stats.PodReference{
@@ -121,7 +121,7 @@ func TestMetadataErrorCases(t *testing.T) {
 						},
 					},
 				},
-			}, nil),
+			}, NodeInfo{}, nil),
 			testScenario: func(acc metricDataAccumulator) {
 				podStats := stats.PodStats{
 					PodRef: stats.PodReference{
@@ -165,8 +165,8 @@ func TestMetadataErrorCases(t *testing.T) {
 						},
 					},
 				},
-			}, nil),
-			detailedPVCLabelsSetterOverride: func(rb *metadata.ResourceBuilder, volCacheID, volumeClaim, namespace string) error {
+			}, NodeInfo{}, nil),
+			detailedPVCLabelsSetterOverride: func(*metadata.ResourceBuilder, string, string, string) error {
 				// Mock failure cases.
 				return errors.New("")
 			},
@@ -201,16 +201,16 @@ func TestMetadataErrorCases(t *testing.T) {
 				logger:                logger,
 				metricGroupsToCollect: tt.metricGroupsToCollect,
 				mbs: &metadata.MetricsBuilders{
-					NodeMetricsBuilder:      metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings()),
-					PodMetricsBuilder:       metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings()),
-					ContainerMetricsBuilder: metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings()),
-					OtherMetricsBuilder:     metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings()),
+					NodeMetricsBuilder:      metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type)),
+					PodMetricsBuilder:       metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type)),
+					ContainerMetricsBuilder: metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type)),
+					OtherMetricsBuilder:     metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type)),
 				},
 			}
 
 			tt.testScenario(acc)
 
-			assert.Equal(t, tt.numMDs, len(acc.m))
+			assert.Len(t, acc.m, tt.numMDs)
 			require.Equal(t, tt.numLogs, logs.Len())
 			for i := 0; i < tt.numLogs; i++ {
 				assert.Equal(t, tt.logMessages[i], logs.All()[i].Message)
@@ -228,10 +228,10 @@ func TestNilHandling(t *testing.T) {
 			VolumeMetricGroup:    true,
 		},
 		mbs: &metadata.MetricsBuilders{
-			NodeMetricsBuilder:      metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings()),
-			PodMetricsBuilder:       metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings()),
-			ContainerMetricsBuilder: metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings()),
-			OtherMetricsBuilder:     metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopCreateSettings()),
+			NodeMetricsBuilder:      metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type)),
+			PodMetricsBuilder:       metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type)),
+			ContainerMetricsBuilder: metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type)),
+			OtherMetricsBuilder:     metadata.NewMetricsBuilder(metadata.DefaultMetricsBuilderConfig(), receivertest.NewNopSettings(metadata.Type)),
 		},
 	}
 	assert.NotPanics(t, func() {

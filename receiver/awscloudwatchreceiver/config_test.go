@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awscloudwatchreceiver/internal/metadata"
 )
@@ -87,7 +88,8 @@ func TestValidate(t *testing.T) {
 						AutodiscoverConfig: &AutodiscoverConfig{
 							Limit: -10000,
 						},
-					}},
+					},
+				},
 			},
 			expectedErr: errInvalidAutodiscoverLimit,
 		},
@@ -259,9 +261,9 @@ func TestLoadConfig(t *testing.T) {
 
 			loaded, err := cm.Sub(component.NewIDWithName(metadata.Type, tc.name).String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(loaded, cfg))
-			require.Equal(t, cfg, tc.expectedConfig)
-			require.NoError(t, component.ValidateConfig(cfg))
+			require.NoError(t, loaded.Unmarshal(cfg))
+			require.Equal(t, tc.expectedConfig, cfg)
+			require.NoError(t, xconfmap.Validate(cfg))
 		})
 	}
 }

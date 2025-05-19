@@ -13,40 +13,53 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-type testConfigCollection int
+type testDataSet int
 
 const (
-	testSetDefault testConfigCollection = iota
-	testSetAll
-	testSetNone
+	testDataSetDefault testDataSet = iota
+	testDataSetAll
+	testDataSetNone
 )
 
 func TestMetricsBuilder(t *testing.T) {
 	tests := []struct {
-		name      string
-		configSet testConfigCollection
+		name        string
+		metricsSet  testDataSet
+		resAttrsSet testDataSet
+		expectEmpty bool
 	}{
 		{
-			name:      "default",
-			configSet: testSetDefault,
+			name: "default",
 		},
 		{
-			name:      "all_set",
-			configSet: testSetAll,
+			name:        "all_set",
+			metricsSet:  testDataSetAll,
+			resAttrsSet: testDataSetAll,
 		},
 		{
-			name:      "none_set",
-			configSet: testSetNone,
+			name:        "none_set",
+			metricsSet:  testDataSetNone,
+			resAttrsSet: testDataSetNone,
+			expectEmpty: true,
+		},
+		{
+			name:        "filter_set_include",
+			resAttrsSet: testDataSetAll,
+		},
+		{
+			name:        "filter_set_exclude",
+			resAttrsSet: testDataSetAll,
+			expectEmpty: true,
 		},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			start := pcommon.Timestamp(1_000_000_000)
 			ts := pcommon.Timestamp(1_000_001_000)
 			observedZapCore, observedLogs := observer.New(zap.WarnLevel)
-			settings := receivertest.NewNopCreateSettings()
+			settings := receivertest.NewNopSettings(receivertest.NopType)
 			settings.Logger = zap.New(observedZapCore)
-			mb := NewMetricsBuilder(loadMetricsBuilderConfig(t, test.name), settings, WithStartTime(start))
+			mb := NewMetricsBuilder(loadMetricsBuilderConfig(t, tt.name), settings, WithStartTime(start))
 
 			expectedWarnings := 0
 
@@ -241,7 +254,7 @@ func TestMetricsBuilder(t *testing.T) {
 			res := rb.Emit()
 			metrics := mb.Emit(WithResource(res))
 
-			if test.configSet == testSetNone {
+			if tt.expectEmpty {
 				assert.Equal(t, 0, metrics.ResourceMetrics().Len())
 				return
 			}
@@ -251,10 +264,10 @@ func TestMetricsBuilder(t *testing.T) {
 			assert.Equal(t, res, rm.Resource())
 			assert.Equal(t, 1, rm.ScopeMetrics().Len())
 			ms := rm.ScopeMetrics().At(0).Metrics()
-			if test.configSet == testSetDefault {
+			if tt.metricsSet == testDataSetDefault {
 				assert.Equal(t, defaultMetricsCount, ms.Len())
 			}
-			if test.configSet == testSetAll {
+			if tt.metricsSet == testDataSetAll {
 				assert.Equal(t, allMetricsCount, ms.Len())
 			}
 			validatedMetrics := make(map[string]bool)
@@ -267,7 +280,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "Number of current alerts.", ms.At(i).Description())
 					assert.Equal(t, "{alerts}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -276,7 +289,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("rating")
 					assert.True(t, ok)
-					assert.EqualValues(t, "alert_rating-val", attrVal.Str())
+					assert.Equal(t, "alert_rating-val", attrVal.Str())
 				case "saphana.backup.latest":
 					assert.False(t, validatedMetrics["saphana.backup.latest"], "Found a duplicate in the metrics slice: saphana.backup.latest")
 					validatedMetrics["saphana.backup.latest"] = true
@@ -296,7 +309,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The memory used in all columns.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -305,10 +318,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "main", attrVal.Str())
+					assert.Equal(t, "main", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("subtype")
 					assert.True(t, ok)
-					assert.EqualValues(t, "data", attrVal.Str())
+					assert.Equal(t, "data", attrVal.Str())
 				case "saphana.component.memory.used":
 					assert.False(t, validatedMetrics["saphana.component.memory.used"], "Found a duplicate in the metrics slice: saphana.component.memory.used")
 					validatedMetrics["saphana.component.memory.used"] = true
@@ -316,7 +329,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The memory used in components.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -325,7 +338,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("component")
 					assert.True(t, ok)
-					assert.EqualValues(t, "component-val", attrVal.Str())
+					assert.Equal(t, "component-val", attrVal.Str())
 				case "saphana.connection.count":
 					assert.False(t, validatedMetrics["saphana.connection.count"], "Found a duplicate in the metrics slice: saphana.connection.count")
 					validatedMetrics["saphana.connection.count"] = true
@@ -333,7 +346,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of current connections.", ms.At(i).Description())
 					assert.Equal(t, "{connections}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -342,7 +355,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("status")
 					assert.True(t, ok)
-					assert.EqualValues(t, "running", attrVal.Str())
+					assert.Equal(t, "running", attrVal.Str())
 				case "saphana.cpu.used":
 					assert.False(t, validatedMetrics["saphana.cpu.used"], "Found a duplicate in the metrics slice: saphana.cpu.used")
 					validatedMetrics["saphana.cpu.used"] = true
@@ -350,7 +363,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "Total CPU time spent.", ms.At(i).Description())
 					assert.Equal(t, "ms", ms.At(i).Unit())
-					assert.Equal(t, true, ms.At(i).Sum().IsMonotonic())
+					assert.True(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -359,7 +372,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "user", attrVal.Str())
+					assert.Equal(t, "user", attrVal.Str())
 				case "saphana.disk.size.current":
 					assert.False(t, validatedMetrics["saphana.disk.size.current"], "Found a duplicate in the metrics slice: saphana.disk.size.current")
 					validatedMetrics["saphana.disk.size.current"] = true
@@ -367,7 +380,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The disk size.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -376,13 +389,13 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("path")
 					assert.True(t, ok)
-					assert.EqualValues(t, "path-val", attrVal.Str())
+					assert.Equal(t, "path-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("usage_type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "disk_usage_type-val", attrVal.Str())
+					assert.Equal(t, "disk_usage_type-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("state")
 					assert.True(t, ok)
-					assert.EqualValues(t, "used", attrVal.Str())
+					assert.Equal(t, "used", attrVal.Str())
 				case "saphana.host.memory.current":
 					assert.False(t, validatedMetrics["saphana.host.memory.current"], "Found a duplicate in the metrics slice: saphana.host.memory.current")
 					validatedMetrics["saphana.host.memory.current"] = true
@@ -390,7 +403,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The amount of physical memory on the host.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -399,7 +412,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("state")
 					assert.True(t, ok)
-					assert.EqualValues(t, "used", attrVal.Str())
+					assert.Equal(t, "used", attrVal.Str())
 				case "saphana.host.swap.current":
 					assert.False(t, validatedMetrics["saphana.host.swap.current"], "Found a duplicate in the metrics slice: saphana.host.swap.current")
 					validatedMetrics["saphana.host.swap.current"] = true
@@ -407,7 +420,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The amount of swap space on the host.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -416,7 +429,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("state")
 					assert.True(t, ok)
-					assert.EqualValues(t, "used", attrVal.Str())
+					assert.Equal(t, "used", attrVal.Str())
 				case "saphana.instance.code_size":
 					assert.False(t, validatedMetrics["saphana.instance.code_size"], "Found a duplicate in the metrics slice: saphana.instance.code_size")
 					validatedMetrics["saphana.instance.code_size"] = true
@@ -424,7 +437,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The instance code size, including shared libraries of SAP HANA processes.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -438,7 +451,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The size of the memory pool for all SAP HANA processes.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -447,7 +460,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("state")
 					assert.True(t, ok)
-					assert.EqualValues(t, "used", attrVal.Str())
+					assert.Equal(t, "used", attrVal.Str())
 				case "saphana.instance.memory.shared.allocated":
 					assert.False(t, validatedMetrics["saphana.instance.memory.shared.allocated"], "Found a duplicate in the metrics slice: saphana.instance.memory.shared.allocated")
 					validatedMetrics["saphana.instance.memory.shared.allocated"] = true
@@ -455,7 +468,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The shared memory size of SAP HANA processes.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -469,7 +482,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The peak memory from the memory pool used by SAP HANA processes since the instance started (this is a sample-based value).", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -490,10 +503,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("system")
 					assert.True(t, ok)
-					assert.EqualValues(t, "system-val", attrVal.Str())
+					assert.Equal(t, "system-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("product")
 					assert.True(t, ok)
-					assert.EqualValues(t, "product-val", attrVal.Str())
+					assert.Equal(t, "product-val", attrVal.Str())
 				case "saphana.license.limit":
 					assert.False(t, validatedMetrics["saphana.license.limit"], "Found a duplicate in the metrics slice: saphana.license.limit")
 					validatedMetrics["saphana.license.limit"] = true
@@ -501,7 +514,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The allowed product usage as specified by the license (for example, main memory).", ms.At(i).Description())
 					assert.Equal(t, "{licenses}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -510,10 +523,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("system")
 					assert.True(t, ok)
-					assert.EqualValues(t, "system-val", attrVal.Str())
+					assert.Equal(t, "system-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("product")
 					assert.True(t, ok)
-					assert.EqualValues(t, "product-val", attrVal.Str())
+					assert.Equal(t, "product-val", attrVal.Str())
 				case "saphana.license.peak":
 					assert.False(t, validatedMetrics["saphana.license.peak"], "Found a duplicate in the metrics slice: saphana.license.peak")
 					validatedMetrics["saphana.license.peak"] = true
@@ -521,7 +534,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The peak product usage value during last 13 months, measured periodically.", ms.At(i).Description())
 					assert.Equal(t, "{licenses}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -530,10 +543,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("system")
 					assert.True(t, ok)
-					assert.EqualValues(t, "system-val", attrVal.Str())
+					assert.Equal(t, "system-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("product")
 					assert.True(t, ok)
-					assert.EqualValues(t, "product-val", attrVal.Str())
+					assert.Equal(t, "product-val", attrVal.Str())
 				case "saphana.network.request.average_time":
 					assert.False(t, validatedMetrics["saphana.network.request.average_time"], "Found a duplicate in the metrics slice: saphana.network.request.average_time")
 					validatedMetrics["saphana.network.request.average_time"] = true
@@ -545,7 +558,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, start, dp.StartTimestamp())
 					assert.Equal(t, ts, dp.Timestamp())
 					assert.Equal(t, pmetric.NumberDataPointValueTypeDouble, dp.ValueType())
-					assert.Equal(t, float64(1), dp.DoubleValue())
+					assert.InDelta(t, float64(1), dp.DoubleValue(), 0.01)
 				case "saphana.network.request.count":
 					assert.False(t, validatedMetrics["saphana.network.request.count"], "Found a duplicate in the metrics slice: saphana.network.request.count")
 					validatedMetrics["saphana.network.request.count"] = true
@@ -553,7 +566,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of active and pending service requests.", ms.At(i).Description())
 					assert.Equal(t, "{requests}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -562,7 +575,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("state")
 					assert.True(t, ok)
-					assert.EqualValues(t, "active", attrVal.Str())
+					assert.Equal(t, "active", attrVal.Str())
 				case "saphana.network.request.finished.count":
 					assert.False(t, validatedMetrics["saphana.network.request.finished.count"], "Found a duplicate in the metrics slice: saphana.network.request.finished.count")
 					validatedMetrics["saphana.network.request.finished.count"] = true
@@ -570,7 +583,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of service requests that have completed.", ms.At(i).Description())
 					assert.Equal(t, "{requests}", ms.At(i).Unit())
-					assert.Equal(t, true, ms.At(i).Sum().IsMonotonic())
+					assert.True(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -579,7 +592,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "internal", attrVal.Str())
+					assert.Equal(t, "internal", attrVal.Str())
 				case "saphana.replication.average_time":
 					assert.False(t, validatedMetrics["saphana.replication.average_time"], "Found a duplicate in the metrics slice: saphana.replication.average_time")
 					validatedMetrics["saphana.replication.average_time"] = true
@@ -591,19 +604,19 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, start, dp.StartTimestamp())
 					assert.Equal(t, ts, dp.Timestamp())
 					assert.Equal(t, pmetric.NumberDataPointValueTypeDouble, dp.ValueType())
-					assert.Equal(t, float64(1), dp.DoubleValue())
+					assert.InDelta(t, float64(1), dp.DoubleValue(), 0.01)
 					attrVal, ok := dp.Attributes().Get("primary")
 					assert.True(t, ok)
-					assert.EqualValues(t, "primary_host-val", attrVal.Str())
+					assert.Equal(t, "primary_host-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("secondary")
 					assert.True(t, ok)
-					assert.EqualValues(t, "secondary_host-val", attrVal.Str())
+					assert.Equal(t, "secondary_host-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("port")
 					assert.True(t, ok)
-					assert.EqualValues(t, "port-val", attrVal.Str())
+					assert.Equal(t, "port-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("mode")
 					assert.True(t, ok)
-					assert.EqualValues(t, "replication_mode-val", attrVal.Str())
+					assert.Equal(t, "replication_mode-val", attrVal.Str())
 				case "saphana.replication.backlog.size":
 					assert.False(t, validatedMetrics["saphana.replication.backlog.size"], "Found a duplicate in the metrics slice: saphana.replication.backlog.size")
 					validatedMetrics["saphana.replication.backlog.size"] = true
@@ -611,7 +624,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The current replication backlog size.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -620,16 +633,16 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("primary")
 					assert.True(t, ok)
-					assert.EqualValues(t, "primary_host-val", attrVal.Str())
+					assert.Equal(t, "primary_host-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("secondary")
 					assert.True(t, ok)
-					assert.EqualValues(t, "secondary_host-val", attrVal.Str())
+					assert.Equal(t, "secondary_host-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("port")
 					assert.True(t, ok)
-					assert.EqualValues(t, "port-val", attrVal.Str())
+					assert.Equal(t, "port-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("mode")
 					assert.True(t, ok)
-					assert.EqualValues(t, "replication_mode-val", attrVal.Str())
+					assert.Equal(t, "replication_mode-val", attrVal.Str())
 				case "saphana.replication.backlog.time":
 					assert.False(t, validatedMetrics["saphana.replication.backlog.time"], "Found a duplicate in the metrics slice: saphana.replication.backlog.time")
 					validatedMetrics["saphana.replication.backlog.time"] = true
@@ -637,7 +650,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The current replication backlog.", ms.At(i).Description())
 					assert.Equal(t, "us", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -646,16 +659,16 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("primary")
 					assert.True(t, ok)
-					assert.EqualValues(t, "primary_host-val", attrVal.Str())
+					assert.Equal(t, "primary_host-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("secondary")
 					assert.True(t, ok)
-					assert.EqualValues(t, "secondary_host-val", attrVal.Str())
+					assert.Equal(t, "secondary_host-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("port")
 					assert.True(t, ok)
-					assert.EqualValues(t, "port-val", attrVal.Str())
+					assert.Equal(t, "port-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("mode")
 					assert.True(t, ok)
-					assert.EqualValues(t, "replication_mode-val", attrVal.Str())
+					assert.Equal(t, "replication_mode-val", attrVal.Str())
 				case "saphana.row_store.memory.used":
 					assert.False(t, validatedMetrics["saphana.row_store.memory.used"], "Found a duplicate in the metrics slice: saphana.row_store.memory.used")
 					validatedMetrics["saphana.row_store.memory.used"] = true
@@ -663,7 +676,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The used memory for all row tables.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -672,7 +685,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "fixed", attrVal.Str())
+					assert.Equal(t, "fixed", attrVal.Str())
 				case "saphana.schema.memory.used.current":
 					assert.False(t, validatedMetrics["saphana.schema.memory.used.current"], "Found a duplicate in the metrics slice: saphana.schema.memory.used.current")
 					validatedMetrics["saphana.schema.memory.used.current"] = true
@@ -680,7 +693,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The memory size for all tables in schema.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -689,10 +702,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("schema")
 					assert.True(t, ok)
-					assert.EqualValues(t, "schema-val", attrVal.Str())
+					assert.Equal(t, "schema-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "main", attrVal.Str())
+					assert.Equal(t, "main", attrVal.Str())
 				case "saphana.schema.memory.used.max":
 					assert.False(t, validatedMetrics["saphana.schema.memory.used.max"], "Found a duplicate in the metrics slice: saphana.schema.memory.used.max")
 					validatedMetrics["saphana.schema.memory.used.max"] = true
@@ -700,7 +713,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The estimated maximum memory consumption for all fully loaded tables in schema (data for open transactions is not included).", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -709,7 +722,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("schema")
 					assert.True(t, ok)
-					assert.EqualValues(t, "schema-val", attrVal.Str())
+					assert.Equal(t, "schema-val", attrVal.Str())
 				case "saphana.schema.operation.count":
 					assert.False(t, validatedMetrics["saphana.schema.operation.count"], "Found a duplicate in the metrics slice: saphana.schema.operation.count")
 					validatedMetrics["saphana.schema.operation.count"] = true
@@ -717,7 +730,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of operations done on all tables in schema.", ms.At(i).Description())
 					assert.Equal(t, "{operations}", ms.At(i).Unit())
-					assert.Equal(t, true, ms.At(i).Sum().IsMonotonic())
+					assert.True(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -726,10 +739,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("schema")
 					assert.True(t, ok)
-					assert.EqualValues(t, "schema-val", attrVal.Str())
+					assert.Equal(t, "schema-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "read", attrVal.Str())
+					assert.Equal(t, "read", attrVal.Str())
 				case "saphana.schema.record.compressed.count":
 					assert.False(t, validatedMetrics["saphana.schema.record.compressed.count"], "Found a duplicate in the metrics slice: saphana.schema.record.compressed.count")
 					validatedMetrics["saphana.schema.record.compressed.count"] = true
@@ -737,7 +750,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of entries in main during the last optimize compression run for all tables in schema.", ms.At(i).Description())
 					assert.Equal(t, "{records}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -746,7 +759,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("schema")
 					assert.True(t, ok)
-					assert.EqualValues(t, "schema-val", attrVal.Str())
+					assert.Equal(t, "schema-val", attrVal.Str())
 				case "saphana.schema.record.count":
 					assert.False(t, validatedMetrics["saphana.schema.record.count"], "Found a duplicate in the metrics slice: saphana.schema.record.count")
 					validatedMetrics["saphana.schema.record.count"] = true
@@ -754,7 +767,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of records for all tables in schema.", ms.At(i).Description())
 					assert.Equal(t, "{records}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -763,10 +776,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("schema")
 					assert.True(t, ok)
-					assert.EqualValues(t, "schema-val", attrVal.Str())
+					assert.Equal(t, "schema-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "main", attrVal.Str())
+					assert.Equal(t, "main", attrVal.Str())
 				case "saphana.service.code_size":
 					assert.False(t, validatedMetrics["saphana.service.code_size"], "Found a duplicate in the metrics slice: saphana.service.code_size")
 					validatedMetrics["saphana.service.code_size"] = true
@@ -774,7 +787,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The service code size, including shared libraries.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -783,7 +796,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("service")
 					assert.True(t, ok)
-					assert.EqualValues(t, "service-val", attrVal.Str())
+					assert.Equal(t, "service-val", attrVal.Str())
 				case "saphana.service.count":
 					assert.False(t, validatedMetrics["saphana.service.count"], "Found a duplicate in the metrics slice: saphana.service.count")
 					validatedMetrics["saphana.service.count"] = true
@@ -791,7 +804,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of services in a given status.", ms.At(i).Description())
 					assert.Equal(t, "{services}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -800,7 +813,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("status")
 					assert.True(t, ok)
-					assert.EqualValues(t, "active", attrVal.Str())
+					assert.Equal(t, "active", attrVal.Str())
 				case "saphana.service.memory.compactors.allocated":
 					assert.False(t, validatedMetrics["saphana.service.memory.compactors.allocated"], "Found a duplicate in the metrics slice: saphana.service.memory.compactors.allocated")
 					validatedMetrics["saphana.service.memory.compactors.allocated"] = true
@@ -808,7 +821,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The part of the memory pool that can potentially (if unpinned) be freed during a memory shortage.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -817,7 +830,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("service")
 					assert.True(t, ok)
-					assert.EqualValues(t, "service-val", attrVal.Str())
+					assert.Equal(t, "service-val", attrVal.Str())
 				case "saphana.service.memory.compactors.freeable":
 					assert.False(t, validatedMetrics["saphana.service.memory.compactors.freeable"], "Found a duplicate in the metrics slice: saphana.service.memory.compactors.freeable")
 					validatedMetrics["saphana.service.memory.compactors.freeable"] = true
@@ -825,7 +838,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The memory that can be freed during a memory shortage.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -834,7 +847,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("service")
 					assert.True(t, ok)
-					assert.EqualValues(t, "service-val", attrVal.Str())
+					assert.Equal(t, "service-val", attrVal.Str())
 				case "saphana.service.memory.effective_limit":
 					assert.False(t, validatedMetrics["saphana.service.memory.effective_limit"], "Found a duplicate in the metrics slice: saphana.service.memory.effective_limit")
 					validatedMetrics["saphana.service.memory.effective_limit"] = true
@@ -842,7 +855,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The effective maximum memory pool size, calculated considering the pool sizes of other processes.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -851,7 +864,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("service")
 					assert.True(t, ok)
-					assert.EqualValues(t, "service-val", attrVal.Str())
+					assert.Equal(t, "service-val", attrVal.Str())
 				case "saphana.service.memory.heap.current":
 					assert.False(t, validatedMetrics["saphana.service.memory.heap.current"], "Found a duplicate in the metrics slice: saphana.service.memory.heap.current")
 					validatedMetrics["saphana.service.memory.heap.current"] = true
@@ -859,7 +872,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The size of the heap portion of the memory pool.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -868,10 +881,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("service")
 					assert.True(t, ok)
-					assert.EqualValues(t, "service-val", attrVal.Str())
+					assert.Equal(t, "service-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("state")
 					assert.True(t, ok)
-					assert.EqualValues(t, "used", attrVal.Str())
+					assert.Equal(t, "used", attrVal.Str())
 				case "saphana.service.memory.limit":
 					assert.False(t, validatedMetrics["saphana.service.memory.limit"], "Found a duplicate in the metrics slice: saphana.service.memory.limit")
 					validatedMetrics["saphana.service.memory.limit"] = true
@@ -879,7 +892,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The configured maximum memory pool size.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -888,7 +901,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("service")
 					assert.True(t, ok)
-					assert.EqualValues(t, "service-val", attrVal.Str())
+					assert.Equal(t, "service-val", attrVal.Str())
 				case "saphana.service.memory.shared.current":
 					assert.False(t, validatedMetrics["saphana.service.memory.shared.current"], "Found a duplicate in the metrics slice: saphana.service.memory.shared.current")
 					validatedMetrics["saphana.service.memory.shared.current"] = true
@@ -896,7 +909,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The size of the shared portion of the memory pool.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -905,10 +918,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("service")
 					assert.True(t, ok)
-					assert.EqualValues(t, "service-val", attrVal.Str())
+					assert.Equal(t, "service-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("state")
 					assert.True(t, ok)
-					assert.EqualValues(t, "used", attrVal.Str())
+					assert.Equal(t, "used", attrVal.Str())
 				case "saphana.service.memory.used":
 					assert.False(t, validatedMetrics["saphana.service.memory.used"], "Found a duplicate in the metrics slice: saphana.service.memory.used")
 					validatedMetrics["saphana.service.memory.used"] = true
@@ -916,7 +929,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The used memory from the operating system perspective.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -925,10 +938,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("service")
 					assert.True(t, ok)
-					assert.EqualValues(t, "service-val", attrVal.Str())
+					assert.Equal(t, "service-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "logical", attrVal.Str())
+					assert.Equal(t, "logical", attrVal.Str())
 				case "saphana.service.stack_size":
 					assert.False(t, validatedMetrics["saphana.service.stack_size"], "Found a duplicate in the metrics slice: saphana.service.stack_size")
 					validatedMetrics["saphana.service.stack_size"] = true
@@ -936,7 +949,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The service stack size.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -945,7 +958,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("service")
 					assert.True(t, ok)
-					assert.EqualValues(t, "service-val", attrVal.Str())
+					assert.Equal(t, "service-val", attrVal.Str())
 				case "saphana.service.thread.count":
 					assert.False(t, validatedMetrics["saphana.service.thread.count"], "Found a duplicate in the metrics slice: saphana.service.thread.count")
 					validatedMetrics["saphana.service.thread.count"] = true
@@ -953,7 +966,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of service threads in a given status.", ms.At(i).Description())
 					assert.Equal(t, "{threads}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -962,7 +975,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("status")
 					assert.True(t, ok)
-					assert.EqualValues(t, "active", attrVal.Str())
+					assert.Equal(t, "active", attrVal.Str())
 				case "saphana.transaction.blocked":
 					assert.False(t, validatedMetrics["saphana.transaction.blocked"], "Found a duplicate in the metrics slice: saphana.transaction.blocked")
 					validatedMetrics["saphana.transaction.blocked"] = true
@@ -970,7 +983,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of transactions waiting for a lock.", ms.At(i).Description())
 					assert.Equal(t, "{transactions}", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -984,7 +997,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of transactions.", ms.At(i).Description())
 					assert.Equal(t, "{transactions}", ms.At(i).Unit())
-					assert.Equal(t, true, ms.At(i).Sum().IsMonotonic())
+					assert.True(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -993,7 +1006,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "update", attrVal.Str())
+					assert.Equal(t, "update", attrVal.Str())
 				case "saphana.uptime":
 					assert.False(t, validatedMetrics["saphana.uptime"], "Found a duplicate in the metrics slice: saphana.uptime")
 					validatedMetrics["saphana.uptime"] = true
@@ -1001,7 +1014,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The uptime of the database.", ms.At(i).Description())
 					assert.Equal(t, "s", ms.At(i).Unit())
-					assert.Equal(t, false, ms.At(i).Sum().IsMonotonic())
+					assert.False(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -1010,10 +1023,10 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("system")
 					assert.True(t, ok)
-					assert.EqualValues(t, "system-val", attrVal.Str())
+					assert.Equal(t, "system-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("database")
 					assert.True(t, ok)
-					assert.EqualValues(t, "database-val", attrVal.Str())
+					assert.Equal(t, "database-val", attrVal.Str())
 				case "saphana.volume.operation.count":
 					assert.False(t, validatedMetrics["saphana.volume.operation.count"], "Found a duplicate in the metrics slice: saphana.volume.operation.count")
 					validatedMetrics["saphana.volume.operation.count"] = true
@@ -1021,7 +1034,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The number of operations executed.", ms.At(i).Description())
 					assert.Equal(t, "{operations}", ms.At(i).Unit())
-					assert.Equal(t, true, ms.At(i).Sum().IsMonotonic())
+					assert.True(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -1030,13 +1043,13 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("path")
 					assert.True(t, ok)
-					assert.EqualValues(t, "path-val", attrVal.Str())
+					assert.Equal(t, "path-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("usage_type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "disk_usage_type-val", attrVal.Str())
+					assert.Equal(t, "disk_usage_type-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "read", attrVal.Str())
+					assert.Equal(t, "read", attrVal.Str())
 				case "saphana.volume.operation.size":
 					assert.False(t, validatedMetrics["saphana.volume.operation.size"], "Found a duplicate in the metrics slice: saphana.volume.operation.size")
 					validatedMetrics["saphana.volume.operation.size"] = true
@@ -1044,7 +1057,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The size of operations executed.", ms.At(i).Description())
 					assert.Equal(t, "By", ms.At(i).Unit())
-					assert.Equal(t, true, ms.At(i).Sum().IsMonotonic())
+					assert.True(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -1053,13 +1066,13 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("path")
 					assert.True(t, ok)
-					assert.EqualValues(t, "path-val", attrVal.Str())
+					assert.Equal(t, "path-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("usage_type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "disk_usage_type-val", attrVal.Str())
+					assert.Equal(t, "disk_usage_type-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "read", attrVal.Str())
+					assert.Equal(t, "read", attrVal.Str())
 				case "saphana.volume.operation.time":
 					assert.False(t, validatedMetrics["saphana.volume.operation.time"], "Found a duplicate in the metrics slice: saphana.volume.operation.time")
 					validatedMetrics["saphana.volume.operation.time"] = true
@@ -1067,7 +1080,7 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, 1, ms.At(i).Sum().DataPoints().Len())
 					assert.Equal(t, "The time spent executing operations.", ms.At(i).Description())
 					assert.Equal(t, "ms", ms.At(i).Unit())
-					assert.Equal(t, true, ms.At(i).Sum().IsMonotonic())
+					assert.True(t, ms.At(i).Sum().IsMonotonic())
 					assert.Equal(t, pmetric.AggregationTemporalityCumulative, ms.At(i).Sum().AggregationTemporality())
 					dp := ms.At(i).Sum().DataPoints().At(0)
 					assert.Equal(t, start, dp.StartTimestamp())
@@ -1076,13 +1089,13 @@ func TestMetricsBuilder(t *testing.T) {
 					assert.Equal(t, int64(1), dp.IntValue())
 					attrVal, ok := dp.Attributes().Get("path")
 					assert.True(t, ok)
-					assert.EqualValues(t, "path-val", attrVal.Str())
+					assert.Equal(t, "path-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("usage_type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "disk_usage_type-val", attrVal.Str())
+					assert.Equal(t, "disk_usage_type-val", attrVal.Str())
 					attrVal, ok = dp.Attributes().Get("type")
 					assert.True(t, ok)
-					assert.EqualValues(t, "read", attrVal.Str())
+					assert.Equal(t, "read", attrVal.Str())
 				}
 			}
 		})

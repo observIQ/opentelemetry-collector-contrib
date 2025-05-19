@@ -17,7 +17,7 @@ import (
 // This file implements factory for Zipkin receiver.
 
 const (
-	defaultBindEndpoint = "0.0.0.0:9411"
+	defaultHTTPEndpoint = "localhost:9411"
 )
 
 // NewFactory creates a new Zipkin receiver factory
@@ -32,8 +32,8 @@ func NewFactory() receiver.Factory {
 // createDefaultConfig creates the default configuration for Zipkin receiver.
 func createDefaultConfig() component.Config {
 	return &Config{
-		HTTPServerSettings: confighttp.HTTPServerSettings{
-			Endpoint: defaultBindEndpoint,
+		ServerConfig: confighttp.ServerConfig{
+			Endpoint: defaultHTTPEndpoint,
 		},
 		ParseStringTags: false,
 	}
@@ -42,7 +42,7 @@ func createDefaultConfig() component.Config {
 // createTracesReceiver creates a trace receiver based on provided config.
 func createTracesReceiver(
 	_ context.Context,
-	set receiver.CreateSettings,
+	set receiver.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Traces,
 ) (receiver.Traces, error) {

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build linux
-// +build linux
 
 package pagingscraper // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/pagingscraper"
 
@@ -45,7 +44,6 @@ func parseSwapsFile(r io.Reader) ([]*pageFileStats, error) {
 			return nil, fmt.Errorf("couldn't read file %q: %w", swapsFilePath, err)
 		}
 		return nil, fmt.Errorf("unexpected end-of-file in %q", swapsFilePath)
-
 	}
 
 	// Check header headerFields are as expected

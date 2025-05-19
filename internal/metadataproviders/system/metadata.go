@@ -12,9 +12,11 @@ import (
 	"strings"
 
 	"github.com/Showmax/go-fqdn"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/host"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
+	conventions "go.opentelemetry.io/otel/semconv/v1.27.0"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/metadataproviders/internal"
 )
@@ -52,6 +54,9 @@ type Provider interface {
 	// OSType returns the host operating system
 	OSType() (string, error)
 
+	// OSVersion returns the version of the operating system
+	OSVersion() (string, error)
+
 	// LookupCNAME returns the canonical name for the current host
 	LookupCNAME() (string, error)
 
@@ -69,6 +74,9 @@ type Provider interface {
 
 	// HostMACs returns the host's MAC addresses
 	HostMACs() ([]net.HardwareAddr, error)
+
+	// CPUInfo returns the host's CPU info
+	CPUInfo(ctx context.Context) ([]cpu.InfoStat, error)
 }
 
 type systemMetadataProvider struct {
@@ -84,12 +92,20 @@ func (systemMetadataProvider) OSType() (string, error) {
 	return internal.GOOSToOSType(runtime.GOOS), nil
 }
 
+func (systemMetadataProvider) OSVersion() (string, error) {
+	info, err := host.Info()
+	if err != nil {
+		return "", fmt.Errorf("OSVersion failed to get os version: %w", err)
+	}
+	return info.PlatformVersion, nil
+}
+
 func (systemMetadataProvider) FQDN() (string, error) {
 	return fqdn.FqdnHostname()
 }
 
 func (p systemMetadataProvider) Hostname() (string, error) {
-	return p.nameInfoProvider.osHostname()
+	return p.osHostname()
 }
 
 func (p systemMetadataProvider) LookupCNAME() (string, error) {
@@ -97,7 +113,7 @@ func (p systemMetadataProvider) LookupCNAME() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("LookupCNAME failed to get hostname: %w", err)
 	}
-	cname, err := p.nameInfoProvider.lookupCNAME(hostname)
+	cname, err := p.lookupCNAME(hostname)
 	if err != nil {
 		return "", fmt.Errorf("LookupCNAME failed to get CNAME: %w", err)
 	}
@@ -113,7 +129,7 @@ func (p systemMetadataProvider) ReverseLookupHost() (string, error) {
 }
 
 func (p systemMetadataProvider) hostnameToDomainName(hostname string) (string, error) {
-	ipAddresses, err := p.nameInfoProvider.lookupHost(hostname)
+	ipAddresses, err := p.lookupHost(hostname)
 	if err != nil {
 		return "", fmt.Errorf("hostnameToDomainName failed to convert hostname to IP addresses: %w", err)
 	}
@@ -124,7 +140,7 @@ func (p systemMetadataProvider) reverseLookup(ipAddresses []string) (string, err
 	var err error
 	for _, ip := range ipAddresses {
 		var names []string
-		names, err = p.nameInfoProvider.lookupAddr(ip)
+		names, err = p.lookupAddr(ip)
 		if err != nil {
 			continue
 		}
@@ -155,11 +171,11 @@ func (p systemMetadataProvider) fromOption(ctx context.Context, opt resource.Opt
 }
 
 func (p systemMetadataProvider) HostID(ctx context.Context) (string, error) {
-	return p.fromOption(ctx, resource.WithHostID(), conventions.AttributeHostID)
+	return p.fromOption(ctx, resource.WithHostID(), string(conventions.HostIDKey))
 }
 
 func (p systemMetadataProvider) OSDescription(ctx context.Context) (string, error) {
-	return p.fromOption(ctx, resource.WithOSDescription(), conventions.AttributeOSDescription)
+	return p.fromOption(ctx, resource.WithOSDescription(), string(conventions.OSDescriptionKey))
 }
 
 func (systemMetadataProvider) HostArch() (string, error) {
@@ -195,7 +211,6 @@ func (p systemMetadataProvider) HostIPs() (ips []net.IP, err error) {
 
 			ips = append(ips, ip)
 		}
-
 	}
 	return ips, err
 }
@@ -215,4 +230,8 @@ func (p systemMetadataProvider) HostMACs() (macs []net.HardwareAddr, err error) 
 		macs = append(macs, iface.HardwareAddr)
 	}
 	return macs, err
+}
+
+func (p systemMetadataProvider) CPUInfo(ctx context.Context) ([]cpu.InfoStat, error) {
+	return cpu.InfoWithContext(ctx)
 }

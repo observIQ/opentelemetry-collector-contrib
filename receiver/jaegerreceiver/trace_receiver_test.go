@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
-	"github.com/jaegertracing/jaeger/model"
-	"github.com/jaegertracing/jaeger/proto-gen/api_v2"
-	jaegerthrift "github.com/jaegertracing/jaeger/thrift-gen/jaeger"
+	"github.com/jaegertracing/jaeger-idl/model/v1"
+	"github.com/jaegertracing/jaeger-idl/proto-gen/api_v2"
+	jaegerthrift "github.com/jaegertracing/jaeger-idl/thrift-gen/jaeger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
@@ -32,20 +32,21 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	conventions "go.opentelemetry.io/otel/semconv/v1.27.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/jaeger"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver/internal/metadata"
 )
 
-var jaegerReceiver = component.NewIDWithName("jaeger", "receiver_test")
+var jaegerReceiver = component.MustNewIDWithName("jaeger", "receiver_test")
 
 func TestTraceSource(t *testing.T) {
-	set := receivertest.NewNopCreateSettings()
-	jr, err := newJaegerReceiver(jaegerReceiver, &configuration{}, nil, set)
+	set := receivertest.NewNopSettings(metadata.Type)
+	jr, err := newJaegerReceiver(jaegerReceiver, Protocols{}, nil, set)
 	require.NoError(t, err)
 	require.NotNil(t, jr)
 }
@@ -55,7 +56,7 @@ func jaegerBatchToHTTPBody(b *jaegerthrift.Batch) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := httptest.NewRequest("POST", "/api/traces", bytes.NewReader(body))
+	r := httptest.NewRequest(http.MethodPost, "/api/traces", bytes.NewReader(body))
 	r.Header.Add("content-type", "application/x-thrift")
 	return r, nil
 }
@@ -77,14 +78,14 @@ func TestThriftHTTPBodyDecode(t *testing.T) {
 func TestReception(t *testing.T) {
 	addr := testutil.GetAvailableLocalAddress(t)
 	// 1. Create the Jaeger receiver aka "server"
-	config := &configuration{
-		CollectorHTTPSettings: confighttp.HTTPServerSettings{
+	config := Protocols{
+		ThriftHTTP: &confighttp.ServerConfig{
 			Endpoint: addr,
 		},
 	}
 	sink := new(consumertest.TracesSink)
 
-	set := receivertest.NewNopCreateSettings()
+	set := receivertest.NewNopSettings(metadata.Type)
 	jr, err := newJaegerReceiver(jaegerReceiver, config, sink, set)
 	require.NoError(t, err)
 
@@ -95,8 +96,7 @@ func TestReception(t *testing.T) {
 	_, port, _ := net.SplitHostPort(addr)
 	collectorAddr := fmt.Sprintf("http://localhost:%s/api/traces", port)
 	td := generateTraceData()
-	batches, err := jaeger.ProtoFromTraces(td)
-	require.NoError(t, err)
+	batches := jaeger.ProtoFromTraces(td)
 	for _, batch := range batches {
 		require.NoError(t, sendToCollector(collectorAddr, modelToThrift(batch)))
 	}
@@ -104,18 +104,18 @@ func TestReception(t *testing.T) {
 	assert.NoError(t, err, "should not have failed to create the Jaeger OpenCensus exporter")
 
 	gotTraces := sink.AllTraces()
-	assert.Equal(t, 1, len(gotTraces))
+	assert.Len(t, gotTraces, 1)
 
-	assert.EqualValues(t, td, gotTraces[0])
+	assert.Equal(t, td, gotTraces[0])
 }
 
 func TestPortsNotOpen(t *testing.T) {
 	// an empty config should result in no open ports
-	config := &configuration{}
+	config := Protocols{}
 
 	sink := new(consumertest.TracesSink)
 
-	set := receivertest.NewNopCreateSettings()
+	set := receivertest.NewNopSettings(metadata.Type)
 	jr, err := newJaegerReceiver(jaegerReceiver, config, sink, set)
 	require.NoError(t, err)
 
@@ -140,24 +140,24 @@ func TestPortsNotOpen(t *testing.T) {
 
 func TestGRPCReception(t *testing.T) {
 	// prepare
-	config := &configuration{
-		CollectorGRPCServerSettings: configgrpc.GRPCServerSettings{
-			NetAddr: confignet.NetAddr{
+	config := Protocols{
+		GRPC: &configgrpc.ServerConfig{
+			NetAddr: confignet.AddrConfig{
 				Endpoint:  testutil.GetAvailableLocalAddress(t),
-				Transport: "tcp",
+				Transport: confignet.TransportTypeTCP,
 			},
 		},
 	}
 	sink := new(consumertest.TracesSink)
 
-	set := receivertest.NewNopCreateSettings()
+	set := receivertest.NewNopSettings(metadata.Type)
 	jr, err := newJaegerReceiver(jaegerReceiver, config, sink, set)
 	require.NoError(t, err)
 
 	require.NoError(t, jr.Start(context.Background(), componenttest.NewNopHost()))
 	t.Cleanup(func() { require.NoError(t, jr.Shutdown(context.Background())) })
 
-	conn, err := grpc.Dial(config.CollectorGRPCServerSettings.NetAddr.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.NewClient(config.GRPC.NetAddr.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -178,37 +178,37 @@ func TestGRPCReception(t *testing.T) {
 	assert.NotNil(t, resp, "response should not have been nil")
 
 	gotTraces := sink.AllTraces()
-	assert.Equal(t, 1, len(gotTraces))
+	assert.Len(t, gotTraces, 1)
 	want := expectedTraceData(now, nowPlus10min, nowPlus10min2sec)
 
 	assert.Len(t, req.Batch.Spans, want.SpanCount(), "got a conflicting amount of spans")
 
-	assert.EqualValues(t, want, gotTraces[0])
+	assert.Equal(t, want, gotTraces[0])
 }
 
 func TestGRPCReceptionWithTLS(t *testing.T) {
 	// prepare
-	tlsCreds := &configtls.TLSServerSetting{
-		TLSSetting: configtls.TLSSetting{
+	tlsCreds := &configtls.ServerConfig{
+		Config: configtls.Config{
 			CertFile: filepath.Join("testdata", "server.crt"),
 			KeyFile:  filepath.Join("testdata", "server.key"),
 		},
 	}
 
-	grpcServerSettings := configgrpc.GRPCServerSettings{
-		NetAddr: confignet.NetAddr{
+	grpcServerSettings := &configgrpc.ServerConfig{
+		NetAddr: confignet.AddrConfig{
 			Endpoint:  testutil.GetAvailableLocalAddress(t),
-			Transport: "tcp",
+			Transport: confignet.TransportTypeTCP,
 		},
 		TLSSetting: tlsCreds,
 	}
 
-	config := &configuration{
-		CollectorGRPCServerSettings: grpcServerSettings,
+	config := Protocols{
+		GRPC: grpcServerSettings,
 	}
 	sink := new(consumertest.TracesSink)
 
-	set := receivertest.NewNopCreateSettings()
+	set := receivertest.NewNopSettings(metadata.Type)
 	jr, err := newJaegerReceiver(jaegerReceiver, config, sink, set)
 	require.NoError(t, err)
 
@@ -217,7 +217,7 @@ func TestGRPCReceptionWithTLS(t *testing.T) {
 
 	creds, err := credentials.NewClientTLSFromFile(filepath.Join("testdata", "server.crt"), "localhost")
 	require.NoError(t, err)
-	conn, err := grpc.Dial(grpcServerSettings.NetAddr.Endpoint, grpc.WithTransportCredentials(creds), grpc.WithBlock())
+	conn, err := grpc.NewClient(grpcServerSettings.NetAddr.Endpoint, grpc.WithTransportCredentials(creds))
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -238,11 +238,11 @@ func TestGRPCReceptionWithTLS(t *testing.T) {
 	assert.NotNil(t, resp, "response should not have been nil")
 
 	gotTraces := sink.AllTraces()
-	assert.Equal(t, 1, len(gotTraces))
+	assert.Len(t, gotTraces, 1)
 	want := expectedTraceData(now, nowPlus10min, nowPlus10min2sec)
 
 	assert.Len(t, req.Batch.Spans, want.SpanCount(), "got a conflicting amount of spans")
-	assert.EqualValues(t, want, gotTraces[0])
+	assert.Equal(t, want, gotTraces[0])
 }
 
 func expectedTraceData(t1, t2, t3 time.Time) ptrace.Traces {
@@ -253,7 +253,7 @@ func expectedTraceData(t1, t2, t3 time.Time) ptrace.Traces {
 
 	traces := ptrace.NewTraces()
 	rs := traces.ResourceSpans().AppendEmpty()
-	rs.Resource().Attributes().PutStr(conventions.AttributeServiceName, "issaTest")
+	rs.Resource().Attributes().PutStr(string(conventions.ServiceNameKey), "issaTest")
 	rs.Resource().Attributes().PutBool("bool", true)
 	rs.Resource().Attributes().PutStr("string", "yes")
 	rs.Resource().Attributes().PutInt("int64", 10000000)
@@ -306,8 +306,8 @@ func grpcFixture(t *testing.T, t1 time.Time, d1, d2 time.Duration) *api_v2.PostS
 					StartTime:     t1,
 					Duration:      d1,
 					Tags: []model.KeyValue{
-						model.String(conventions.OtelStatusDescription, "Stale indices"),
-						model.Int64(conventions.OtelStatusCode, int64(ptrace.StatusCodeError)),
+						model.String(string(conventions.OTelStatusDescriptionKey), "Stale indices"),
+						model.Int64(string(conventions.OTelStatusCodeKey), int64(ptrace.StatusCodeError)),
 						model.Bool("error", true),
 					},
 					References: []model.SpanRef{
@@ -325,8 +325,8 @@ func grpcFixture(t *testing.T, t1 time.Time, d1, d2 time.Duration) *api_v2.PostS
 					StartTime:     t1.Add(d1),
 					Duration:      d2,
 					Tags: []model.KeyValue{
-						model.String(conventions.OtelStatusDescription, "Frontend crash"),
-						model.Int64(conventions.OtelStatusCode, int64(ptrace.StatusCodeError)),
+						model.String(string(conventions.OTelStatusDescriptionKey), "Frontend crash"),
+						model.Int64(string(conventions.OTelStatusCodeKey), int64(ptrace.StatusCodeError)),
 						model.Bool("error", true),
 					},
 				},
@@ -336,22 +336,22 @@ func grpcFixture(t *testing.T, t1 time.Time, d1, d2 time.Duration) *api_v2.PostS
 }
 
 func TestSampling(t *testing.T) {
-	config := &configuration{
-		CollectorGRPCServerSettings: configgrpc.GRPCServerSettings{NetAddr: confignet.NetAddr{
+	config := Protocols{
+		GRPC: &configgrpc.ServerConfig{NetAddr: confignet.AddrConfig{
 			Endpoint:  testutil.GetAvailableLocalAddress(t),
-			Transport: "tcp",
+			Transport: confignet.TransportTypeTCP,
 		}},
 	}
 	sink := new(consumertest.TracesSink)
 
-	set := receivertest.NewNopCreateSettings()
+	set := receivertest.NewNopSettings(metadata.Type)
 	jr, err := newJaegerReceiver(jaegerReceiver, config, sink, set)
 	require.NoError(t, err)
 
 	require.NoError(t, jr.Start(context.Background(), componenttest.NewNopHost()))
 	t.Cleanup(func() { require.NoError(t, jr.Shutdown(context.Background())) })
 
-	conn, err := grpc.Dial(config.CollectorGRPCServerSettings.NetAddr.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(config.GRPC.NetAddr.Endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	assert.NoError(t, err)
 	defer conn.Close()
 
@@ -389,7 +389,7 @@ func sendToCollector(endpoint string, batch *jaegerthrift.Batch) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(buf))
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(buf))
 	if err != nil {
 		return err
 	}

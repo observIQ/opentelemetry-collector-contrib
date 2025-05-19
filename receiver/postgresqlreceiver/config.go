@@ -7,11 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/config/configtls"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 	"go.uber.org/multierr"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/postgresqlreceiver/internal/metadata"
@@ -26,15 +27,36 @@ const (
 	ErrHostPort            = "invalid config: 'endpoint' must be in the form <host>:<port> no matter what 'transport' is configured"
 )
 
+type TopQueryCollection struct {
+	Enabled         bool  `mapstructure:"enabled"`
+	MaxRowsPerQuery int64 `mapstructure:"max_rows_per_query"`
+	TopNQuery       int64 `mapstructure:"top_n_query"`
+}
+
+type QuerySampleCollection struct {
+	Enabled         bool  `mapstructure:"enabled"`
+	MaxRowsPerQuery int64 `mapstructure:"max_rows_per_query"`
+}
+
 type Config struct {
-	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
-	Username                                string                         `mapstructure:"username"`
-	Password                                configopaque.String            `mapstructure:"password"`
-	Databases                               []string                       `mapstructure:"databases"`
-	ExcludeDatabases                        []string                       `mapstructure:"exclude_databases"`
-	confignet.NetAddr                       `mapstructure:",squash"`       // provides Endpoint and Transport
-	configtls.TLSClientSetting              `mapstructure:"tls,omitempty"` // provides SSL details
-	metadata.MetricsBuilderConfig           `mapstructure:",squash"`
+	scraperhelper.ControllerConfig `mapstructure:",squash"`
+	Username                       string                         `mapstructure:"username"`
+	Password                       configopaque.String            `mapstructure:"password"`
+	Databases                      []string                       `mapstructure:"databases"`
+	ExcludeDatabases               []string                       `mapstructure:"exclude_databases"`
+	confignet.AddrConfig           `mapstructure:",squash"`       // provides Endpoint and Transport
+	configtls.ClientConfig         `mapstructure:"tls,omitempty"` // provides SSL details
+	ConnectionPool                 `mapstructure:"connection_pool,omitempty"`
+	metadata.MetricsBuilderConfig  `mapstructure:",squash"`
+	QuerySampleCollection          `mapstructure:"query_sample_collection,omitempty"`
+	TopQueryCollection             `mapstructure:"top_query_collection,omitempty"`
+}
+
+type ConnectionPool struct {
+	MaxIdleTime *time.Duration `mapstructure:"max_idle_time,omitempty"`
+	MaxLifetime *time.Duration `mapstructure:"max_lifetime,omitempty"`
+	MaxIdle     *int           `mapstructure:"max_idle,omitempty"`
+	MaxOpen     *int           `mapstructure:"max_open,omitempty"`
 }
 
 func (cfg *Config) Validate() error {
@@ -58,7 +80,7 @@ func (cfg *Config) Validate() error {
 	}
 
 	switch cfg.Transport {
-	case "tcp", "unix":
+	case confignet.TransportTypeTCP, confignet.TransportTypeUnix:
 		_, _, endpointErr := net.SplitHostPort(cfg.Endpoint)
 		if endpointErr != nil {
 			err = multierr.Append(err, errors.New(ErrHostPort))

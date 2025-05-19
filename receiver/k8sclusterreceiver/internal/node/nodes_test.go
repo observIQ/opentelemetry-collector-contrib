@@ -13,10 +13,12 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+	conventions "go.opentelemetry.io/otel/semconv/v1.18.0"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/experimentalmetricmetadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/pmetrictest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver/internal/metadata"
@@ -26,7 +28,7 @@ import (
 func TestNodeMetricsReportCPUMetrics(t *testing.T) {
 	n := testutils.NewNode("1")
 	rb := metadata.NewResourceBuilder(metadata.DefaultResourceAttributesConfig())
-	rm := CustomMetrics(receivertest.NewNopCreateSettings(), rb, n,
+	rm := CustomMetrics(receivertest.NewNopSettings(metadata.Type), rb, n,
 		[]string{
 			"Ready",
 			"MemoryPressure",
@@ -61,14 +63,18 @@ func TestNodeMetricsReportCPUMetrics(t *testing.T) {
 	),
 	)
 }
+
 func TestNodeOptionalMetrics(t *testing.T) {
 	n := testutils.NewNode("2")
 	rac := metadata.DefaultResourceAttributesConfig()
 	rac.K8sKubeletVersion.Enabled = true
-	rac.K8sKubeproxyVersion.Enabled = true
+	rac.ContainerRuntime.Enabled = true
+	rac.ContainerRuntimeVersion.Enabled = true
+	rac.OsType.Enabled = true
+	rac.OsDescription.Enabled = true
 
 	rb := metadata.NewResourceBuilder(rac)
-	rm := CustomMetrics(receivertest.NewNopCreateSettings(), rb, n,
+	rm := CustomMetrics(receivertest.NewNopSettings(metadata.Type), rb, n,
 		[]string{},
 		[]string{
 			"cpu",
@@ -90,8 +96,8 @@ func TestNodeOptionalMetrics(t *testing.T) {
 		pmetrictest.IgnoreScopeMetricsOrder(),
 	),
 	)
-
 }
+
 func TestNodeConditionValue(t *testing.T) {
 	type args struct {
 		node     *corev1.Node
@@ -164,7 +170,7 @@ func TestNodeMetrics(t *testing.T) {
 	ts := pcommon.Timestamp(time.Now().UnixNano())
 	mbc := metadata.DefaultMetricsBuilderConfig()
 	mbc.Metrics.K8sNodeCondition.Enabled = true
-	mb := metadata.NewMetricsBuilder(mbc, receivertest.NewNopCreateSettings())
+	mb := metadata.NewMetricsBuilder(mbc, receivertest.NewNopSettings(metadata.Type))
 	RecordMetrics(mb, n, ts)
 	m := mb.Emit()
 
@@ -250,10 +256,120 @@ func TestTransform(t *testing.T) {
 				corev1.ResourceMemory: resource.MustParse("8Gi"),
 			},
 			NodeInfo: corev1.NodeSystemInfo{
-				KubeletVersion:   "v1.25.3",
-				KubeProxyVersion: "v1.25.3",
+				KubeletVersion:          "v1.25.3",
+				OSImage:                 "Ubuntu 22.04.1 LTS",
+				ContainerRuntimeVersion: "containerd://1.6.9",
+				OperatingSystem:         "linux",
 			},
 		},
 	}
 	assert.Equal(t, wantNode, Transform(originalNode))
+}
+
+func TestNodeMetadata(t *testing.T) {
+	creationTimestamp := time.Now()
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "test-node",
+			UID:               "test-node-uid",
+			Labels:            map[string]string{"env": "production"},
+			CreationTimestamp: metav1.Time{Time: creationTimestamp},
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{
+					Type:   "FrequentUnregisterNetDevice",
+					Status: "False",
+					LastHeartbeatTime: metav1.Time{
+						Time: time.Now(),
+					},
+					LastTransitionTime: metav1.Time{
+						Time: time.Now(),
+					},
+					Message: "node is functioning properly",
+					Reason:  "NoFrequentUnregisterNetDevice",
+				},
+				{
+					Type:   "MemoryPressure",
+					Status: "False",
+					LastHeartbeatTime: metav1.Time{
+						Time: time.Now(),
+					},
+					LastTransitionTime: metav1.Time{
+						Time: time.Now(),
+					},
+					Reason:  "KubeletHasSufficientMemory",
+					Message: "kubelet has sufficient memory available",
+				},
+				{
+					Type:   "DiskPressure",
+					Status: "False",
+					LastHeartbeatTime: metav1.Time{
+						Time: time.Now(),
+					},
+					LastTransitionTime: metav1.Time{
+						Time: time.Now(),
+					},
+					Reason:  "KubeletHasNoDiskPressure",
+					Message: "kubelet has no disk pressure",
+				},
+				{
+					Type:   "PIDPressure",
+					Status: "False",
+					LastHeartbeatTime: metav1.Time{
+						Time: time.Now(),
+					},
+					LastTransitionTime: metav1.Time{
+						Time: time.Now(),
+					},
+					Reason:  "KubeletHasSufficientPID",
+					Message: "kubelet has sufficient PID available",
+				},
+				{
+					Type:   "Ready",
+					Status: "True",
+					LastHeartbeatTime: metav1.Time{
+						Time: time.Now(),
+					},
+					LastTransitionTime: metav1.Time{
+						Time: time.Now(),
+					},
+					Reason:  "KubeletReady",
+					Message: "kubelet is posting ready status",
+				},
+			},
+			NodeInfo: corev1.NodeSystemInfo{
+				MachineID:               "70ebe86154de42bda73a4ffe181afa3d",
+				SystemUUID:              "70ebe86154de42bda73a4ffe181afa3d",
+				BootID:                  "541c31d4-d1e2-4660-a3b2-484abbb1cbce",
+				KernelVersion:           "6.10.4-linuxkit",
+				OSImage:                 "Debian GNU/Linux 12 (bookworm)",
+				ContainerRuntimeVersion: "containerd://1.7.15",
+				KubeletVersion:          "v1.30.0",
+				OperatingSystem:         "linux",
+				Architecture:            "amd64",
+			},
+		},
+	}
+
+	expectedMeta := map[experimentalmetricmetadata.ResourceID]*metadata.KubernetesMetadata{
+		experimentalmetricmetadata.ResourceID("test-node-uid"): {
+			EntityType:    "k8s.node",
+			ResourceIDKey: "k8s.node.uid",
+			ResourceID:    experimentalmetricmetadata.ResourceID("test-node-uid"),
+			Metadata: map[string]string{
+				"env":                                "production",
+				string(conventions.K8SNodeNameKey):   "test-node",
+				"k8s.node.condition_ready":           "true",
+				"k8s.node.condition_memory_pressure": "false",
+				"k8s.node.condition_disk_pressure":   "false",
+				"k8s.node.condition_pid_pressure":    "false",
+				"node.creation_timestamp":            creationTimestamp.Format(time.RFC3339),
+			},
+		},
+	}
+
+	actualMeta := GetMetadata(node)
+	require.NotNil(t, actualMeta)
+	require.Equal(t, expectedMeta, actualMeta)
 }

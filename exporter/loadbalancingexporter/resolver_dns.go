@@ -12,9 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/loadbalancingexporter/internal/metadata"
 )
 
 var _ resolver = (*dnsResolver)(nil)
@@ -27,10 +29,10 @@ const (
 var (
 	errNoHostname = errors.New("no hostname specified to resolve the backends")
 
-	resolverMutator = tag.Upsert(tag.MustNewKey("resolver"), "dns")
-
-	resolverSuccessTrueMutators  = []tag.Mutator{resolverMutator, successTrueMutator}
-	resolverSuccessFalseMutators = []tag.Mutator{resolverMutator, successFalseMutator}
+	dnsResolverAttr           = attribute.String("resolver", "dns")
+	dnsResolverAttrSet        = attribute.NewSet(dnsResolverAttr)
+	dnsResolverSuccessAttrSet = attribute.NewSet(dnsResolverAttr, attribute.Bool("success", true))
+	dnsResolverFailureAttrSet = attribute.NewSet(dnsResolverAttr, attribute.Bool("success", false))
 )
 
 type dnsResolver struct {
@@ -49,13 +51,21 @@ type dnsResolver struct {
 	updateLock         sync.Mutex
 	shutdownWg         sync.WaitGroup
 	changeCallbackLock sync.RWMutex
+	telemetry          *metadata.TelemetryBuilder
 }
 
 type netResolver interface {
 	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
 }
 
-func newDNSResolver(logger *zap.Logger, hostname string, port string, interval time.Duration, timeout time.Duration) (*dnsResolver, error) {
+func newDNSResolver(
+	logger *zap.Logger,
+	hostname string,
+	port string,
+	interval time.Duration,
+	timeout time.Duration,
+	tb *metadata.TelemetryBuilder,
+) (*dnsResolver, error) {
 	if len(hostname) == 0 {
 		return nil, errNoHostname
 	}
@@ -74,6 +84,7 @@ func newDNSResolver(logger *zap.Logger, hostname string, port string, interval t
 		resInterval: interval,
 		resTimeout:  timeout,
 		stopCh:      make(chan struct{}),
+		telemetry:   tb,
 	}, nil
 }
 
@@ -82,6 +93,7 @@ func (r *dnsResolver) start(ctx context.Context) error {
 		r.logger.Warn("failed to resolve", zap.Error(err))
 	}
 
+	r.shutdownWg.Add(1)
 	go r.periodicallyResolve()
 
 	r.logger.Debug("DNS resolver started",
@@ -102,6 +114,7 @@ func (r *dnsResolver) shutdown(_ context.Context) error {
 
 func (r *dnsResolver) periodicallyResolve() {
 	ticker := time.NewTicker(r.resInterval)
+	defer r.shutdownWg.Done()
 
 	for {
 		select {
@@ -120,16 +133,13 @@ func (r *dnsResolver) periodicallyResolve() {
 }
 
 func (r *dnsResolver) resolve(ctx context.Context) ([]string, error) {
-	r.shutdownWg.Add(1)
-	defer r.shutdownWg.Done()
-
 	addrs, err := r.resolver.LookupIPAddr(ctx, r.hostname)
 	if err != nil {
-		_ = stats.RecordWithTags(ctx, resolverSuccessFalseMutators, mNumResolutions.M(1))
+		r.telemetry.LoadbalancerNumResolutions.Add(ctx, 1, metric.WithAttributeSet(dnsResolverFailureAttrSet))
 		return nil, err
 	}
 
-	_ = stats.RecordWithTags(ctx, resolverSuccessTrueMutators, mNumResolutions.M(1))
+	r.telemetry.LoadbalancerNumResolutions.Add(ctx, 1, metric.WithAttributeSet(dnsResolverSuccessAttrSet))
 
 	backends := make([]string, len(addrs))
 	for i, ip := range addrs {
@@ -160,7 +170,8 @@ func (r *dnsResolver) resolve(ctx context.Context) ([]string, error) {
 	r.updateLock.Lock()
 	r.endpoints = backends
 	r.updateLock.Unlock()
-	_ = stats.RecordWithTags(ctx, resolverSuccessTrueMutators, mNumBackends.M(int64(len(backends))))
+	r.telemetry.LoadbalancerNumBackends.Record(ctx, int64(len(backends)), metric.WithAttributeSet(dnsResolverAttrSet))
+	r.telemetry.LoadbalancerNumBackendUpdates.Add(ctx, 1, metric.WithAttributeSet(dnsResolverAttrSet))
 
 	// propagate the change
 	r.changeCallbackLock.RLock()

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build integration
-// +build integration
 
 package jmxreceiver
 
@@ -28,6 +27,7 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/scraperinttest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/pmetrictest"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/metadata"
 )
 
 const jmxPort = "7199"
@@ -37,7 +37,7 @@ var jmxJarReleases = map[string]string{
 	"1.10.0-alpha": "https://repo1.maven.org/maven2/io/opentelemetry/contrib/opentelemetry-jmx-metrics/1.10.0-alpha/opentelemetry-jmx-metrics-1.10.0-alpha.jar",
 }
 
-type JMXIntegrationSuite struct {
+type jmxIntegrationSuite struct {
 	suite.Suite
 	VersionToJar map[string]string
 }
@@ -45,32 +45,32 @@ type JMXIntegrationSuite struct {
 // It is recommended that this test be run locally with a longer timeout than the default 30s
 // go test -timeout 60s -run ^TestJMXIntegration$ github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver
 func TestJMXIntegration(t *testing.T) {
-	suite.Run(t, new(JMXIntegrationSuite))
+	suite.Run(t, new(jmxIntegrationSuite))
 }
 
-func (suite *JMXIntegrationSuite) SetupSuite() {
+func (suite *jmxIntegrationSuite) SetupSuite() {
 	suite.VersionToJar = make(map[string]string)
 	for version, url := range jmxJarReleases {
-		jarPath, err := downloadJMXMetricGathererJAR(url)
+		jarPath, err := downloadJMXMetricGathererJAR(suite.T(), url)
 		suite.VersionToJar[version] = jarPath
-		require.NoError(suite.T(), err)
+		suite.Require().NoError(err)
 	}
 }
 
-func (suite *JMXIntegrationSuite) TearDownSuite() {
+func (suite *jmxIntegrationSuite) TearDownSuite() {
 	for _, path := range suite.VersionToJar {
-		require.NoError(suite.T(), os.Remove(path))
+		suite.Require().NoError(os.Remove(path))
 	}
 }
 
-func downloadJMXMetricGathererJAR(url string) (string, error) {
+func downloadJMXMetricGathererJAR(t *testing.T, url string) (string, error) {
 	resp, err := http.Get(url) //nolint:gosec
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	file, err := os.CreateTemp("", "jmx-metrics.jar")
+	file, err := os.CreateTemp(t.TempDir(), "jmx-metrics.jar")
 	if err != nil {
 		return "", err
 	}
@@ -80,7 +80,7 @@ func downloadJMXMetricGathererJAR(url string) (string, error) {
 	return file.Name(), err
 }
 
-func (suite *JMXIntegrationSuite) TestJMXReceiverHappyPath() {
+func (suite *jmxIntegrationSuite) TestJMXReceiverHappyPath() {
 	for version, jar := range suite.VersionToJar {
 		suite.T().Run(version, integrationTest(version, jar))
 	}
@@ -120,7 +120,7 @@ func integrationTest(version string, jar string) func(*testing.T) {
 				}
 				rCfg.OTLPExporterConfig = otlpExporterConfig{
 					Endpoint: "127.0.0.1:0",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: time.Second,
 					},
 				}
@@ -138,7 +138,7 @@ func integrationTest(version string, jar string) func(*testing.T) {
 }
 
 func TestJMXReceiverInvalidOTLPEndpointIntegration(t *testing.T) {
-	params := receivertest.NewNopCreateSettings()
+	params := receivertest.NewNopSettings(metadata.Type)
 	cfg := &Config{
 		CollectionInterval: 100 * time.Millisecond,
 		Endpoint:           "service:jmx:rmi:///jndi/rmi://localhost:7199/jmxrmi",
@@ -146,7 +146,7 @@ func TestJMXReceiverInvalidOTLPEndpointIntegration(t *testing.T) {
 		TargetSystem:       "jvm",
 		OTLPExporterConfig: otlpExporterConfig{
 			Endpoint: "<invalid>:123",
-			TimeoutSettings: exporterhelper.TimeoutSettings{
+			TimeoutSettings: exporterhelper.TimeoutConfig{
 				Timeout: 1000 * time.Millisecond,
 			},
 		},
@@ -158,5 +158,5 @@ func TestJMXReceiverInvalidOTLPEndpointIntegration(t *testing.T) {
 	}()
 
 	err := receiver.Start(context.Background(), componenttest.NewNopHost())
-	require.Contains(t, err.Error(), "listen tcp: lookup <invalid>:")
+	require.ErrorContains(t, err, "listen tcp: lookup <invalid>:")
 }

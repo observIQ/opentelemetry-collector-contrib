@@ -13,15 +13,17 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"testing"
 	"text/template"
 	"time"
 
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/process"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/process"
 )
 
 // childProcessCollector implements the OtelcolRunner interface as a child process on the same machine executing
@@ -40,6 +42,9 @@ type childProcessCollector struct {
 
 	// Command to execute
 	cmd *exec.Cmd
+
+	// additional env vars (os.Environ() populated by default)
+	additionalEnv map[string]string
 
 	// Various starting/stopping flags
 	isStarted  bool
@@ -85,7 +90,7 @@ type ChildProcessOption func(*childProcessCollector)
 
 // NewChildProcessCollector creates a new OtelcolRunner as a child process on the same machine executing the test.
 func NewChildProcessCollector(options ...ChildProcessOption) OtelcolRunner {
-	col := &childProcessCollector{}
+	col := &childProcessCollector{additionalEnv: map[string]string{}}
 
 	for _, option := range options {
 		option(col)
@@ -101,12 +106,19 @@ func WithAgentExePath(exePath string) ChildProcessOption {
 	}
 }
 
-func (cp *childProcessCollector) PrepareConfig(configStr string) (configCleanup func(), err error) {
+// WithEnvVar sets an additional environment variable for the process
+func WithEnvVar(k, v string) ChildProcessOption {
+	return func(cpc *childProcessCollector) {
+		cpc.additionalEnv[k] = v
+	}
+}
+
+func (cp *childProcessCollector) PrepareConfig(t *testing.T, configStr string) (configCleanup func(), err error) {
 	configCleanup = func() {
 		// NoOp
 	}
 	var file *os.File
-	file, err = os.CreateTemp("", "agent*.yaml")
+	file, err = os.CreateTemp(t.TempDir(), "agent*.yaml")
 	if err != nil {
 		log.Printf("%s", err)
 		return configCleanup, err
@@ -165,7 +177,6 @@ func expandExeFileName(exeName string) string {
 // the process to.
 // cmdArgs is the command line arguments to pass to the process.
 func (cp *childProcessCollector) Start(params StartParams) error {
-
 	cp.name = params.Name
 	cp.doneSignal = make(chan struct{})
 	cp.resourceSpec = params.resourceSpec
@@ -204,9 +215,17 @@ func (cp *childProcessCollector) Start(params StartParams) error {
 	}
 	// #nosec
 	cp.cmd = exec.Command(exePath, args...)
-	cp.cmd.Env = append(os.Environ(),
-		"GOMAXPROCS=2",
-	)
+	cp.cmd.Env = os.Environ()
+
+	// update env deterministically
+	var additionalEnvVars []string
+	for k := range cp.additionalEnv {
+		additionalEnvVars = append(additionalEnvVars, k)
+	}
+	sort.Strings(additionalEnvVars)
+	for _, k := range additionalEnvVars {
+		cp.cmd.Env = append(cp.cmd.Env, fmt.Sprintf("%s=%s", k, cp.additionalEnv[k]))
+	}
 
 	// Capture standard output and standard error.
 	cp.cmd.Stdout = logFile
@@ -230,7 +249,6 @@ func (cp *childProcessCollector) Stop() (stopped bool, err error) {
 		return false, nil
 	}
 	cp.stopOnce.Do(func() {
-
 		if !cp.isStarted {
 			// Process wasn't started, nothing to stop.
 			return
@@ -317,12 +335,12 @@ func (cp *childProcessCollector) WatchResourceConsumption() error {
 	for start := time.Now(); time.Since(start) < time.Minute; {
 		cp.fetchRAMUsage()
 		cp.fetchCPUUsage()
-		if err := cp.checkAllowedResourceUsage(); err != nil {
-			log.Printf("Allowed usage of resources is too high before test starts wait for one second : %v", err)
-			time.Sleep(time.Second)
-		} else {
+		err := cp.checkAllowedResourceUsage()
+		if err == nil {
 			break
 		}
+		log.Printf("Allowed usage of resources is too high before test starts wait for one second : %v", err)
+		time.Sleep(time.Second)
 	}
 
 	remainingFailures := cp.resourceSpec.MaxConsecutiveFailures
@@ -449,7 +467,10 @@ func (cp *childProcessCollector) GetResourceConsumption() string {
 
 // GetTotalConsumption returns total resource consumption since start of process
 func (cp *childProcessCollector) GetTotalConsumption() *ResourceConsumption {
-	rc := &ResourceConsumption{}
+	rc := &ResourceConsumption{
+		CPUPercentLimit: float64(cp.resourceSpec.ExpectedMaxCPU),
+		RAMMiBLimit:     cp.resourceSpec.ExpectedMaxRAM,
+	}
 
 	if cp.processMon != nil {
 		// Get total elapsed time since process start

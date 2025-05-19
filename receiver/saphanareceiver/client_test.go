@@ -107,7 +107,7 @@ func TestBasicConnectAndClose(t *testing.T) {
 
 func TestFailedPing(t *testing.T) {
 	dbWrapper := &testDBWrapper{}
-	dbWrapper.On("PingContext").Return(errors.New("Coult not ping host"))
+	dbWrapper.On("PingContext").Return(errors.New("Could not ping host"))
 	dbWrapper.On("Close").Return(nil)
 
 	factory := &testConnectionFactory{dbWrapper}
@@ -136,16 +136,18 @@ func TestSimpleQueryOutput(t *testing.T) {
 		orderedStats: []queryStat{
 			{
 				key: "value",
-				addMetricFunction: func(mb *metadata.MetricsBuilder, t pcommon.Timestamp, val string,
-					m map[string]string) error {
+				addMetricFunction: func(*metadata.MetricsBuilder, pcommon.Timestamp, string,
+					map[string]string,
+				) error {
 					// Function is a no-op as it's not required for this test
 					return nil
 				},
 			},
 			{
 				key: "rate",
-				addMetricFunction: func(mb *metadata.MetricsBuilder, t pcommon.Timestamp, val string,
-					m map[string]string) error {
+				addMetricFunction: func(*metadata.MetricsBuilder, pcommon.Timestamp, string,
+					map[string]string,
+				) error {
 					// Function is a no-op as it's not required for this test
 					return nil
 				},
@@ -192,16 +194,18 @@ func TestNullOutput(t *testing.T) {
 		orderedStats: []queryStat{
 			{
 				key: "value",
-				addMetricFunction: func(mb *metadata.MetricsBuilder, t pcommon.Timestamp, val string,
-					m map[string]string) error {
+				addMetricFunction: func(*metadata.MetricsBuilder, pcommon.Timestamp, string,
+					map[string]string,
+				) error {
 					// Function is a no-op as it's not required for this test
 					return nil
 				},
 			},
 			{
 				key: "rate",
-				addMetricFunction: func(mb *metadata.MetricsBuilder, t pcommon.Timestamp, val string,
-					m map[string]string) error {
+				addMetricFunction: func(*metadata.MetricsBuilder, pcommon.Timestamp, string,
+					map[string]string,
+				) error {
 					// Function is a no-op as it's not required for this test
 					return nil
 				},
@@ -211,7 +215,7 @@ func TestNullOutput(t *testing.T) {
 
 	results, err := client.collectDataFromQuery(context.TODO(), query)
 	// Error expected for second row, but data is also returned
-	require.Contains(t, err.Error(), "database row NULL value for required metric label id")
+	require.ErrorContains(t, err, "database row NULL value for required metric label id")
 	require.Equal(t, []map[string]string{
 		{
 			"id":    "my_id",

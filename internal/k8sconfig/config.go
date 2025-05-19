@@ -4,22 +4,31 @@
 package k8sconfig // import "github.com/open-telemetry/opentelemetry-collector-contrib/internal/k8sconfig"
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	quotaclientset "github.com/openshift/client-go/quota/clientset/versioned"
+	api_v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	k8s "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 func init() {
 	k8sruntime.ReallyCrash = false
-	k8sruntime.PanicHandlers = []func(any){}
+	k8sruntime.PanicHandlers = []func(context.Context, any){}
 }
 
 // AuthType describes the type of authentication to use for the K8s API
@@ -79,7 +88,7 @@ func CreateRestConfig(apiConf APIConfig) (*rest.Config, error) {
 	if authType != AuthTypeKubeConfig {
 		host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
 		if len(host) == 0 || len(port) == 0 {
-			return nil, fmt.Errorf("unable to load k8s config, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be defined")
+			return nil, errors.New("unable to load k8s config, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be defined")
 		}
 		k8sHost = "https://" + net.JoinHostPort(host, port)
 	}
@@ -93,7 +102,6 @@ func CreateRestConfig(apiConf APIConfig) (*rest.Config, error) {
 		}
 		authConf, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 			loadingRules, configOverrides).ClientConfig()
-
 		if err != nil {
 			return nil, fmt.Errorf("error connecting to k8s with auth_type=%s: %w", AuthTypeKubeConfig, err)
 		}
@@ -178,4 +186,26 @@ func MakeOpenShiftQuotaClient(apiConf APIConfig) (quotaclientset.Interface, erro
 	}
 
 	return client, nil
+}
+
+func NewNodeSharedInformer(client k8s.Interface, nodeName string, watchSyncPeriod time.Duration) cache.SharedInformer {
+	informer := cache.NewSharedInformer(
+		&cache.ListWatch{
+			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
+				if nodeName != "" {
+					opts.FieldSelector = fields.OneTermEqualSelector("metadata.name", nodeName).String()
+				}
+				return client.CoreV1().Nodes().List(context.Background(), opts)
+			},
+			WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
+				if nodeName != "" {
+					opts.FieldSelector = fields.OneTermEqualSelector("metadata.name", nodeName).String()
+				}
+				return client.CoreV1().Nodes().Watch(context.Background(), opts)
+			},
+		},
+		&api_v1.Node{},
+		watchSyncPeriod,
+	)
+	return informer
 }

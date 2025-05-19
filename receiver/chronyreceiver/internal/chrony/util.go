@@ -9,13 +9,9 @@ import (
 	"net"
 	"os"
 	"strings"
-
-	"go.uber.org/multierr"
 )
 
-var (
-	ErrInvalidNetwork = errors.New("invalid network format")
-)
+var ErrInvalidNetwork = errors.New("invalid network format")
 
 // SplitNetworkEndpoint takes in a URL like string of the format: [network type]://[network endpoint]
 // and then will return the network and the endpoint for the client to use for connection.
@@ -30,7 +26,7 @@ func SplitNetworkEndpoint(addr string) (network, endpoint string, err error) {
 	case "udp":
 		host, _, err := net.SplitHostPort(endpoint)
 		if err != nil {
-			return "", "", fmt.Errorf("issue parsing endpoint: %w", multierr.Combine(ErrInvalidNetwork, err))
+			return "", "", fmt.Errorf("issue parsing endpoint: %w", errors.Join(ErrInvalidNetwork, err))
 		}
 		if host == "" {
 			return "", "", fmt.Errorf("missing hostname: %w", ErrInvalidNetwork)

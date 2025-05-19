@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"fmt"
+	"errors"
 	"net"
 	"reflect"
 	"runtime"
@@ -85,7 +85,7 @@ func TestNewAMQPMessagingServiceFactory(t *testing.T) {
 			name: "expecting authentication errors",
 			cfg: &Config{ // no password
 				Auth:       Authentication{PlainText: &SaslPlainTextConfig{Username: "set"}},
-				TLS:        configtls.TLSClientSetting{Insecure: false, InsecureSkipVerify: false},
+				TLS:        configtls.ClientConfig{Insecure: false, InsecureSkipVerify: false},
 				Broker:     []string{broker},
 				Queue:      queue,
 				MaxUnacked: maxUnacked,
@@ -97,7 +97,7 @@ func TestNewAMQPMessagingServiceFactory(t *testing.T) {
 			name: "expecting tls errors",
 			cfg: &Config{ // invalid to only provide a key file
 				Auth:       Authentication{PlainText: &SaslPlainTextConfig{Username: "user", Password: "password"}},
-				TLS:        configtls.TLSClientSetting{TLSSetting: configtls.TLSSetting{KeyFile: "someKeyFile"}, Insecure: false},
+				TLS:        configtls.ClientConfig{Config: configtls.Config{KeyFile: "someKeyFile"}, Insecure: false},
 				Broker:     []string{broker},
 				Queue:      queue,
 				MaxUnacked: maxUnacked,
@@ -109,7 +109,7 @@ func TestNewAMQPMessagingServiceFactory(t *testing.T) {
 			name: "expecting success with TLS expecting an amqps connection",
 			cfg: &Config{ // invalid to only provide a key file
 				Auth:       Authentication{PlainText: &SaslPlainTextConfig{Username: "user", Password: "password"}},
-				TLS:        configtls.TLSClientSetting{Insecure: false},
+				TLS:        configtls.ClientConfig{Insecure: false},
 				Broker:     []string{broker},
 				Queue:      queue,
 				MaxUnacked: maxUnacked,
@@ -133,7 +133,7 @@ func TestNewAMQPMessagingServiceFactory(t *testing.T) {
 			name: "expecting success without TLS expecting an amqp connection",
 			cfg: &Config{ // invalid to only provide a key file
 				Auth:       Authentication{PlainText: &SaslPlainTextConfig{Username: "user", Password: "password"}},
-				TLS:        configtls.TLSClientSetting{Insecure: true},
+				TLS:        configtls.ClientConfig{Insecure: true},
 				Broker:     []string{broker},
 				Queue:      queue,
 				MaxUnacked: maxUnacked,
@@ -156,7 +156,7 @@ func TestNewAMQPMessagingServiceFactory(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.want != nil && tt.want.connectConfig.saslConfig != nil {
-				connSASLPlain = func(username, password string) amqp.SASLType {
+				connSASLPlain = func(string, string) amqp.SASLType {
 					connSASLPlain = amqp.SASLTypePlain
 					return tt.want.connectConfig.saslConfig
 				}
@@ -182,8 +182,8 @@ func TestNewAMQPMessagingServiceFactory(t *testing.T) {
 
 func TestAMQPDialFailure(t *testing.T) {
 	const expectedAddr = "some-host:1234"
-	var expectedErr = fmt.Errorf("some error")
-	dialFunc = func(ctx context.Context, addr string, opts *amqp.ConnOptions) (*amqp.Conn, error) {
+	expectedErr := errors.New("some error")
+	dialFunc = func(_ context.Context, addr string, _ *amqp.ConnOptions) (*amqp.Conn, error) {
 		defer func() { dialFunc = amqp.Dial }() // reset dialFunc
 		assert.Equal(t, expectedAddr, addr)
 		return nil, expectedErr
@@ -207,9 +207,9 @@ func TestAMQPDialFailure(t *testing.T) {
 func TestAMQPDialConfigOptionsWithoutTLS(t *testing.T) {
 	// try creating a service without a tls config calling dial expecting no tls config passed
 	const expectedAddr = "some-host:1234"
-	var expectedErr = fmt.Errorf("some error")
+	expectedErr := errors.New("some error")
 	expectedAuthConnOption := amqp.SASLTypeAnonymous()
-	dialFunc = func(ctx context.Context, addr string, opts *amqp.ConnOptions) (*amqp.Conn, error) {
+	dialFunc = func(_ context.Context, addr string, opts *amqp.ConnOptions) (*amqp.Conn, error) {
 		defer func() { dialFunc = amqp.Dial }() // reset dialFunc
 		assert.Equal(t, expectedAddr, addr)
 		testFunctionEquality(t, expectedAuthConnOption, opts.SASLType)
@@ -235,12 +235,12 @@ func TestAMQPDialConfigOptionsWithoutTLS(t *testing.T) {
 func TestAMQPDialConfigOptionsWithTLS(t *testing.T) {
 	// try creating a service with a tls config calling dial
 	const expectedAddr = "some-host:1234"
-	var expectedErr = fmt.Errorf("some error")
+	expectedErr := errors.New("some error")
 	expectedAuthConnOption := amqp.SASLTypeAnonymous()
 	expectedTLSConnOption := &tls.Config{
 		InsecureSkipVerify: false,
 	}
-	dialFunc = func(ctx context.Context, addr string, opts *amqp.ConnOptions) (*amqp.Conn, error) {
+	dialFunc = func(_ context.Context, addr string, opts *amqp.ConnOptions) (*amqp.Conn, error) {
 		defer func() { dialFunc = amqp.Dial }() // reset dialFunc
 		assert.Equal(t, expectedAddr, addr)
 		testFunctionEquality(t, expectedAuthConnOption, opts.SASLType)
@@ -302,7 +302,7 @@ func TestAMQPNewClientDialAndCloseConnFailure(t *testing.T) {
 	closed := false
 	conn.setCloseHandler(func() error {
 		closed = true
-		return fmt.Errorf("some error")
+		return errors.New("some error")
 	})
 	service.close(context.Background())
 	// expect conn.Close to have been called
@@ -384,7 +384,7 @@ func startMockedService(t *testing.T) (*amqpMessagingService, *connMock) {
 	writeData := [][]byte{[]byte(amqpProtocolHeaderResponse), []byte(amqpOpenResponse), []byte(amqpSessionBeginResponse), []byte(amqpAttachResponse)}
 	// we need a custom write handler allowing for waiting until a flow start is called
 	flowStartCalled := make(chan struct{})
-	mockWriteData(conn, writeData, func(sentData, receivedData []byte) {
+	mockWriteData(conn, writeData, func(sentData, _ []byte) {
 		if len(sentData) > 10 && sentData[10] == 19 { // check if the type is 19 (flow)
 			close(flowStartCalled)
 		}
@@ -488,7 +488,7 @@ func mockWriteData(conn *connMock, data [][]byte, callbacks ...func(sentData, re
 }
 
 func mockDialFunc(conn *connMock) {
-	dialFunc = func(ctx context.Context, addr string, opts *amqp.ConnOptions) (*amqp.Conn, error) {
+	dialFunc = func(ctx context.Context, _ string, opts *amqp.ConnOptions) (*amqp.Conn, error) {
 		defer func() { dialFunc = amqp.Dial }() // reset dialFunc
 		return amqp.NewConn(ctx, conn, opts)
 	}
@@ -504,9 +504,9 @@ func TestAMQPSubstituteVariables(t *testing.T) {
 
 // testFunctionEquality will check that the pointer names are the same for the two functions.
 // It is not a perfect comparison but will perform well differentiating between anonymous
-// functions and the amqp named functinos
+// functions and the amqp named functions
 func testFunctionEquality(t *testing.T, f1, f2 any) {
-	assert.True(t, (f1 == nil) == (f2 == nil))
+	assert.Equal(t, (f1 == nil), (f2 == nil))
 	if f1 == nil {
 		return
 	}
@@ -610,7 +610,7 @@ func TestConfigAMQPAuthenticationExternal(t *testing.T) {
 	}()
 	called := false
 	connSASLExternal = func(resp string) amqp.SASLType {
-		assert.Equal(t, "", resp)
+		assert.Empty(t, resp)
 		called = true
 		return nil
 	}
@@ -636,8 +636,10 @@ type connMock struct {
 	remaining   *bytes.Reader
 }
 
-type writeHandler func([]byte) (n int, err error)
-type closeHandler func() error
+type (
+	writeHandler func([]byte) (n int, err error)
+	closeHandler func() error
+)
 
 func (c *connMock) setWriteHandler(handler writeHandler) {
 	atomic.StorePointer(&c.writeHandle, unsafe.Pointer(&handler))
@@ -652,7 +654,7 @@ func (c *connMock) Read(b []byte) (n int, err error) {
 		d := <-c.nextData
 		// the way this test fixture is designed, there is a race condition
 		// between write and read where data may be written to nextData on
-		// a call to Write and may be propogated prior to the return of Write.
+		// a call to Write and may be propagated prior to the return of Write.
 		time.Sleep(10 * time.Millisecond)
 		c.remaining = bytes.NewReader(d)
 	}
@@ -679,18 +681,23 @@ func (c *connMock) Close() error {
 	}
 	return nil
 }
+
 func (c *connMock) LocalAddr() net.Addr {
 	return nil
 }
+
 func (c *connMock) RemoteAddr() net.Addr {
 	return nil
 }
+
 func (c *connMock) SetDeadline(_ time.Time) error {
 	return nil
 }
+
 func (c *connMock) SetReadDeadline(_ time.Time) error {
 	return nil
 }
+
 func (c *connMock) SetWriteDeadline(_ time.Time) error {
 	return nil
 }

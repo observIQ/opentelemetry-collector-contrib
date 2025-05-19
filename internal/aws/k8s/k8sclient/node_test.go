@@ -302,8 +302,8 @@ func TestNodeClient(t *testing.T) {
 	clusterFailedNodeCount := client.ClusterFailedNodeCount()
 	log.Printf("clusterNodeCount: %v, clusterFailedNodeCount: %v", clusterNodeCount, clusterFailedNodeCount)
 
-	assert.Equal(t, clusterNodeCount, expectedClusterNodeCount)
-	assert.Equal(t, clusterFailedNodeCount, expectedClusterFailedNodeCount)
+	assert.Equal(t, expectedClusterNodeCount, clusterNodeCount)
+	assert.Equal(t, expectedClusterFailedNodeCount, clusterFailedNodeCount)
 	client.shutdown()
 	assert.True(t, client.stopped)
 }
@@ -311,5 +311,5 @@ func TestNodeClient(t *testing.T) {
 func TestTransformFuncNode(t *testing.T) {
 	info, err := transformFuncNode(nil)
 	assert.Nil(t, info)
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 }

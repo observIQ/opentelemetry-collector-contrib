@@ -6,7 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type      = component.MustNewType("namedpipe")
+	ScopeName = "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/namedpipereceiver"
+)
+
 const (
-	Type          = "namedpipe"
 	LogsStability = component.StabilityLevelAlpha
 )

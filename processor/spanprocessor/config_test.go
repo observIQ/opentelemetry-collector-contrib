@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterconfig"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterset"
@@ -24,7 +25,7 @@ func TestLoadingConfig(t *testing.T) {
 		expected component.Config
 	}{
 		{
-			id: component.NewIDWithName("span", "custom"),
+			id: component.MustNewIDWithName("span", "custom"),
 			expected: &Config{
 				Rename: Name{
 					FromAttributes: []string{"db.svc", "operation", "id"},
@@ -33,7 +34,7 @@ func TestLoadingConfig(t *testing.T) {
 			},
 		},
 		{
-			id: component.NewIDWithName("span", "no-separator"),
+			id: component.MustNewIDWithName("span", "no-separator"),
 			expected: &Config{
 				Rename: Name{
 					FromAttributes: []string{"db.svc", "operation", "id"},
@@ -42,17 +43,29 @@ func TestLoadingConfig(t *testing.T) {
 			},
 		},
 		{
-			id: component.NewIDWithName("span", "to_attributes"),
+			id: component.MustNewIDWithName("span", "to_attributes"),
 			expected: &Config{
 				Rename: Name{
 					ToAttributes: &ToAttributes{
-						Rules: []string{`^\/api\/v1\/document\/(?P<documentId>.*)\/update$`},
+						Rules:            []string{`^\/api\/v1\/document\/(?P<documentId>.*)\/update$`},
+						KeepOriginalName: false,
 					},
 				},
 			},
 		},
 		{
-			id: component.NewIDWithName("span", "includeexclude"),
+			id: component.MustNewIDWithName("span", "to_attributes_keep_original_name"),
+			expected: &Config{
+				Rename: Name{
+					ToAttributes: &ToAttributes{
+						Rules:            []string{`^\/api\/v1\/document\/(?P<documentId>.*)\/update$`},
+						KeepOriginalName: true,
+					},
+				},
+			},
+		},
+		{
+			id: component.MustNewIDWithName("span", "includeexclude"),
 			expected: &Config{
 				MatchConfig: filterconfig.MatchConfig{
 					Include: &filterconfig.MatchProperties{
@@ -74,7 +87,7 @@ func TestLoadingConfig(t *testing.T) {
 		},
 		{
 			// Set name
-			id: component.NewIDWithName("span", "set_status_err"),
+			id: component.MustNewIDWithName("span", "set_status_err"),
 			expected: &Config{
 				SetStatus: &Status{
 					Code:        "Error",
@@ -83,7 +96,7 @@ func TestLoadingConfig(t *testing.T) {
 			},
 		},
 		{
-			id: component.NewIDWithName("span", "set_status_ok"),
+			id: component.MustNewIDWithName("span", "set_status_ok"),
 			expected: &Config{
 				MatchConfig: filterconfig.MatchConfig{
 					Include: &filterconfig.MatchProperties{
@@ -108,9 +121,9 @@ func TestLoadingConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}

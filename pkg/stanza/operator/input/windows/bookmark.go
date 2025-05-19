@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build windows
-// +build windows
 
 package windows // import "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/input/windows"
 
 import (
+	"errors"
 	"fmt"
 	"syscall"
 )
@@ -19,7 +19,7 @@ type Bookmark struct {
 // Open will open the bookmark handle using the supplied xml.
 func (b *Bookmark) Open(offsetXML string) error {
 	if b.handle != 0 {
-		return fmt.Errorf("bookmark handle is already open")
+		return errors.New("bookmark handle is already open")
 	}
 
 	utf16, err := syscall.UTF16PtrFromString(offsetXML)
@@ -54,13 +54,13 @@ func (b *Bookmark) Update(event Event) error {
 }
 
 // Render will render the bookmark as xml.
-func (b *Bookmark) Render(buffer Buffer) (string, error) {
+func (b *Bookmark) Render(buffer *Buffer) (string, error) {
 	if b.handle == 0 {
-		return "", fmt.Errorf("bookmark handle is not open")
+		return "", errors.New("bookmark handle is not open")
 	}
 
-	bufferUsed, _, err := evtRender(0, b.handle, EvtRenderBookmark, buffer.SizeBytes(), buffer.FirstByte())
-	if err == ErrorInsufficientBuffer {
+	bufferUsed, err := evtRender(0, b.handle, EvtRenderBookmark, buffer.SizeBytes(), buffer.FirstByte())
+	if errors.Is(err, ErrorInsufficientBuffer) {
 		buffer.UpdateSizeBytes(*bufferUsed)
 		return b.Render(buffer)
 	}

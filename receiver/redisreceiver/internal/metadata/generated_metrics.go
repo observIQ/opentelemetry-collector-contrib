@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/filter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
 )
 
-// AttributePercentile specifies the a value percentile attribute.
+// AttributePercentile specifies the value percentile attribute.
 type AttributePercentile int
 
 const (
@@ -41,7 +42,7 @@ var MapAttributePercentile = map[string]AttributePercentile{
 	"p99.9": AttributePercentileP999,
 }
 
-// AttributeRole specifies the a value role attribute.
+// AttributeRole specifies the value role attribute.
 type AttributeRole int
 
 const (
@@ -67,7 +68,7 @@ var MapAttributeRole = map[string]AttributeRole{
 	"primary": AttributeRolePrimary,
 }
 
-// AttributeState specifies the a value state attribute.
+// AttributeState specifies the value state attribute.
 type AttributeState int
 
 const (
@@ -107,6 +108,156 @@ var MapAttributeState = map[string]AttributeState{
 	"user":             AttributeStateUser,
 	"user_children":    AttributeStateUserChildren,
 	"user_main_thread": AttributeStateUserMainThread,
+}
+
+var MetricsInfo = metricsInfo{
+	RedisClientsBlocked: metricInfo{
+		Name: "redis.clients.blocked",
+	},
+	RedisClientsConnected: metricInfo{
+		Name: "redis.clients.connected",
+	},
+	RedisClientsMaxInputBuffer: metricInfo{
+		Name: "redis.clients.max_input_buffer",
+	},
+	RedisClientsMaxOutputBuffer: metricInfo{
+		Name: "redis.clients.max_output_buffer",
+	},
+	RedisCmdCalls: metricInfo{
+		Name: "redis.cmd.calls",
+	},
+	RedisCmdLatency: metricInfo{
+		Name: "redis.cmd.latency",
+	},
+	RedisCmdUsec: metricInfo{
+		Name: "redis.cmd.usec",
+	},
+	RedisCommands: metricInfo{
+		Name: "redis.commands",
+	},
+	RedisCommandsProcessed: metricInfo{
+		Name: "redis.commands.processed",
+	},
+	RedisConnectionsReceived: metricInfo{
+		Name: "redis.connections.received",
+	},
+	RedisConnectionsRejected: metricInfo{
+		Name: "redis.connections.rejected",
+	},
+	RedisCPUTime: metricInfo{
+		Name: "redis.cpu.time",
+	},
+	RedisDbAvgTTL: metricInfo{
+		Name: "redis.db.avg_ttl",
+	},
+	RedisDbExpires: metricInfo{
+		Name: "redis.db.expires",
+	},
+	RedisDbKeys: metricInfo{
+		Name: "redis.db.keys",
+	},
+	RedisKeysEvicted: metricInfo{
+		Name: "redis.keys.evicted",
+	},
+	RedisKeysExpired: metricInfo{
+		Name: "redis.keys.expired",
+	},
+	RedisKeyspaceHits: metricInfo{
+		Name: "redis.keyspace.hits",
+	},
+	RedisKeyspaceMisses: metricInfo{
+		Name: "redis.keyspace.misses",
+	},
+	RedisLatestFork: metricInfo{
+		Name: "redis.latest_fork",
+	},
+	RedisMaxmemory: metricInfo{
+		Name: "redis.maxmemory",
+	},
+	RedisMemoryFragmentationRatio: metricInfo{
+		Name: "redis.memory.fragmentation_ratio",
+	},
+	RedisMemoryLua: metricInfo{
+		Name: "redis.memory.lua",
+	},
+	RedisMemoryPeak: metricInfo{
+		Name: "redis.memory.peak",
+	},
+	RedisMemoryRss: metricInfo{
+		Name: "redis.memory.rss",
+	},
+	RedisMemoryUsed: metricInfo{
+		Name: "redis.memory.used",
+	},
+	RedisNetInput: metricInfo{
+		Name: "redis.net.input",
+	},
+	RedisNetOutput: metricInfo{
+		Name: "redis.net.output",
+	},
+	RedisRdbChangesSinceLastSave: metricInfo{
+		Name: "redis.rdb.changes_since_last_save",
+	},
+	RedisReplicationBacklogFirstByteOffset: metricInfo{
+		Name: "redis.replication.backlog_first_byte_offset",
+	},
+	RedisReplicationOffset: metricInfo{
+		Name: "redis.replication.offset",
+	},
+	RedisReplicationReplicaOffset: metricInfo{
+		Name: "redis.replication.replica_offset",
+	},
+	RedisRole: metricInfo{
+		Name: "redis.role",
+	},
+	RedisSlavesConnected: metricInfo{
+		Name: "redis.slaves.connected",
+	},
+	RedisUptime: metricInfo{
+		Name: "redis.uptime",
+	},
+}
+
+type metricsInfo struct {
+	RedisClientsBlocked                    metricInfo
+	RedisClientsConnected                  metricInfo
+	RedisClientsMaxInputBuffer             metricInfo
+	RedisClientsMaxOutputBuffer            metricInfo
+	RedisCmdCalls                          metricInfo
+	RedisCmdLatency                        metricInfo
+	RedisCmdUsec                           metricInfo
+	RedisCommands                          metricInfo
+	RedisCommandsProcessed                 metricInfo
+	RedisConnectionsReceived               metricInfo
+	RedisConnectionsRejected               metricInfo
+	RedisCPUTime                           metricInfo
+	RedisDbAvgTTL                          metricInfo
+	RedisDbExpires                         metricInfo
+	RedisDbKeys                            metricInfo
+	RedisKeysEvicted                       metricInfo
+	RedisKeysExpired                       metricInfo
+	RedisKeyspaceHits                      metricInfo
+	RedisKeyspaceMisses                    metricInfo
+	RedisLatestFork                        metricInfo
+	RedisMaxmemory                         metricInfo
+	RedisMemoryFragmentationRatio          metricInfo
+	RedisMemoryLua                         metricInfo
+	RedisMemoryPeak                        metricInfo
+	RedisMemoryRss                         metricInfo
+	RedisMemoryUsed                        metricInfo
+	RedisNetInput                          metricInfo
+	RedisNetOutput                         metricInfo
+	RedisRdbChangesSinceLastSave           metricInfo
+	RedisReplicationBacklogFirstByteOffset metricInfo
+	RedisReplicationOffset                 metricInfo
+	RedisReplicationReplicaOffset          metricInfo
+	RedisRole                              metricInfo
+	RedisSlavesConnected                   metricInfo
+	RedisUptime                            metricInfo
+}
+
+type metricInfo struct {
+	Name string
 }
 
 type metricRedisClientsBlocked struct {
@@ -1673,6 +1824,55 @@ func newMetricRedisReplicationOffset(cfg MetricConfig) metricRedisReplicationOff
 	return m
 }
 
+type metricRedisReplicationReplicaOffset struct {
+	data     pmetric.Metric // data buffer for generated metric.
+	config   MetricConfig   // metric config provided by user.
+	capacity int            // max observed number of data points added to the metric.
+}
+
+// init fills redis.replication.replica_offset metric with initial data.
+func (m *metricRedisReplicationReplicaOffset) init() {
+	m.data.SetName("redis.replication.replica_offset")
+	m.data.SetDescription("Offset for redis replica")
+	m.data.SetUnit("By")
+	m.data.SetEmptyGauge()
+}
+
+func (m *metricRedisReplicationReplicaOffset) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val int64) {
+	if !m.config.Enabled {
+		return
+	}
+	dp := m.data.Gauge().DataPoints().AppendEmpty()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	dp.SetIntValue(val)
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricRedisReplicationReplicaOffset) updateCapacity() {
+	if m.data.Gauge().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Gauge().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricRedisReplicationReplicaOffset) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricRedisReplicationReplicaOffset(cfg MetricConfig) metricRedisReplicationReplicaOffset {
+	m := metricRedisReplicationReplicaOffset{config: cfg}
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
 type metricRedisRole struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	config   MetricConfig   // metric config provided by user.
@@ -1836,6 +2036,8 @@ type MetricsBuilder struct {
 	metricsCapacity                              int                  // maximum observed number of metrics per resource.
 	metricsBuffer                                pmetric.Metrics      // accumulates metrics data before emitting.
 	buildInfo                                    component.BuildInfo  // contains version information.
+	resourceAttributeIncludeFilter               map[string]filter.Filter
+	resourceAttributeExcludeFilter               map[string]filter.Filter
 	metricRedisClientsBlocked                    metricRedisClientsBlocked
 	metricRedisClientsConnected                  metricRedisClientsConnected
 	metricRedisClientsMaxInputBuffer             metricRedisClientsMaxInputBuffer
@@ -1867,22 +2069,30 @@ type MetricsBuilder struct {
 	metricRedisRdbChangesSinceLastSave           metricRedisRdbChangesSinceLastSave
 	metricRedisReplicationBacklogFirstByteOffset metricRedisReplicationBacklogFirstByteOffset
 	metricRedisReplicationOffset                 metricRedisReplicationOffset
+	metricRedisReplicationReplicaOffset          metricRedisReplicationReplicaOffset
 	metricRedisRole                              metricRedisRole
 	metricRedisSlavesConnected                   metricRedisSlavesConnected
 	metricRedisUptime                            metricRedisUptime
 }
 
-// metricBuilderOption applies changes to default metrics builder.
-type metricBuilderOption func(*MetricsBuilder)
-
-// WithStartTime sets startTime on the metrics builder.
-func WithStartTime(startTime pcommon.Timestamp) metricBuilderOption {
-	return func(mb *MetricsBuilder) {
-		mb.startTime = startTime
-	}
+// MetricBuilderOption applies changes to default metrics builder.
+type MetricBuilderOption interface {
+	apply(*MetricsBuilder)
 }
 
-func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSettings, options ...metricBuilderOption) *MetricsBuilder {
+type metricBuilderOptionFunc func(mb *MetricsBuilder)
+
+func (mbof metricBuilderOptionFunc) apply(mb *MetricsBuilder) {
+	mbof(mb)
+}
+
+// WithStartTime sets startTime on the metrics builder.
+func WithStartTime(startTime pcommon.Timestamp) MetricBuilderOption {
+	return metricBuilderOptionFunc(func(mb *MetricsBuilder) {
+		mb.startTime = startTime
+	})
+}
+func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.Settings, options ...MetricBuilderOption) *MetricsBuilder {
 	mb := &MetricsBuilder{
 		config:                                       mbc,
 		startTime:                                    pcommon.NewTimestampFromTime(time.Now()),
@@ -1919,12 +2129,34 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricRedisRdbChangesSinceLastSave:           newMetricRedisRdbChangesSinceLastSave(mbc.Metrics.RedisRdbChangesSinceLastSave),
 		metricRedisReplicationBacklogFirstByteOffset: newMetricRedisReplicationBacklogFirstByteOffset(mbc.Metrics.RedisReplicationBacklogFirstByteOffset),
 		metricRedisReplicationOffset:                 newMetricRedisReplicationOffset(mbc.Metrics.RedisReplicationOffset),
+		metricRedisReplicationReplicaOffset:          newMetricRedisReplicationReplicaOffset(mbc.Metrics.RedisReplicationReplicaOffset),
 		metricRedisRole:                              newMetricRedisRole(mbc.Metrics.RedisRole),
 		metricRedisSlavesConnected:                   newMetricRedisSlavesConnected(mbc.Metrics.RedisSlavesConnected),
 		metricRedisUptime:                            newMetricRedisUptime(mbc.Metrics.RedisUptime),
+		resourceAttributeIncludeFilter:               make(map[string]filter.Filter),
+		resourceAttributeExcludeFilter:               make(map[string]filter.Filter),
 	}
+	if mbc.ResourceAttributes.RedisVersion.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["redis.version"] = filter.CreateFilter(mbc.ResourceAttributes.RedisVersion.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.RedisVersion.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["redis.version"] = filter.CreateFilter(mbc.ResourceAttributes.RedisVersion.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.ServerAddress.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["server.address"] = filter.CreateFilter(mbc.ResourceAttributes.ServerAddress.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ServerAddress.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["server.address"] = filter.CreateFilter(mbc.ResourceAttributes.ServerAddress.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.ServerPort.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["server.port"] = filter.CreateFilter(mbc.ResourceAttributes.ServerPort.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ServerPort.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["server.port"] = filter.CreateFilter(mbc.ResourceAttributes.ServerPort.MetricsExclude)
+	}
+
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 	return mb
 }
@@ -1942,20 +2174,28 @@ func (mb *MetricsBuilder) updateCapacity(rm pmetric.ResourceMetrics) {
 }
 
 // ResourceMetricsOption applies changes to provided resource metrics.
-type ResourceMetricsOption func(pmetric.ResourceMetrics)
+type ResourceMetricsOption interface {
+	apply(pmetric.ResourceMetrics)
+}
+
+type resourceMetricsOptionFunc func(pmetric.ResourceMetrics)
+
+func (rmof resourceMetricsOptionFunc) apply(rm pmetric.ResourceMetrics) {
+	rmof(rm)
+}
 
 // WithResource sets the provided resource on the emitted ResourceMetrics.
 // It's recommended to use ResourceBuilder to create the resource.
 func WithResource(res pcommon.Resource) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		res.CopyTo(rm.Resource())
-	}
+	})
 }
 
 // WithStartTimeOverride overrides start time for all the resource metrics data points.
 // This option should be only used if different start time has to be set on metrics coming from different resources.
 func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		var dps pmetric.NumberDataPointSlice
 		metrics := rm.ScopeMetrics().At(0).Metrics()
 		for i := 0; i < metrics.Len(); i++ {
@@ -1969,7 +2209,7 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 				dps.At(j).SetStartTimestamp(start)
 			}
 		}
-	}
+	})
 }
 
 // EmitForResource saves all the generated metrics under a new resource and updates the internal state to be ready for
@@ -1977,10 +2217,10 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 // needs to emit metrics from several resources. Otherwise calling this function is not required,
 // just `Emit` function can be called instead.
 // Resource attributes should be provided as ResourceMetricsOption arguments.
-func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
+func (mb *MetricsBuilder) EmitForResource(options ...ResourceMetricsOption) {
 	rm := pmetric.NewResourceMetrics()
 	ils := rm.ScopeMetrics().AppendEmpty()
-	ils.Scope().SetName("otelcol/redisreceiver")
+	ils.Scope().SetName(ScopeName)
 	ils.Scope().SetVersion(mb.buildInfo.Version)
 	ils.Metrics().EnsureCapacity(mb.metricsCapacity)
 	mb.metricRedisClientsBlocked.emit(ils.Metrics())
@@ -2014,13 +2254,25 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricRedisRdbChangesSinceLastSave.emit(ils.Metrics())
 	mb.metricRedisReplicationBacklogFirstByteOffset.emit(ils.Metrics())
 	mb.metricRedisReplicationOffset.emit(ils.Metrics())
+	mb.metricRedisReplicationReplicaOffset.emit(ils.Metrics())
 	mb.metricRedisRole.emit(ils.Metrics())
 	mb.metricRedisSlavesConnected.emit(ils.Metrics())
 	mb.metricRedisUptime.emit(ils.Metrics())
 
-	for _, op := range rmo {
-		op(rm)
+	for _, op := range options {
+		op.apply(rm)
 	}
+	for attr, filter := range mb.resourceAttributeIncludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && !filter.Matches(val.AsString()) {
+			return
+		}
+	}
+	for attr, filter := range mb.resourceAttributeExcludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && filter.Matches(val.AsString()) {
+			return
+		}
+	}
+
 	if ils.Metrics().Len() > 0 {
 		mb.updateCapacity(rm)
 		rm.MoveTo(mb.metricsBuffer.ResourceMetrics().AppendEmpty())
@@ -2030,8 +2282,8 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 // Emit returns all the metrics accumulated by the metrics builder and updates the internal state to be ready for
 // recording another set of metrics. This function will be responsible for applying all the transformations required to
 // produce metric representation defined in metadata and user config, e.g. delta or cumulative.
-func (mb *MetricsBuilder) Emit(rmo ...ResourceMetricsOption) pmetric.Metrics {
-	mb.EmitForResource(rmo...)
+func (mb *MetricsBuilder) Emit(options ...ResourceMetricsOption) pmetric.Metrics {
+	mb.EmitForResource(options...)
 	metrics := mb.metricsBuffer
 	mb.metricsBuffer = pmetric.NewMetrics()
 	return metrics
@@ -2192,6 +2444,11 @@ func (mb *MetricsBuilder) RecordRedisReplicationOffsetDataPoint(ts pcommon.Times
 	mb.metricRedisReplicationOffset.recordDataPoint(mb.startTime, ts, val)
 }
 
+// RecordRedisReplicationReplicaOffsetDataPoint adds a data point to redis.replication.replica_offset metric.
+func (mb *MetricsBuilder) RecordRedisReplicationReplicaOffsetDataPoint(ts pcommon.Timestamp, val int64) {
+	mb.metricRedisReplicationReplicaOffset.recordDataPoint(mb.startTime, ts, val)
+}
+
 // RecordRedisRoleDataPoint adds a data point to redis.role metric.
 func (mb *MetricsBuilder) RecordRedisRoleDataPoint(ts pcommon.Timestamp, val int64, roleAttributeValue AttributeRole) {
 	mb.metricRedisRole.recordDataPoint(mb.startTime, ts, val, roleAttributeValue.String())
@@ -2209,9 +2466,9 @@ func (mb *MetricsBuilder) RecordRedisUptimeDataPoint(ts pcommon.Timestamp, val i
 
 // Reset resets metrics builder to its initial state. It should be used when external metrics source is restarted,
 // and metrics builder should update its startTime and reset it's internal state accordingly.
-func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
+func (mb *MetricsBuilder) Reset(options ...MetricBuilderOption) {
 	mb.startTime = pcommon.NewTimestampFromTime(time.Now())
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 }

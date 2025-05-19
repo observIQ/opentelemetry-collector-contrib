@@ -15,10 +15,11 @@ import (
 	"go.opentelemetry.io/collector/receiver/receivertest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/testutil"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jmxreceiver/internal/metadata"
 )
 
 func TestReceiver(t *testing.T) {
-	params := receivertest.NewNopCreateSettings()
+	params := receivertest.NewNopSettings(metadata.Type)
 	config := &Config{
 		Endpoint: "service:jmx:protocol:sap",
 		OTLPExporterConfig: otlpExporterConfig{
@@ -31,8 +32,8 @@ func TestReceiver(t *testing.T) {
 	require.Same(t, params.Logger, receiver.logger)
 	require.Same(t, config, receiver.config)
 
-	require.Nil(t, receiver.Start(context.Background(), componenttest.NewNopHost()))
-	require.Nil(t, receiver.Shutdown(context.Background()))
+	require.NoError(t, receiver.Start(context.Background(), componenttest.NewNopHost()))
+	require.NoError(t, receiver.Shutdown(context.Background()))
 }
 
 func TestBuildJMXMetricGathererConfig(t *testing.T) {
@@ -50,7 +51,7 @@ func TestBuildJMXMetricGathererConfig(t *testing.T) {
 				CollectionInterval: 123 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "https://myotlpendpoint",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 234 * time.Second,
 					},
 					Headers: map[string]string{
@@ -61,9 +62,8 @@ func TestBuildJMXMetricGathererConfig(t *testing.T) {
 				// While these aren't realistic usernames/passwords, we want to test the
 				// multiline handling in place to reduce the attack surface of the
 				// interface to the JMX metrics gatherer
-				Username: "myuser\nname",
-				Password: `mypass 
-word`,
+				Username:           "myuser\nname",
+				Password:           "mypass \nword",
 				Realm:              "myrealm",
 				RemoteProfile:      "myprofile",
 				TruststorePath:     "/1/2/3",
@@ -105,7 +105,7 @@ otel.resource.attributes = abc=123,one=two`,
 				CollectionInterval: 123 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "myotlpendpoint",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 234 * time.Second,
 					},
 				},
@@ -120,7 +120,7 @@ otel.resource.attributes = abc=123,one=two`,
 				CollectionInterval: 123 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "myotlpendpoint",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 234 * time.Second,
 					},
 				},
@@ -135,7 +135,7 @@ otel.resource.attributes = abc=123,one=two`,
 				CollectionInterval: 123 * time.Second,
 				OTLPExporterConfig: otlpExporterConfig{
 					Endpoint: "myotlpendpoint",
-					TimeoutSettings: exporterhelper.TimeoutSettings{
+					TimeoutSettings: exporterhelper.TimeoutConfig{
 						Timeout: 234 * time.Second,
 					},
 				},
@@ -145,8 +145,8 @@ otel.resource.attributes = abc=123,one=two`,
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(tt *testing.T) {
-			params := receivertest.NewNopCreateSettings()
+		t.Run(test.name, func(*testing.T) {
+			params := receivertest.NewNopSettings(metadata.Type)
 			receiver := newJMXMetricReceiver(params, test.config, consumertest.NewNop())
 			jmxConfig, err := receiver.buildJMXMetricGathererConfig()
 			if test.expectedError == "" {
@@ -178,12 +178,11 @@ func TestBuildOTLPReceiverInvalidEndpoints(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(tt *testing.T) {
-			params := receivertest.NewNopCreateSettings()
+		t.Run(test.name, func(*testing.T) {
+			params := receivertest.NewNopSettings(metadata.Type)
 			jmxReceiver := newJMXMetricReceiver(params, test.config, consumertest.NewNop())
 			otlpReceiver, err := jmxReceiver.buildOTLPReceiver()
-			require.Error(t, err)
-			require.Contains(t, err.Error(), test.expectedErr)
+			require.ErrorContains(t, err, test.expectedErr)
 			require.Nil(t, otlpReceiver)
 		})
 	}

@@ -19,6 +19,7 @@ func Test_getGenericMetadata(t *testing.T) {
 	om := &v1.ObjectMeta{
 		Name:              "test-name",
 		UID:               "test-uid",
+		Namespace:         "test-namespace",
 		Generation:        0,
 		CreationTimestamp: v1.NewTime(now),
 		Labels: map[string]string{
@@ -46,6 +47,7 @@ func Test_getGenericMetadata(t *testing.T) {
 	assert.Equal(t, map[string]string{
 		"k8s.workload.name":               "test-name",
 		"k8s.workload.kind":               "ResourceType",
+		"k8s.namespace.name":              "test-namespace",
 		"resourcetype.creation_timestamp": now.Format(time.RFC3339),
 		"k8s.owner-kind-1.name":           "owner1",
 		"k8s.owner-kind-1.uid":            "owner1",
@@ -216,10 +218,10 @@ func TestGetMetadataUpdate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			delta := GetMetadataUpdate(tt.args.oldMdata, tt.args.newMdata)
 			if tt.metadataDelta != nil {
-				require.Equal(t, 1, len(delta))
+				require.Len(t, delta, 1)
 				require.Equal(t, *tt.metadataDelta, delta[0].MetadataDelta)
 			} else {
-				require.Zero(t, len(delta))
+				require.Empty(t, delta)
 			}
 		})
 	}

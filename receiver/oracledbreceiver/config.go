@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 	"go.uber.org/multierr"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/oracledbreceiver/internal/metadata"
@@ -27,13 +27,13 @@ var (
 )
 
 type Config struct {
-	DataSource                              string `mapstructure:"datasource"`
-	Endpoint                                string `mapstructure:"endpoint"`
-	Password                                string `mapstructure:"password"`
-	Service                                 string `mapstructure:"service"`
-	Username                                string `mapstructure:"username"`
-	scraperhelper.ScraperControllerSettings `mapstructure:",squash"`
-	metadata.MetricsBuilderConfig           `mapstructure:",squash"`
+	DataSource                     string `mapstructure:"datasource"`
+	Endpoint                       string `mapstructure:"endpoint"`
+	Password                       string `mapstructure:"password"`
+	Service                        string `mapstructure:"service"`
+	Username                       string `mapstructure:"username"`
+	scraperhelper.ControllerConfig `mapstructure:",squash"`
+	metadata.MetricsBuilderConfig  `mapstructure:",squash"`
 }
 
 func (c Config) Validate() error {
@@ -41,7 +41,6 @@ func (c Config) Validate() error {
 
 	// If DataSource is defined it takes precedence over the rest of the connection options.
 	if c.DataSource == "" {
-
 		if c.Endpoint == "" {
 			allErrs = multierr.Append(allErrs, errEmptyEndpoint)
 		}

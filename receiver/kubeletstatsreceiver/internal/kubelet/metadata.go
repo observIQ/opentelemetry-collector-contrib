@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	conventions "go.opentelemetry.io/otel/semconv/v1.27.0"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	stats "k8s.io/kubelet/pkg/apis/stats/v1alpha1"
@@ -20,28 +20,28 @@ import (
 type MetadataLabel string
 
 // Values for MetadataLabel enum.
-const (
-	MetadataLabelContainerID MetadataLabel = conventions.AttributeContainerID
-	MetadataLabelVolumeType  MetadataLabel = labelVolumeType
-)
+const MetadataLabelVolumeType MetadataLabel = labelVolumeType
 
-var supportedLabels = map[MetadataLabel]bool{
-	MetadataLabelContainerID: true,
-	MetadataLabelVolumeType:  true,
-}
+var (
+	MetadataLabelContainerID MetadataLabel = MetadataLabel(conventions.ContainerIDKey)
+	supportedLabels                        = map[MetadataLabel]bool{
+		MetadataLabelContainerID: true,
+		MetadataLabelVolumeType:  true,
+	}
+)
 
 // ValidateMetadataLabelsConfig validates that provided list of metadata labels is supported
 func ValidateMetadataLabelsConfig(labels []MetadataLabel) error {
 	labelsFound := map[MetadataLabel]bool{}
 	for _, label := range labels {
-		if _, supported := supportedLabels[label]; supported {
-			if _, duplicate := labelsFound[label]; duplicate {
-				return fmt.Errorf("duplicate metadata label: %q", label)
-			}
-			labelsFound[label] = true
-		} else {
+		_, supported := supportedLabels[label]
+		if !supported {
 			return fmt.Errorf("label %q is not supported", label)
 		}
+		if _, duplicate := labelsFound[label]; duplicate {
+			return fmt.Errorf("duplicate metadata label: %q", label)
+		}
+		labelsFound[label] = true
 	}
 	return nil
 }
@@ -52,6 +52,7 @@ type Metadata struct {
 	DetailedPVCResourceSetter func(rb *metadata.ResourceBuilder, volCacheID, volumeClaim, namespace string) error
 	podResources              map[string]resources
 	containerResources        map[string]resources
+	nodeInfo                  NodeInfo
 }
 
 type resources struct {
@@ -59,6 +60,14 @@ type resources struct {
 	cpuLimit      float64
 	memoryRequest int64
 	memoryLimit   int64
+}
+
+type NodeInfo struct {
+	Name string
+	// node's CPU capacity in cores
+	CPUCapacity float64
+	// node's Memory capacity in bytes
+	MemoryCapacity float64
 }
 
 func getContainerResources(r *v1.ResourceRequirements) resources {
@@ -74,14 +83,16 @@ func getContainerResources(r *v1.ResourceRequirements) resources {
 	}
 }
 
-func NewMetadata(labels []MetadataLabel, podsMetadata *v1.PodList,
-	detailedPVCResourceSetter func(rb *metadata.ResourceBuilder, volCacheID, volumeClaim, namespace string) error) Metadata {
+func NewMetadata(labels []MetadataLabel, podsMetadata *v1.PodList, nodeInfo NodeInfo,
+	detailedPVCResourceSetter func(rb *metadata.ResourceBuilder, volCacheID, volumeClaim, namespace string) error,
+) Metadata {
 	m := Metadata{
 		Labels:                    getLabelsMap(labels),
 		PodsMetadata:              podsMetadata,
 		DetailedPVCResourceSetter: detailedPVCResourceSetter,
-		podResources:              make(map[string]resources, 0),
-		containerResources:        make(map[string]resources, 0),
+		podResources:              make(map[string]resources),
+		containerResources:        make(map[string]resources),
+		nodeInfo:                  nodeInfo,
 	}
 
 	if podsMetadata != nil {
@@ -144,7 +155,8 @@ func getLabelsMap(metadataLabels []MetadataLabel) map[MetadataLabel]bool {
 
 // getExtraResources gets extra resources based on provided metadata label.
 func (m *Metadata) setExtraResources(rb *metadata.ResourceBuilder, podRef stats.PodReference,
-	extraMetadataLabel MetadataLabel, extraMetadataFrom string) error {
+	extraMetadataLabel MetadataLabel, extraMetadataFrom string,
+) error {
 	// Ensure MetadataLabel exists before proceeding.
 	if !m.Labels[extraMetadataLabel] || len(m.Labels) == 0 {
 		return nil
@@ -197,7 +209,6 @@ func (m *Metadata) getContainerID(podUID string, containerName string) (string, 
 					return stripContainerID(containerStatus.ContainerID), nil
 				}
 			}
-
 		}
 	}
 

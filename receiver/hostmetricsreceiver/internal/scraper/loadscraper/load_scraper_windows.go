@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build windows
-// +build windows
 
 package loadscraper // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/loadscraper"
 
@@ -12,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shirou/gopsutil/v3/load"
+	"github.com/shirou/gopsutil/v4/load"
 	"go.uber.org/zap"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/perfcounters"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/winperfcounters"
 )
 
 // Sample processor queue length at a 5s frequency, and calculate exponentially weighted moving averages
@@ -32,6 +31,9 @@ var (
 	loadAvgFactor1m  = 1 / math.Exp(samplingFrequency.Seconds()/time.Minute.Seconds())
 	loadAvgFactor5m  = 1 / math.Exp(samplingFrequency.Seconds()/(5*time.Minute).Seconds())
 	loadAvgFactor15m = 1 / math.Exp(samplingFrequency.Seconds()/(15*time.Minute).Seconds())
+
+	// perfCounterFactory is used to facilitate testing
+	perfCounterFactory = winperfcounters.NewWatcher
 )
 
 var (
@@ -44,11 +46,15 @@ var (
 type sampler struct {
 	done               chan struct{}
 	logger             *zap.Logger
-	perfCounterScraper perfcounters.PerfCounterScraper
+	perfCounterWatcher winperfcounters.PerfCounterWatcher
 	loadAvg1m          float64
 	loadAvg5m          float64
 	loadAvg15m         float64
 	lock               sync.RWMutex
+}
+
+func setSamplingFrequency(freq time.Duration) {
+	samplingFrequency = freq
 }
 
 func startSampling(_ context.Context, logger *zap.Logger) error {
@@ -65,7 +71,11 @@ func startSampling(_ context.Context, logger *zap.Logger) error {
 	var err error
 	samplerInstance, err = newSampler(logger)
 	if err != nil {
-		return err
+		// To keep the same behavior, as previous versions on Windows, error in this case is just logged
+		// and the scraper is not started.
+		scraperCount = 0
+		logger.Error("Failed to init performance counters, load metrics will not be scraped", zap.Error(err))
+		return errPreventScrape
 	}
 
 	samplerInstance.startSamplingTicker()
@@ -73,15 +83,14 @@ func startSampling(_ context.Context, logger *zap.Logger) error {
 }
 
 func newSampler(logger *zap.Logger) (*sampler, error) {
-	perfCounterScraper := &perfcounters.PerfLibScraper{}
-
-	if err := perfCounterScraper.Initialize(system); err != nil {
+	perfCounterWatcher, err := perfCounterFactory(system, "", processorQueueLength)
+	if err != nil {
 		return nil, err
 	}
 
 	sampler := &sampler{
 		logger:             logger,
-		perfCounterScraper: perfCounterScraper,
+		perfCounterWatcher: perfCounterWatcher,
 		done:               make(chan struct{}),
 	}
 
@@ -93,6 +102,7 @@ func (sw *sampler) startSamplingTicker() {
 		ticker := time.NewTicker(samplingFrequency)
 		defer ticker.Stop()
 
+		sw.sampleLoad()
 		for {
 			select {
 			case <-ticker.C:
@@ -105,25 +115,19 @@ func (sw *sampler) startSamplingTicker() {
 }
 
 func (sw *sampler) sampleLoad() {
-	counters, err := sw.perfCounterScraper.Scrape()
+	var currentLoadRaw int64
+	ok, err := sw.perfCounterWatcher.ScrapeRawValue(&currentLoadRaw)
 	if err != nil {
 		sw.logger.Error("Load Scraper: failed to measure processor queue length", zap.Error(err))
 		return
 	}
 
-	systemObject, err := counters.GetObject(system)
-	if err != nil {
-		sw.logger.Error("Load Scraper: failed to measure processor queue length", zap.Error(err))
+	if !ok {
+		sw.logger.Error("Load Scraper: failed to measure processor queue length, no data returned")
 		return
 	}
 
-	counterValues, err := systemObject.GetValues(processorQueueLength)
-	if err != nil {
-		sw.logger.Error("Load Scraper: failed to measure processor queue length", zap.Error(err))
-		return
-	}
-
-	currentLoad := float64(counterValues[0].Values[processorQueueLength])
+	currentLoad := float64(currentLoadRaw)
 
 	sw.lock.Lock()
 	defer sw.lock.Unlock()

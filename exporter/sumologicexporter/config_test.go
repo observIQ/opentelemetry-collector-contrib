@@ -1,116 +1,119 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package sumologicexporter
+package sumologicexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sumologicexporter"
 
 import (
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/config/confighttp"
-	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 )
 
-func TestConfigValidation(t *testing.T) {
+func TestInitExporterInvalidConfiguration(t *testing.T) {
+	clientConfig := confighttp.NewDefaultClientConfig()
+	clientConfig.Endpoint = "test_endpoint"
+	clientConfig.Timeout = defaultTimeout
+
+	clientConfigGzip := confighttp.NewDefaultClientConfig()
+	clientConfigGzip.Endpoint = "test_endpoint"
+	clientConfigGzip.Timeout = defaultTimeout
+	clientConfigGzip.Compression = "gzip"
+
 	testcases := []struct {
-		name        string
-		cfg         *Config
-		expectedErr string
+		name          string
+		cfg           *Config
+		expectedError error
 	}{
 		{
-			name: "invalid log format",
+			name:          "unexpected log format",
+			expectedError: errors.New("unexpected log format: test_format"),
 			cfg: &Config{
-				LogFormat:        "test_format",
-				MetricFormat:     "carbon2",
-				CompressEncoding: "gzip",
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Timeout:  defaultTimeout,
-					Endpoint: "test_endpoint",
-				},
+				LogFormat:    "test_format",
+				MetricFormat: "otlp",
+				ClientConfig: clientConfig,
 			},
-			expectedErr: "unexpected log format: test_format",
 		},
 		{
-			name: "invalid metric format",
+			name:          "unexpected metric format",
+			expectedError: errors.New("unexpected metric format: test_format"),
 			cfg: &Config{
 				LogFormat:    "json",
 				MetricFormat: "test_format",
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Timeout:  defaultTimeout,
-					Endpoint: "test_endpoint",
-				},
-				CompressEncoding: "gzip",
+				ClientConfig: clientConfigGzip,
 			},
-			expectedErr: "unexpected metric format: test_format",
 		},
 		{
-			name: "invalid compress encoding",
+			name:          "unsupported Carbon2 metrics format",
+			expectedError: errors.New("support for the carbon2 metric format was removed, please use prometheus or otlp instead"),
 			cfg: &Config{
-				LogFormat:        "json",
-				MetricFormat:     "carbon2",
-				CompressEncoding: "test_format",
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Timeout:  defaultTimeout,
-					Endpoint: "test_endpoint",
-				},
+				LogFormat:    "json",
+				MetricFormat: "carbon2",
+				ClientConfig: clientConfigGzip,
 			},
-			expectedErr: "unexpected compression encoding: test_format",
 		},
 		{
-			name: "invalid endpoint",
+			name:          "unsupported Graphite metrics format",
+			expectedError: errors.New("support for the graphite metric format was removed, please use prometheus or otlp instead"),
 			cfg: &Config{
-				LogFormat:        "json",
-				MetricFormat:     "carbon2",
-				CompressEncoding: "gzip",
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Timeout: defaultTimeout,
-				},
+				LogFormat:    "json",
+				MetricFormat: "graphite",
+				ClientConfig: clientConfigGzip,
 			},
-			expectedErr: "endpoint is not set",
-		},
-		{
-			name: "invalid log format",
-			cfg: &Config{
-				LogFormat:        "json",
-				MetricFormat:     "carbon2",
-				CompressEncoding: "gzip",
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Timeout:  defaultTimeout,
-					Endpoint: "test_endpoint",
-				},
-				QueueSettings: exporterhelper.QueueSettings{
-					Enabled:   true,
-					QueueSize: -10,
-				},
-			},
-			expectedErr: "queue settings has invalid configuration: queue size must be positive",
-		},
-		{
-			name: "valid config",
-			cfg: &Config{
-				LogFormat:        "json",
-				MetricFormat:     "carbon2",
-				CompressEncoding: "gzip",
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Timeout:  defaultTimeout,
-					Endpoint: "test_endpoint",
-				},
-			},
-			expectedErr: "",
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			err := xconfmap.Validate(tc.cfg)
 
+			if tc.expectedError != nil {
+				assert.EqualError(t, err, tc.expectedError.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestConfigInvalidTimeout(t *testing.T) {
+	clientConfig := confighttp.NewDefaultClientConfig()
+	clientConfig.Timeout = 56 * time.Second
+
+	clientConfigZeroTimeout := confighttp.NewDefaultClientConfig()
+	clientConfigZeroTimeout.Timeout = 0 * time.Second
+	testcases := []struct {
+		name          string
+		expectedError error
+		cfg           *Config
+	}{
+		{
+			name:          "over the limit timeout",
+			expectedError: errors.New("timeout must be between 1 and 55 seconds, got 56s"),
+			cfg: &Config{
+				ClientConfig: clientConfig,
+			},
+		},
+		{
+			name:          "less than 1 timeout",
+			expectedError: errors.New("timeout must be between 1 and 55 seconds, got 0s"),
+			cfg: &Config{
+				ClientConfig: clientConfigZeroTimeout,
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
 			err := tc.cfg.Validate()
 
-			if tc.expectedErr == "" {
-				assert.NoError(t, err)
+			if tc.expectedError != nil {
+				assert.EqualError(t, err, tc.expectedError.Error())
 			} else {
-				require.NotNil(t, err)
-				assert.EqualError(t, err, tc.expectedErr)
+				assert.NoError(t, err)
 			}
 		})
 	}

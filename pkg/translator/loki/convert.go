@@ -137,7 +137,7 @@ func parseAttributeNames(attrsToSelect pcommon.Value) []string {
 }
 
 func removeAttributes(attrs pcommon.Map, labels model.LabelSet) {
-	attrs.RemoveIf(func(s string, v pcommon.Value) bool {
+	attrs.RemoveIf(func(s string, _ pcommon.Value) bool {
 		if s == hintAttributes || s == hintResources || s == hintTenant || s == hintFormat {
 			return true
 		}
@@ -187,7 +187,6 @@ func convertLogToLokiEntry(lr plog.LogRecord, res pcommon.Resource, format strin
 	default:
 		return nil, fmt.Errorf("invalid format %s. Expected one of: %s, %s, %s", format, formatJSON, formatLogfmt, formatRaw)
 	}
-
 }
 
 func timestampFromLogRecord(lr plog.LogRecord) time.Time {

@@ -4,15 +4,7 @@ status:
   class: processor
   stability:
     beta: [traces, metrics, logs]
-  distributions:
-  - core
-  - contrib
-  - aws
-  - grafana
-  - observiq
-  - redhat
-  - splunk
-  - sumo
+  distributions: [core, contrib, k8s]
   warnings: [Identity Conflict]
   codeowners:
     active: [boostchicken]

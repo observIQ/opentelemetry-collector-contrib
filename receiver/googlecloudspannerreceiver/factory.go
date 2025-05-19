@@ -10,7 +10,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/googlecloudspannerreceiver/internal/metadata"
 )
@@ -32,7 +33,7 @@ func NewFactory() receiver.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		ScraperControllerSettings:         scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
+		ControllerConfig:                  scraperhelper.NewDefaultControllerConfig(),
 		TopMetricsQueryMaxRows:            defaultTopMetricsQueryMaxRows,
 		BackfillEnabled:                   defaultBackfillEnabled,
 		HideTopnLockstatsRowrangestartkey: defaultHideTopnLockstatsRowrangestartkey,
@@ -42,20 +43,19 @@ func createDefaultConfig() component.Config {
 
 func createMetricsReceiver(
 	_ context.Context,
-	settings receiver.CreateSettings,
+	settings receiver.Settings,
 	baseCfg component.Config,
 	consumer consumer.Metrics,
 ) (receiver.Metrics, error) {
-
 	rCfg := baseCfg.(*Config)
 	r := newGoogleCloudSpannerReceiver(settings.Logger, rCfg)
 
-	scraper, err := scraperhelper.NewScraper(metadata.Type, r.Scrape, scraperhelper.WithStart(r.Start),
-		scraperhelper.WithShutdown(r.Shutdown))
+	s, err := scraper.NewMetrics(r.Scrape, scraper.WithStart(r.Start),
+		scraper.WithShutdown(r.Shutdown))
 	if err != nil {
 		return nil, err
 	}
 
-	return scraperhelper.NewScraperControllerReceiver(&rCfg.ScraperControllerSettings, settings, consumer,
-		scraperhelper.AddScraper(scraper))
+	return scraperhelper.NewMetricsController(&rCfg.ControllerConfig, settings, consumer,
+		scraperhelper.AddScraper(metadata.Type, s))
 }

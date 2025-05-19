@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/consumer"
@@ -23,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/pmetrictest"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/collectdreceiver/internal/metadata"
 )
 
 type wantedBody struct {
@@ -44,22 +44,10 @@ func TestNewReceiver(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "nil next Consumer",
-			args: args{
-				config: &Config{
-					HTTPServerSettings: confighttp.HTTPServerSettings{
-						Endpoint: ":0",
-					},
-				},
-				attrsPrefix: "default_attr_",
-			},
-			wantErr: component.ErrNilNextConsumer,
-		},
-		{
 			name: "happy path",
 			args: args{
 				config: &Config{
-					HTTPServerSettings: confighttp.HTTPServerSettings{
+					ServerConfig: confighttp.ServerConfig{
 						Endpoint: ":0",
 					},
 				},
@@ -71,7 +59,7 @@ func TestNewReceiver(t *testing.T) {
 	logger := zap.NewNop()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := newCollectdReceiver(logger, tt.args.config, "", tt.args.nextConsumer, receivertest.NewNopCreateSettings())
+			_, err := newCollectdReceiver(logger, tt.args.config, "", tt.args.nextConsumer, receivertest.NewNopSettings(metadata.Type))
 			require.ErrorIs(t, err, tt.wantErr)
 		})
 	}
@@ -89,7 +77,7 @@ func TestCollectDServer(t *testing.T) {
 	}
 
 	config := &Config{
-		HTTPServerSettings: confighttp.HTTPServerSettings{
+		ServerConfig: confighttp.ServerConfig{
 			Endpoint: "localhost:8081",
 		},
 	}
@@ -111,7 +99,7 @@ func TestCollectDServer(t *testing.T) {
 
 	testInvalidHTTPMethodCase := testCase{
 		Name:         "invalid-http-method",
-		HTTPMethod:   "GET",
+		HTTPMethod:   http.MethodGet,
 		RequestBody:  `invalid-body`,
 		ResponseCode: 400,
 		WantData:     []pmetric.Metrics{},
@@ -119,7 +107,7 @@ func TestCollectDServer(t *testing.T) {
 
 	testValidRequestBodyCase := testCase{
 		Name:        "valid-request-body",
-		HTTPMethod:  "POST",
+		HTTPMethod:  http.MethodPost,
 		QueryParams: "dap_attr1=attr1val",
 		RequestBody: `[
     	{
@@ -147,7 +135,7 @@ func TestCollectDServer(t *testing.T) {
 
 	testInValidRequestBodyCase := testCase{
 		Name:         "invalid-request-body",
-		HTTPMethod:   "POST",
+		HTTPMethod:   http.MethodPost,
 		RequestBody:  `invalid-body`,
 		ResponseCode: 400,
 		WantData:     []pmetric.Metrics{},
@@ -158,7 +146,7 @@ func TestCollectDServer(t *testing.T) {
 	sink := new(consumertest.MetricsSink)
 
 	logger := zap.NewNop()
-	cdr, err := newCollectdReceiver(logger, config, defaultAttrsPrefix, sink, receivertest.NewNopCreateSettings())
+	cdr, err := newCollectdReceiver(logger, config, defaultAttrsPrefix, sink, receivertest.NewNopSettings(metadata.Type))
 	if err != nil {
 		t.Fatalf("Failed to create receiver: %v", err)
 	}
@@ -178,7 +166,7 @@ func TestCollectDServer(t *testing.T) {
 			sink.Reset()
 			req, err := http.NewRequest(
 				tt.HTTPMethod,
-				"http://"+config.HTTPServerSettings.Endpoint+"?"+tt.QueryParams,
+				"http://"+config.Endpoint+"?"+tt.QueryParams,
 				bytes.NewBuffer([]byte(tt.RequestBody)),
 			)
 			require.NoError(t, err)
@@ -206,7 +194,7 @@ func TestCollectDServer(t *testing.T) {
 func createWantedMetrics(wantedRequestBody wantedBody) pmetric.Metrics {
 	var dataPoint pmetric.NumberDataPoint
 	testMetrics := pmetric.NewMetrics()
-	scopeMemtrics := testMetrics.ResourceMetrics().AppendEmpty().ScopeMetrics().AppendEmpty()
+	scopeMetrics := testMetrics.ResourceMetrics().AppendEmpty().ScopeMetrics().AppendEmpty()
 	testMetric := pmetric.NewMetric()
 	testMetric.SetName(wantedRequestBody.Name)
 	sum := testMetric.SetEmptySum()
@@ -219,13 +207,12 @@ func createWantedMetrics(wantedRequestBody wantedBody) pmetric.Metrics {
 	}
 	attributes.CopyTo(dataPoint.Attributes())
 	dataPoint.SetDoubleValue(wantedRequestBody.Value)
-	newMetric := scopeMemtrics.Metrics().AppendEmpty()
+	newMetric := scopeMetrics.Metrics().AppendEmpty()
 	testMetric.MoveTo(newMetric)
 	return testMetrics
 }
 
 func assertMetricsAreEqual(t *testing.T, expectedData []pmetric.Metrics, actualData []pmetric.Metrics) {
-
 	for i := 0; i < len(expectedData); i++ {
 		err := pmetrictest.CompareMetrics(expectedData[i], actualData[i])
 		require.NoError(t, err)

@@ -6,7 +6,11 @@ import (
 	"go.opentelemetry.io/collector/component"
 )
 
+var (
+	Type      = component.MustNewType("alertmanager")
+	ScopeName = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/alertmanagerexporter"
+)
+
 const (
-	Type            = "alertmanager"
 	TracesStability = component.StabilityLevelDevelopment
 )

@@ -30,7 +30,7 @@ type influxHTTPWriter struct {
 	encoderPool sync.Pool
 	httpClient  *http.Client
 
-	httpClientSettings confighttp.HTTPClientSettings
+	httpClientSettings confighttp.ClientConfig
 	telemetrySettings  component.TelemetrySettings
 	writeURL           string
 	payloadMaxLines    int
@@ -54,7 +54,7 @@ func newInfluxHTTPWriter(logger common.Logger, config *Config, telemetrySettings
 				return e
 			},
 		},
-		httpClientSettings: config.HTTPClientSettings,
+		httpClientSettings: config.ClientConfig,
 		telemetrySettings:  telemetrySettings,
 		writeURL:           writeURL,
 		payloadMaxLines:    config.PayloadMaxLines,
@@ -64,7 +64,7 @@ func newInfluxHTTPWriter(logger common.Logger, config *Config, telemetrySettings
 }
 
 func composeWriteURL(config *Config) (string, error) {
-	writeURL, err := url.Parse(config.HTTPClientSettings.Endpoint)
+	writeURL, err := url.Parse(config.Endpoint)
 	if err != nil {
 		return "", err
 	}
@@ -90,20 +90,20 @@ func composeWriteURL(config *Config) (string, error) {
 		if config.V1Compatibility.Username != "" && config.V1Compatibility.Password != "" {
 			basicAuth := base64.StdEncoding.EncodeToString(
 				[]byte(config.V1Compatibility.Username + ":" + string(config.V1Compatibility.Password)))
-			if config.HTTPClientSettings.Headers == nil {
-				config.HTTPClientSettings.Headers = make(map[string]configopaque.String, 1)
+			if config.Headers == nil {
+				config.Headers = make(map[string]configopaque.String, 1)
 			}
-			config.HTTPClientSettings.Headers["Authorization"] = configopaque.String("Basic " + basicAuth)
+			config.Headers["Authorization"] = configopaque.String("Basic " + basicAuth)
 		}
 	} else {
 		queryValues.Set("org", config.Org)
 		queryValues.Set("bucket", config.Bucket)
 
 		if config.Token != "" {
-			if config.HTTPClientSettings.Headers == nil {
-				config.HTTPClientSettings.Headers = make(map[string]configopaque.String, 1)
+			if config.Headers == nil {
+				config.Headers = make(map[string]configopaque.String, 1)
 			}
-			config.HTTPClientSettings.Headers["Authorization"] = "Token " + config.Token
+			config.Headers["Authorization"] = "Token " + config.Token
 		}
 	}
 
@@ -113,8 +113,8 @@ func composeWriteURL(config *Config) (string, error) {
 }
 
 // Start implements component.StartFunc
-func (w *influxHTTPWriter) Start(_ context.Context, host component.Host) error {
-	httpClient, err := w.httpClientSettings.ToClient(host, w.telemetrySettings)
+func (w *influxHTTPWriter) Start(ctx context.Context, host component.Host) error {
+	httpClient, err := w.httpClientSettings.ToClient(ctx, host, w.telemetrySettings)
 	if err != nil {
 		return err
 	}
@@ -205,10 +205,10 @@ func (b *influxHTTPWriterBatch) WriteBatch(ctx context.Context) error {
 	if err = res.Body.Close(); err != nil {
 		return err
 	}
-	switch res.StatusCode / 100 {
-	case 2: // Success
+	switch {
+	case res.StatusCode >= 200 && res.StatusCode < 300: // Success
 		break
-	case 5: // Retryable error
+	case res.StatusCode >= 500 && res.StatusCode < 600: // Retryable error
 		return fmt.Errorf("line protocol write returned %q %q", res.Status, string(body))
 	default: // Terminal error
 		return consumererror.NewPermanent(fmt.Errorf("line protocol write returned %q %q", res.Status, string(body)))

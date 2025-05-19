@@ -13,7 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/mezmoexporter/internal/metadata"
@@ -40,10 +43,15 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "allsettings"),
 			expected: &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Timeout: 5 * time.Second,
+				ClientConfig: confighttp.ClientConfig{
+					Timeout:             5 * time.Second,
+					MaxIdleConns:        defaultMaxIdleConns,
+					MaxIdleConnsPerHost: defaultMaxIdleConnsPerHost,
+					MaxConnsPerHost:     defaultMaxConnsPerHost,
+					IdleConnTimeout:     defaultIdleConnTimeout,
+					Headers:             map[string]configopaque.String{},
 				},
-				RetrySettings: exporterhelper.RetrySettings{
+				BackOffConfig: configretry.BackOffConfig{
 					Enabled:             false,
 					InitialInterval:     99 * time.Second,
 					MaxInterval:         199 * time.Second,
@@ -51,10 +59,11 @@ func TestLoadConfig(t *testing.T) {
 					RandomizationFactor: backoff.DefaultRandomizationFactor,
 					Multiplier:          backoff.DefaultMultiplier,
 				},
-				QueueSettings: exporterhelper.QueueSettings{
+				QueueSettings: exporterhelper.QueueBatchConfig{
 					Enabled:      false,
 					NumConsumers: 7,
 					QueueSize:    17,
+					Sizer:        exporterhelper.RequestSizerTypeRequests,
 				},
 				IngestURL: "https://alternate.mezmo.com/otel/ingest/rest",
 				IngestKey: "1234509876",
@@ -69,9 +78,9 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}

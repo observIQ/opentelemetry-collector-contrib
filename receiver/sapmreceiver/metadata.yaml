@@ -3,7 +3,12 @@ type: sapm
 status:
   class: receiver
   stability:
-    beta: [traces]
-  distributions: [contrib, splunk, observiq, sumo]
+    deprecated: [traces]
+  deprecation:
+    traces:
+      migration: "use OTLP receiver"
+      date: "2024-10-22"
+  distributions: [contrib]
   codeowners:
     active: [atoulme]
+    seeking_new: true

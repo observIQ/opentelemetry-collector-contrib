@@ -4,7 +4,7 @@
 package metrics
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -273,7 +273,7 @@ func Test_extractSumMetric(t *testing.T) {
 			name:         "gauge (error)",
 			input:        getTestGaugeMetric(),
 			monotonicity: false,
-			wantErr:      fmt.Errorf("extract_sum_metric requires an input metric of type Histogram, ExponentialHistogram or Summary, got Gauge"),
+			wantErr:      errors.New("extract_sum_metric requires an input metric of type Histogram, ExponentialHistogram or Summary, got Gauge"),
 		},
 	}
 	for _, tt := range tests {
@@ -284,7 +284,7 @@ func Test_extractSumMetric(t *testing.T) {
 			evaluate, err := extractSumMetric(tt.monotonicity)
 			assert.NoError(t, err)
 
-			_, err = evaluate(nil, ottlmetric.NewTransformContext(tt.input, actualMetrics, pcommon.NewInstrumentationScope(), pcommon.NewResource()))
+			_, err = evaluate(nil, ottlmetric.NewTransformContext(tt.input, actualMetrics, pcommon.NewInstrumentationScope(), pcommon.NewResource(), pmetric.NewScopeMetrics(), pmetric.NewResourceMetrics()))
 			assert.Equal(t, tt.wantErr, err)
 
 			if tt.want != nil {

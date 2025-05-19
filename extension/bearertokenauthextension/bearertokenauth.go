@@ -5,15 +5,18 @@ package bearertokenauthextension // import "github.com/open-telemetry/openteleme
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"sync"
+	"strings"
+	"sync/atomic"
 
 	"github.com/fsnotify/fsnotify"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/extension/auth"
+	"go.opentelemetry.io/collector/extension"
+	"go.opentelemetry.io/collector/extension/extensionauth"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/credentials"
 )
@@ -22,12 +25,12 @@ var _ credentials.PerRPCCredentials = (*PerRPCAuth)(nil)
 
 // PerRPCAuth is a gRPC credentials.PerRPCCredentials implementation that returns an 'authorization' header.
 type PerRPCAuth struct {
-	metadata map[string]string
+	auth *BearerTokenAuth
 }
 
 // GetRequestMetadata returns the request metadata to be used with the RPC.
 func (c *PerRPCAuth) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return c.metadata, nil
+	return map[string]string{strings.ToLower(c.auth.header): c.auth.authorizationValue()}, nil
 }
 
 // RequireTransportSecurity always returns true for this implementation. Passing bearer tokens in plain-text connections is a bad idea.
@@ -36,15 +39,17 @@ func (c *PerRPCAuth) RequireTransportSecurity() bool {
 }
 
 var (
-	_ auth.Server = (*BearerTokenAuth)(nil)
-	_ auth.Client = (*BearerTokenAuth)(nil)
+	_ extension.Extension      = (*BearerTokenAuth)(nil)
+	_ extensionauth.Server     = (*BearerTokenAuth)(nil)
+	_ extensionauth.HTTPClient = (*BearerTokenAuth)(nil)
+	_ extensionauth.GRPCClient = (*BearerTokenAuth)(nil)
 )
 
-// BearerTokenAuth is an implementation of auth.Client. It embeds a static authorization "bearer" token in every rpc call.
+// BearerTokenAuth is an implementation of extensionauth interfaces. It embeds a static authorization "bearer" token in every rpc call.
 type BearerTokenAuth struct {
-	muTokenString sync.RWMutex
-	scheme        string
-	tokenString   string
+	header                    string
+	scheme                    string
+	authorizationValuesAtomic atomic.Value
 
 	shutdownCH chan struct{}
 
@@ -52,18 +57,29 @@ type BearerTokenAuth struct {
 	logger   *zap.Logger
 }
 
-var _ auth.Client = (*BearerTokenAuth)(nil)
-
 func newBearerTokenAuth(cfg *Config, logger *zap.Logger) *BearerTokenAuth {
-	if cfg.Filename != "" && cfg.BearerToken != "" {
-		logger.Warn("a filename is specified. Configured token is ignored!")
+	if cfg.Filename != "" && (cfg.BearerToken != "" || len(cfg.Tokens) > 0) {
+		logger.Warn("a filename is specified. Configured token(s) is ignored!")
 	}
-	return &BearerTokenAuth{
-		scheme:      cfg.Scheme,
-		tokenString: string(cfg.BearerToken),
-		filename:    cfg.Filename,
-		logger:      logger,
+	a := &BearerTokenAuth{
+		header:   cfg.Header,
+		scheme:   cfg.Scheme,
+		filename: cfg.Filename,
+		logger:   logger,
 	}
+	switch {
+	case len(cfg.Tokens) > 0:
+		tokens := make([]string, len(cfg.Tokens))
+		for i, token := range cfg.Tokens {
+			tokens[i] = string(token)
+		}
+		a.setAuthorizationValues(tokens) // Store tokens
+	case cfg.BearerToken != "":
+		a.setAuthorizationValues([]string{string(cfg.BearerToken)}) // Store token
+	case cfg.Filename != "":
+		a.refreshToken() // Load tokens from file
+	}
+	return a
 }
 
 // Start of BearerTokenAuth does nothing and returns nil if no filename
@@ -75,7 +91,7 @@ func (b *BearerTokenAuth) Start(ctx context.Context, _ component.Host) error {
 	}
 
 	if b.shutdownCH != nil {
-		return fmt.Errorf("bearerToken file monitoring is already running")
+		return errors.New("bearerToken file monitoring is already running")
 	}
 
 	// Read file once
@@ -128,16 +144,48 @@ func (b *BearerTokenAuth) startWatcher(ctx context.Context, watcher *fsnotify.Wa
 	}
 }
 
+// Reloads token from file
 func (b *BearerTokenAuth) refreshToken() {
 	b.logger.Info("refresh token", zap.String("filename", b.filename))
-	token, err := os.ReadFile(b.filename)
+	tokenData, err := os.ReadFile(b.filename)
 	if err != nil {
 		b.logger.Error(err.Error())
 		return
 	}
-	b.muTokenString.Lock()
-	b.tokenString = string(token)
-	b.muTokenString.Unlock()
+
+	tokens := strings.Split(string(tokenData), "\n")
+	for i, token := range tokens {
+		tokens[i] = strings.TrimSpace(token)
+	}
+	b.setAuthorizationValues(tokens) // Stores new tokens
+}
+
+func (b *BearerTokenAuth) setAuthorizationValues(tokens []string) {
+	values := make([]string, len(tokens))
+	for i, token := range tokens {
+		if b.scheme != "" {
+			values[i] = b.scheme + " " + token
+		} else {
+			values[i] = token
+		}
+	}
+	b.authorizationValuesAtomic.Store(values)
+}
+
+// authorizationValues returns the Authorization header/metadata values
+// to set for client auth, and expected values for server auth.
+func (b *BearerTokenAuth) authorizationValues() []string {
+	return b.authorizationValuesAtomic.Load().([]string)
+}
+
+// authorizationValue returns the first Authorization header/metadata value
+// to set for client auth, and expected value for server auth.
+func (b *BearerTokenAuth) authorizationValue() string {
+	values := b.authorizationValues()
+	if len(values) > 0 {
+		return values[0] // Return the first token
+	}
+	return ""
 }
 
 // Shutdown of BearerTokenAuth does nothing and returns nil
@@ -147,7 +195,7 @@ func (b *BearerTokenAuth) Shutdown(_ context.Context) error {
 	}
 
 	if b.shutdownCH == nil {
-		return fmt.Errorf("bearerToken file monitoring is not running")
+		return errors.New("bearerToken file monitoring is not running")
 	}
 	b.shutdownCH <- struct{}{}
 	close(b.shutdownCH)
@@ -158,54 +206,51 @@ func (b *BearerTokenAuth) Shutdown(_ context.Context) error {
 // PerRPCCredentials returns PerRPCAuth an implementation of credentials.PerRPCCredentials that
 func (b *BearerTokenAuth) PerRPCCredentials() (credentials.PerRPCCredentials, error) {
 	return &PerRPCAuth{
-		metadata: map[string]string{"authorization": b.bearerToken()},
+		auth: b,
 	}, nil
-}
-
-func (b *BearerTokenAuth) bearerToken() string {
-	b.muTokenString.RLock()
-	token := fmt.Sprintf("%s %s", b.scheme, b.tokenString)
-	b.muTokenString.RUnlock()
-	return token
 }
 
 // RoundTripper is not implemented by BearerTokenAuth
 func (b *BearerTokenAuth) RoundTripper(base http.RoundTripper) (http.RoundTripper, error) {
 	return &BearerAuthRoundTripper{
-		baseTransport:   base,
-		bearerTokenFunc: b.bearerToken,
+		header:        b.header,
+		baseTransport: base,
+		auth:          b,
 	}, nil
 }
 
-// Authenticate checks whether the given context contains valid auth data.
+// Authenticate checks whether the given context contains valid auth data. Validates tokens from clients trying to access the service (incoming requests)
 func (b *BearerTokenAuth) Authenticate(ctx context.Context, headers map[string][]string) (context.Context, error) {
-	auth, ok := headers["authorization"]
+	auth, ok := headers[strings.ToLower(b.header)]
+	if !ok {
+		auth, ok = headers[b.header]
+	}
 	if !ok || len(auth) == 0 {
-		return ctx, errors.New("authentication didn't succeed")
+		return ctx, fmt.Errorf("missing or empty authorization header: %s", b.header)
 	}
-	token := auth[0]
-	expect := b.tokenString
-	if len(b.scheme) != 0 {
-		expect = fmt.Sprintf("%s %s", b.scheme, expect)
+	token := auth[0] // Extract token from authorization header
+	expectedTokens := b.authorizationValues()
+	for _, expectedToken := range expectedTokens {
+		if subtle.ConstantTimeCompare([]byte(expectedToken), []byte(token)) == 1 {
+			return ctx, nil // Authentication successful, token is valid
+		}
 	}
-	if expect != token {
-		return ctx, fmt.Errorf("scheme or token does not match: %s", token)
-	}
-	return ctx, nil
+	return ctx, fmt.Errorf("scheme or token does not match: %s", token) // Token is invalid
 }
 
 // BearerAuthRoundTripper intercepts and adds Bearer token Authorization headers to each http request.
 type BearerAuthRoundTripper struct {
-	baseTransport   http.RoundTripper
-	bearerTokenFunc func() string
+	header        string
+	baseTransport http.RoundTripper
+	auth          *BearerTokenAuth
 }
 
-// RoundTrip modifies the original request and adds Bearer token Authorization headers.
+// RoundTrip modifies the original request and adds Bearer token Authorization headers. Incoming requests support multiple tokens, but outgoing requests only use one.
 func (interceptor *BearerAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	req2 := req.Clone(req.Context())
 	if req2.Header == nil {
 		req2.Header = make(http.Header)
 	}
-	req2.Header.Set("Authorization", interceptor.bearerTokenFunc())
+	req2.Header.Set(interceptor.header, interceptor.auth.authorizationValue())
 	return interceptor.baseTransport.RoundTrip(req2)
 }

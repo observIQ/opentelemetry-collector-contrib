@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	defaultHeader = "Authorization"
 	defaultScheme = "Bearer"
 )
 
@@ -28,10 +29,11 @@ func NewFactory() extension.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
+		Header: defaultHeader,
 		Scheme: defaultScheme,
 	}
 }
 
-func createExtension(_ context.Context, set extension.CreateSettings, cfg component.Config) (extension.Extension, error) {
+func createExtension(_ context.Context, set extension.Settings, cfg component.Config) (extension.Extension, error) {
 	return newBearerTokenAuth(cfg.(*Config), set.Logger), nil
 }

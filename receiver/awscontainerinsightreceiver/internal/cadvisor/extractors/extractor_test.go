@@ -25,7 +25,7 @@ func TestCAdvisorMetric_Merge(t *testing.T) {
 		logger: zap.NewNop(),
 	}
 	src.Merge(dest)
-	assert.Equal(t, 3, len(src.fields))
+	assert.Len(t, src.fields, 3)
 	assert.Equal(t, 1, src.fields["value1"].(int))
 }
 
@@ -78,7 +78,7 @@ func TestGetMetricKey(t *testing.T) {
 	assert.Equal(t, "metricType:NodeDiskIO,device:/abc", getMetricKey(c))
 
 	c = &CAdvisorMetric{}
-	assert.Equal(t, "", getMetricKey(c))
+	assert.Empty(t, getMetricKey(c))
 }
 
 func TestMergeMetrics(t *testing.T) {
@@ -120,5 +120,4 @@ func TestMergeMetrics(t *testing.T) {
 	require.Len(t, mergedMetrics, 1)
 	assert.Equal(t, expected.GetTags(), mergedMetrics[0].GetTags())
 	assert.Equal(t, expected.GetFields(), mergedMetrics[0].GetFields())
-
 }

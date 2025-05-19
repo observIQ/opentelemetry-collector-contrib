@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/prometheus/common/model"
@@ -31,6 +32,7 @@ type alertmanagerExporter struct {
 	generatorURL      string
 	defaultSeverity   string
 	severityAttribute string
+	apiVersion        string
 }
 
 type alertmanagerEvent struct {
@@ -67,7 +69,6 @@ func (s *alertmanagerExporter) convertEventSliceToArray(eventSlice ptrace.SpanEv
 }
 
 func (s *alertmanagerExporter) extractEvents(td ptrace.Traces) []*alertmanagerEvent {
-
 	// Stitch parent trace ID and span ID
 	rss := td.ResourceSpans()
 	var events []*alertmanagerEvent
@@ -97,25 +98,36 @@ func (s *alertmanagerExporter) extractEvents(td ptrace.Traces) []*alertmanagerEv
 
 func createAnnotations(event *alertmanagerEvent) model.LabelSet {
 	labelMap := make(model.LabelSet, event.spanEvent.Attributes().Len()+2)
-	event.spanEvent.Attributes().Range(func(key string, attr pcommon.Value) bool {
+	for key, attr := range event.spanEvent.Attributes().All() {
 		labelMap[model.LabelName(key)] = model.LabelValue(attr.AsString())
-		return true
-	})
+	}
 	labelMap["TraceID"] = model.LabelValue(event.traceID)
 	labelMap["SpanID"] = model.LabelValue(event.spanID)
 	return labelMap
 }
 
-func (s *alertmanagerExporter) convertEventsToAlertPayload(events []*alertmanagerEvent) []model.Alert {
+func (s *alertmanagerExporter) createLabels(event *alertmanagerEvent) model.LabelSet {
+	labelMap := model.LabelSet{}
+	for key, attr := range event.spanEvent.Attributes().All() {
+		if slices.Contains(s.config.EventLabels, key) {
+			labelMap[model.LabelName(key)] = model.LabelValue(attr.AsString())
+		}
+	}
+	labelMap["severity"] = model.LabelValue(event.severity)
+	labelMap["event_name"] = model.LabelValue(event.spanEvent.Name())
+	return labelMap
+}
 
+func (s *alertmanagerExporter) convertEventsToAlertPayload(events []*alertmanagerEvent) []model.Alert {
 	payload := make([]model.Alert, len(events))
 
 	for i, event := range events {
 		annotations := createAnnotations(event)
+		labels := s.createLabels(event)
 
 		alert := model.Alert{
 			StartsAt:     time.Now(),
-			Labels:       model.LabelSet{"severity": model.LabelValue(event.severity), "event_name": model.LabelValue(event.spanEvent.Name())},
+			Labels:       labels,
 			Annotations:  annotations,
 			GeneratorURL: s.generatorURL,
 		}
@@ -126,13 +138,12 @@ func (s *alertmanagerExporter) convertEventsToAlertPayload(events []*alertmanage
 }
 
 func (s *alertmanagerExporter) postAlert(ctx context.Context, payload []model.Alert) error {
-
 	msg, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("error marshaling alert to JSON: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", s.endpoint, bytes.NewBuffer(msg))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint, bytes.NewBuffer(msg))
 	if err != nil {
 		return fmt.Errorf("error creating HTTP request: %w", err)
 	}
@@ -162,7 +173,6 @@ func (s *alertmanagerExporter) postAlert(ctx context.Context, payload []model.Al
 }
 
 func (s *alertmanagerExporter) pushTraces(ctx context.Context, td ptrace.Traces) error {
-
 	events := s.extractEvents(td)
 
 	if len(events) == 0 {
@@ -171,7 +181,6 @@ func (s *alertmanagerExporter) pushTraces(ctx context.Context, td ptrace.Traces)
 
 	alert := s.convertEventsToAlertPayload(events)
 	err := s.postAlert(ctx, alert)
-
 	if err != nil {
 		return err
 	}
@@ -179,9 +188,8 @@ func (s *alertmanagerExporter) pushTraces(ctx context.Context, td ptrace.Traces)
 	return nil
 }
 
-func (s *alertmanagerExporter) start(_ context.Context, host component.Host) error {
-
-	client, err := s.config.HTTPClientSettings.ToClient(host, s.settings)
+func (s *alertmanagerExporter) start(ctx context.Context, host component.Host) error {
+	client, err := s.config.ToClient(ctx, host, s.settings)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP Client: %w", err)
 	}
@@ -190,7 +198,6 @@ func (s *alertmanagerExporter) start(_ context.Context, host component.Host) err
 }
 
 func (s *alertmanagerExporter) shutdown(context.Context) error {
-
 	if s.client != nil {
 		s.client.CloseIdleConnections()
 	}
@@ -198,25 +205,24 @@ func (s *alertmanagerExporter) shutdown(context.Context) error {
 }
 
 func newAlertManagerExporter(cfg *Config, set component.TelemetrySettings) *alertmanagerExporter {
-
 	return &alertmanagerExporter{
 		config:            cfg,
 		settings:          set,
 		tracesMarshaler:   &ptrace.JSONMarshaler{},
-		endpoint:          fmt.Sprintf("%s/api/v1/alerts", cfg.HTTPClientSettings.Endpoint),
+		endpoint:          fmt.Sprintf("%s/api/%s/alerts", cfg.Endpoint, cfg.APIVersion),
 		generatorURL:      cfg.GeneratorURL,
 		defaultSeverity:   cfg.DefaultSeverity,
 		severityAttribute: cfg.SeverityAttribute,
+		apiVersion:        cfg.APIVersion,
 	}
 }
 
-func newTracesExporter(ctx context.Context, cfg component.Config, set exporter.CreateSettings) (exporter.Traces, error) {
-
+func newTracesExporter(ctx context.Context, cfg component.Config, set exporter.Settings) (exporter.Traces, error) {
 	config := cfg.(*Config)
 
 	s := newAlertManagerExporter(config, set.TelemetrySettings)
 
-	return exporterhelper.NewTracesExporter(
+	return exporterhelper.NewTraces(
 		ctx,
 		set,
 		cfg,
@@ -224,7 +230,7 @@ func newTracesExporter(ctx context.Context, cfg component.Config, set exporter.C
 		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
 		exporterhelper.WithStart(s.start),
 		exporterhelper.WithTimeout(config.TimeoutSettings),
-		exporterhelper.WithRetry(config.RetrySettings),
+		exporterhelper.WithRetry(config.BackoffConfig),
 		exporterhelper.WithQueue(config.QueueSettings),
 		exporterhelper.WithShutdown(s.shutdown),
 	)

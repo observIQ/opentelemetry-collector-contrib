@@ -12,8 +12,8 @@ import (
 
 // Config defines configuration for simple prometheus receiver.
 type Config struct {
-	confighttp.HTTPClientSettings `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
-	// Deprecated: [v0.55.0] Use confighttp.HTTPClientSettings instead.
+	confighttp.ClientConfig `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
+	// Deprecated: [v0.55.0] Use confighttp.ClientConfig instead.
 	httpConfig `mapstructure:",squash"`
 	// CollectionInterval is the interval at which metrics should be collected
 	CollectionInterval time.Duration `mapstructure:"collection_interval"`
@@ -25,6 +25,8 @@ type Config struct {
 	Labels map[string]string `mapstructure:"labels,omitempty"`
 	// Whether or not to use pod service account to authenticate.
 	UseServiceAccount bool `mapstructure:"use_service_account"`
+	// JobName allows users to customize the job name optionally.
+	JobName string `mapstructure:"job_name"`
 }
 
 // TODO: Move to a common package for use by other receivers and also pull

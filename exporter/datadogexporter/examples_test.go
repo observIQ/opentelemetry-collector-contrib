@@ -19,12 +19,13 @@ import (
 	"go.opentelemetry.io/collector/processor/memorylimiterprocessor"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/otlpreceiver"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/connector/datadogconnector"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/probabilisticsamplerprocessor"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/dockerstatsreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver"
@@ -41,6 +42,10 @@ func TestExamples(t *testing.T) {
 	files, err := os.ReadDir(folder)
 	require.NoError(t, err)
 	for _, f := range files {
+		if f.Name() == "kafka.yaml" {
+			// skip validation, as it requires jar file.
+			continue
+		}
 		if f.IsDir() {
 			continue
 		}
@@ -48,7 +53,7 @@ func TestExamples(t *testing.T) {
 			continue
 		}
 		t.Run(filepath.Base(f.Name()), func(t *testing.T) {
-			t.Setenv("DD_API_KEY", "testvalue")
+			t.Setenv("DD_API_KEY", "aaaaaaaaa")
 			name := filepath.Join(folder, f.Name())
 			_, err := otelcoltest.LoadConfigAndValidate(name, factories)
 			require.NoError(t, err, "All yaml config must validate. Please ensure that all necessary component factories are added in newTestComponents()")
@@ -67,18 +72,17 @@ func TestExamples(t *testing.T) {
 		require.NoError(t, err)
 		err = yaml.Unmarshal(slurp, &out)
 		require.NoError(t, err)
-		require.Equal(t, out.Kind, "ConfigMap")
+		require.Equal(t, "ConfigMap", out.Kind)
 		require.NotEmpty(t, out.Data.YAML)
 
 		data := []byte(out.Data.YAML)
-		f, err := os.CreateTemp("", "ddexporter-yaml-test-")
+		f, err := os.CreateTemp(t.TempDir(), "ddexporter-yaml-test-")
 		require.NoError(t, err)
 		n, err := f.Write(data)
 		require.NoError(t, err)
-		require.Equal(t, n, len(data))
+		require.Len(t, data, n)
 		require.NoError(t, f.Close())
 		defer os.RemoveAll(f.Name())
-
 		_, err = otelcoltest.LoadConfigAndValidate(f.Name(), factories)
 		require.NoError(t, err, "All yaml config must validate. Please ensure that all necessary component factories are added in newTestComponents()")
 	})
@@ -91,7 +95,7 @@ func newTestComponents(t *testing.T) otelcol.Factories {
 		factories otelcol.Factories
 		err       error
 	)
-	factories.Receivers, err = receiver.MakeFactoryMap(
+	factories.Receivers, err = otelcol.MakeFactoryMap[receiver.Factory](
 		[]receiver.Factory{
 			otlpreceiver.NewFactory(),
 			hostmetricsreceiver.NewFactory(),
@@ -101,23 +105,24 @@ func newTestComponents(t *testing.T) otelcol.Factories {
 		}...,
 	)
 	require.NoError(t, err)
-	factories.Processors, err = processor.MakeFactoryMap(
+	factories.Processors, err = otelcol.MakeFactoryMap[processor.Factory](
 		[]processor.Factory{
 			batchprocessor.NewFactory(),
 			memorylimiterprocessor.NewFactory(),
 			k8sattributesprocessor.NewFactory(),
 			resourcedetectionprocessor.NewFactory(),
 			probabilisticsamplerprocessor.NewFactory(),
+			transformprocessor.NewFactory(),
 		}...,
 	)
 	require.NoError(t, err)
-	factories.Connectors, err = connector.MakeFactoryMap(
+	factories.Connectors, err = otelcol.MakeFactoryMap[connector.Factory](
 		[]connector.Factory{
 			datadogconnector.NewFactory(),
 		}...,
 	)
 	require.NoError(t, err)
-	factories.Exporters, err = exporter.MakeFactoryMap(
+	factories.Exporters, err = otelcol.MakeFactoryMap[exporter.Factory](
 		[]exporter.Factory{
 			NewFactory(),
 		}...,

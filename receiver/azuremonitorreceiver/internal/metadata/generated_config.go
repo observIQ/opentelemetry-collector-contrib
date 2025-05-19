@@ -2,7 +2,9 @@
 
 package metadata
 
-import "go.opentelemetry.io/collector/confmap"
+import (
+	"go.opentelemetry.io/collector/confmap"
+)
 
 // ResourceAttributeConfig provides common config for a particular resource attribute.
 type ResourceAttributeConfig struct {
@@ -15,7 +17,7 @@ func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
-	err := parser.Unmarshal(rac, confmap.WithErrorUnused())
+	err := parser.Unmarshal(rac)
 	if err != nil {
 		return err
 	}
@@ -25,12 +27,16 @@ func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
 
 // ResourceAttributesConfig provides config for azuremonitor resource attributes.
 type ResourceAttributesConfig struct {
+	AzuremonitorSubscription   ResourceAttributeConfig `mapstructure:"azuremonitor.subscription"`
 	AzuremonitorSubscriptionID ResourceAttributeConfig `mapstructure:"azuremonitor.subscription_id"`
 	AzuremonitorTenantID       ResourceAttributeConfig `mapstructure:"azuremonitor.tenant_id"`
 }
 
 func DefaultResourceAttributesConfig() ResourceAttributesConfig {
 	return ResourceAttributesConfig{
+		AzuremonitorSubscription: ResourceAttributeConfig{
+			Enabled: false,
+		},
 		AzuremonitorSubscriptionID: ResourceAttributeConfig{
 			Enabled: false,
 		},

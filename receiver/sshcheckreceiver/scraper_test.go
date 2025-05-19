@@ -6,7 +6,6 @@ package sshcheckreceiver // import "github.com/open-telemetry/opentelemetry-coll
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pkg/sftp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
@@ -22,16 +22,34 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/pmetrictest"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sshcheckreceiver/internal/metadata"
 )
 
-func setupSSHServer(t *testing.T) string {
+type sshServer struct {
+	listener net.Listener
+	done     chan struct{}
+}
+
+func newSSHServer(network, endpoint string) (*sshServer, error) {
+	listener, err := net.Listen(network, endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sshServer{
+		listener: listener,
+		done:     make(chan struct{}),
+	}, nil
+}
+
+func (s *sshServer) runSSHServer(t *testing.T) string {
 	config := &ssh.ServerConfig{
 		NoClientAuth: true,
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			if c.User() == "otelu" && string(pass) == "otelp" {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("wrong username or password")
+			return nil, errors.New("wrong username or password")
 		},
 	}
 
@@ -43,14 +61,16 @@ func setupSSHServer(t *testing.T) string {
 
 	config.AddHostKey(private)
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-
 	go func() {
 		for {
-			conn, err := listener.Accept()
+			conn, err := s.listener.Accept()
 			if err != nil {
-				break
+				select {
+				case <-s.done:
+					return
+				default:
+					assert.NoError(t, err)
+				}
 			}
 			_, chans, reqs, err := ssh.NewServerConn(conn, config)
 			if err != nil {
@@ -62,13 +82,18 @@ func setupSSHServer(t *testing.T) string {
 		}
 	}()
 
-	return listener.Addr().String()
+	return s.listener.Addr().String()
+}
+
+func (s *sshServer) shutdown() {
+	close(s.done)
+	s.listener.Close()
 }
 
 func handleChannels(chans <-chan ssh.NewChannel) {
 	for newChannel := range chans {
 		if t := newChannel.ChannelType(); t != "session" {
-			if err := newChannel.Reject(ssh.UnknownChannelType, fmt.Sprintf("unknown channel type: %s", t)); err != nil {
+			if err := newChannel.Reject(ssh.UnknownChannelType, "unknown channel type: "+t); err != nil {
 				return
 			}
 			continue
@@ -113,11 +138,11 @@ func handleChannels(chans <-chan ssh.NewChannel) {
 }
 
 func TestScraper(t *testing.T) {
-	if !supportedOS() {
-		t.Skip("Skip tests if not running on one of: [linux, darwin, freebsd, openbsd]")
-	}
-	endpoint := setupSSHServer(t)
+	s, err := newSSHServer("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	endpoint := s.runSSHServer(t)
 	require.NotEmpty(t, endpoint)
+	defer s.shutdown()
 
 	testCases := []struct {
 		name       string
@@ -151,7 +176,7 @@ func TestScraper(t *testing.T) {
 
 			f := NewFactory()
 			cfg := f.CreateDefaultConfig().(*Config)
-			cfg.ScraperControllerSettings.CollectionInterval = 100 * time.Millisecond
+			cfg.CollectionInterval = 100 * time.Millisecond
 			cfg.Username = "otelu"
 			cfg.Password = "otelp"
 			cfg.Endpoint = endpoint
@@ -161,7 +186,7 @@ func TestScraper(t *testing.T) {
 				cfg.MetricsBuilderConfig.Metrics.SshcheckSftpDuration.Enabled = true
 			}
 
-			settings := receivertest.NewNopCreateSettings()
+			settings := receivertest.NewNopSettings(metadata.Type)
 
 			scrpr := newScraper(cfg, settings)
 			require.NoError(t, scrpr.start(context.Background(), componenttest.NewNopHost()), "failed starting scraper")
@@ -184,22 +209,22 @@ func TestScraper(t *testing.T) {
 }
 
 func TestScraperPropagatesResourceAttributes(t *testing.T) {
-	if !supportedOS() {
-		t.Skip("Skip tests if not running on one of: [linux, darwin, freebsd, openbsd]")
-	}
-	endpoint := setupSSHServer(t)
+	s, err := newSSHServer("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	endpoint := s.runSSHServer(t)
 	require.NotEmpty(t, endpoint)
+	defer s.shutdown()
 
 	f := NewFactory()
 	cfg := f.CreateDefaultConfig().(*Config)
 	cfg.MetricsBuilderConfig.ResourceAttributes.SSHEndpoint.Enabled = true
-	cfg.ScraperControllerSettings.CollectionInterval = 100 * time.Millisecond
+	cfg.CollectionInterval = 100 * time.Millisecond
 	cfg.Username = "otelu"
 	cfg.Password = "otelp"
 	cfg.Endpoint = endpoint
 	cfg.IgnoreHostKey = true
 
-	settings := receivertest.NewNopCreateSettings()
+	settings := receivertest.NewNopSettings(metadata.Type)
 
 	scraper := newScraper(cfg, settings)
 	require.NoError(t, scraper.start(context.Background(), componenttest.NewNopHost()), "failed starting scraper")
@@ -220,33 +245,30 @@ func TestScraperPropagatesResourceAttributes(t *testing.T) {
 }
 
 func TestScraperDoesNotErrForSSHErr(t *testing.T) {
-	if !supportedOS() {
-		t.Skip("Skip tests if not running on one of: [linux, darwin, freebsd, openbsd]")
-	}
-	endpoint := setupSSHServer(t)
+	s, err := newSSHServer("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	endpoint := s.runSSHServer(t)
 	require.NotEmpty(t, endpoint)
+	defer s.shutdown()
 
 	f := NewFactory()
 	cfg := f.CreateDefaultConfig().(*Config)
-	cfg.ScraperControllerSettings.CollectionInterval = 100 * time.Millisecond
+	cfg.CollectionInterval = 100 * time.Millisecond
 	cfg.Username = "not-the-user"
 	cfg.Password = "not-the-password"
 	cfg.Endpoint = endpoint
 	cfg.IgnoreHostKey = true
 
-	settings := receivertest.NewNopCreateSettings()
+	settings := receivertest.NewNopSettings(metadata.Type)
 
 	scraper := newScraper(cfg, settings)
 	require.NoError(t, scraper.start(context.Background(), componenttest.NewNopHost()), "should not err to start")
 
-	_, err := scraper.scrape(context.Background())
+	_, err = scraper.scrape(context.Background())
 	require.NoError(t, err, "should not err")
 }
 
 func TestTimeout(t *testing.T) {
-	if !supportedOS() {
-		t.Skip("Skip tests if not running on one of: [linux, darwin, freebsd, openbsd]")
-	}
 	testCases := []struct {
 		name     string
 		deadline time.Time
@@ -279,15 +301,11 @@ func TestTimeout(t *testing.T) {
 func TestCancellation(t *testing.T) {
 	f := NewFactory()
 	cfg := f.CreateDefaultConfig().(*Config)
-	cfg.ScraperControllerSettings.CollectionInterval = 100 * time.Millisecond
+	cfg.CollectionInterval = 100 * time.Millisecond
 
-	settings := receivertest.NewNopCreateSettings()
+	settings := receivertest.NewNopSettings(metadata.Type)
 
 	scrpr := newScraper(cfg, settings)
-	if !supportedOS() {
-		require.Error(t, scrpr.start(context.Background(), componenttest.NewNopHost()), "should err starting scraper")
-		return
-	}
 	require.NoError(t, scrpr.start(context.Background(), componenttest.NewNopHost()), "failed starting scraper")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -295,8 +313,7 @@ func TestCancellation(t *testing.T) {
 
 	_, err := scrpr.scrape(ctx)
 	require.Error(t, err, "should have returned error on canceled context")
-	require.EqualValues(t, err.Error(), ctx.Err().Error(), "scrape should return context's error")
-
+	require.EqualError(t, err, ctx.Err().Error(), "scrape should return context's error")
 }
 
 // issue # 18193
@@ -304,7 +321,7 @@ func TestCancellation(t *testing.T) {
 func TestWithoutStartErrsNotPanics(t *testing.T) {
 	f := NewFactory()
 	cfg := f.CreateDefaultConfig().(*Config)
-	cfg.ScraperControllerSettings.CollectionInterval = 100 * time.Millisecond
+	cfg.CollectionInterval = 100 * time.Millisecond
 	cfg.Username = "otelu"
 	cfg.Password = "otelp"
 	cfg.Endpoint = "localhost:22"
@@ -313,7 +330,7 @@ func TestWithoutStartErrsNotPanics(t *testing.T) {
 	cfg.MetricsBuilderConfig.Metrics.SshcheckSftpDuration.Enabled = true
 
 	// create the scraper without starting it, so Client is nil
-	scrpr := newScraper(cfg, receivertest.NewNopCreateSettings())
+	scrpr := newScraper(cfg, receivertest.NewNopSettings(metadata.Type))
 
 	// scrape should error not panic
 	var err error

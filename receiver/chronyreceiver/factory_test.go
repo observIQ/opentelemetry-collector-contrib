@@ -9,11 +9,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/chronyreceiver/internal/metadata"
 )
@@ -22,7 +21,7 @@ func TestType(t *testing.T) {
 	t.Parallel()
 
 	factory := NewFactory()
-	assert.Equal(t, component.Type("chrony"), factory.Type(), "Must match the expected type")
+	assert.Equal(t, metadata.Type, factory.Type(), "Must match the expected type")
 }
 
 func TestValidConfig(t *testing.T) {
@@ -45,11 +44,11 @@ func TestCreatingMetricsReceiver(t *testing.T) {
 			Enabled: true,
 		},
 	}
-	mem, err := factory.CreateMetricsReceiver(
+	mem, err := factory.CreateMetrics(
 		context.Background(),
-		receivertest.NewNopCreateSettings(),
+		receivertest.NewNopSettings(metadata.Type),
 		&Config{
-			ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
+			ControllerConfig: scraperhelper.ControllerConfig{
 				CollectionInterval: 30 * time.Second,
 				Timeout:            10 * time.Second,
 			},

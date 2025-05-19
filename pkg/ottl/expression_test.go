@@ -5,7 +5,7 @@ package ottl
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
@@ -18,13 +18,13 @@ import (
 )
 
 func hello() (ExprFunc[any], error) {
-	return func(ctx context.Context, tCtx any) (any, error) {
+	return func(_ context.Context, _ any) (any, error) {
 		return "world", nil
 	}, nil
 }
 
 func pmap() (ExprFunc[any], error) {
-	return func(ctx context.Context, tCtx any) (any, error) {
+	return func(_ context.Context, _ any) (any, error) {
 		m := pcommon.NewMap()
 		m.PutEmptyMap("foo").PutStr("bar", "pass")
 		return m, nil
@@ -32,7 +32,7 @@ func pmap() (ExprFunc[any], error) {
 }
 
 func basicMap() (ExprFunc[any], error) {
-	return func(ctx context.Context, tCtx any) (any, error) {
+	return func(_ context.Context, _ any) (any, error) {
 		return map[string]any{
 			"foo": map[string]any{
 				"bar": "pass",
@@ -42,7 +42,7 @@ func basicMap() (ExprFunc[any], error) {
 }
 
 func pslice() (ExprFunc[any], error) {
-	return func(ctx context.Context, tCtx any) (any, error) {
+	return func(_ context.Context, _ any) (any, error) {
 		s := pcommon.NewSlice()
 		s.AppendEmpty().SetEmptySlice().AppendEmpty().SetStr("pass")
 		return s, nil
@@ -50,10 +50,60 @@ func pslice() (ExprFunc[any], error) {
 }
 
 func basicSlice() (ExprFunc[any], error) {
-	return func(ctx context.Context, tCtx any) (any, error) {
+	return func(_ context.Context, _ any) (any, error) {
 		return []any{
 			[]any{
 				"pass",
+			},
+		}, nil
+	}, nil
+}
+
+func basicSliceString() (ExprFunc[any], error) {
+	return func(_ context.Context, _ any) (any, error) {
+		return []any{
+			[]string{
+				"pass",
+			},
+		}, nil
+	}, nil
+}
+
+func basicSliceBool() (ExprFunc[any], error) {
+	return func(_ context.Context, _ any) (any, error) {
+		return []any{
+			[]bool{
+				true,
+			},
+		}, nil
+	}, nil
+}
+
+func basicSliceInteger() (ExprFunc[any], error) {
+	return func(_ context.Context, _ any) (any, error) {
+		return []any{
+			[]int64{
+				1,
+			},
+		}, nil
+	}, nil
+}
+
+func basicSliceFloat() (ExprFunc[any], error) {
+	return func(_ context.Context, _ any) (any, error) {
+		return []any{
+			[]float64{
+				1,
+			},
+		}, nil
+	}, nil
+}
+
+func basicSliceByte() (ExprFunc[any], error) {
+	return func(_ context.Context, _ any) (any, error) {
+		return []any{
+			[]byte{
+				byte('p'),
 			},
 		}, nil
 	}, nil
@@ -116,8 +166,8 @@ func Test_newGetter(t *testing.T) {
 			name: "path expression",
 			val: value{
 				Literal: &mathExprLiteral{
-					Path: &Path{
-						Fields: []Field{
+					Path: &path{
+						Fields: []field{
 							{
 								Name: "name",
 							},
@@ -131,11 +181,11 @@ func Test_newGetter(t *testing.T) {
 			name: "complex path expression",
 			val: value{
 				Literal: &mathExprLiteral{
-					Path: &Path{
-						Fields: []Field{
+					Path: &path{
+						Fields: []field{
 							{
 								Name: "attributes",
-								Keys: []Key{
+								Keys: []key{
 									{
 										String: ottltest.Strp("foo"),
 									},
@@ -167,7 +217,7 @@ func Test_newGetter(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "PMap",
-						Keys: []Key{
+						Keys: []key{
 							{
 								String: ottltest.Strp("foo"),
 							},
@@ -186,7 +236,7 @@ func Test_newGetter(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "Map",
-						Keys: []Key{
+						Keys: []key{
 							{
 								String: ottltest.Strp("foo"),
 							},
@@ -205,7 +255,7 @@ func Test_newGetter(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "PSlice",
-						Keys: []Key{
+						Keys: []key{
 							{
 								Int: ottltest.Intp(0),
 							},
@@ -224,7 +274,7 @@ func Test_newGetter(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "Slice",
-						Keys: []Key{
+						Keys: []key{
 							{
 								Int: ottltest.Intp(0),
 							},
@@ -238,9 +288,104 @@ func Test_newGetter(t *testing.T) {
 			want: "pass",
 		},
 		{
+			name: "function call nested SliceString",
+			val: value{
+				Literal: &mathExprLiteral{
+					Converter: &converter{
+						Function: "SliceString",
+						Keys: []key{
+							{
+								Int: ottltest.Intp(0),
+							},
+							{
+								Int: ottltest.Intp(0),
+							},
+						},
+					},
+				},
+			},
+			want: "pass",
+		},
+		{
+			name: "function call nested SliceBool",
+			val: value{
+				Literal: &mathExprLiteral{
+					Converter: &converter{
+						Function: "SliceBool",
+						Keys: []key{
+							{
+								Int: ottltest.Intp(0),
+							},
+							{
+								Int: ottltest.Intp(0),
+							},
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "function call nested SliceInteger",
+			val: value{
+				Literal: &mathExprLiteral{
+					Converter: &converter{
+						Function: "SliceInteger",
+						Keys: []key{
+							{
+								Int: ottltest.Intp(0),
+							},
+							{
+								Int: ottltest.Intp(0),
+							},
+						},
+					},
+				},
+			},
+			want: int64(1),
+		},
+		{
+			name: "function call nested SliceFloat",
+			val: value{
+				Literal: &mathExprLiteral{
+					Converter: &converter{
+						Function: "SliceFloat",
+						Keys: []key{
+							{
+								Int: ottltest.Intp(0),
+							},
+							{
+								Int: ottltest.Intp(0),
+							},
+						},
+					},
+				},
+			},
+			want: 1.0,
+		},
+		{
+			name: "function call nested SliceByte",
+			val: value{
+				Literal: &mathExprLiteral{
+					Converter: &converter{
+						Function: "SliceByte",
+						Keys: []key{
+							{
+								Int: ottltest.Intp(0),
+							},
+							{
+								Int: ottltest.Intp(0),
+							},
+						},
+					},
+				},
+			},
+			want: byte('p'),
+		},
+		{
 			name: "enum",
 			val: value{
-				Enum: (*EnumSymbol)(ottltest.Strp("TEST_ENUM_ONE")),
+				Enum: (*enumSymbol)(ottltest.Strp("TEST_ENUM_ONE")),
 			},
 			want: int64(1),
 		},
@@ -348,8 +493,8 @@ func Test_newGetter(t *testing.T) {
 					Values: []value{
 						{
 							Literal: &mathExprLiteral{
-								Path: &Path{
-									Fields: []Field{
+								Path: &path{
+									Fields: []field{
 										{
 											Name: "name",
 										},
@@ -414,6 +559,126 @@ func Test_newGetter(t *testing.T) {
 			},
 			want: []any{"test0", int64(1)},
 		},
+		{
+			name: "map",
+			val: value{
+				Map: &mapValue{
+					Values: []mapItem{
+						{
+							Key:   ottltest.Strp("stringAttr"),
+							Value: &value{String: ottltest.Strp("value")},
+						},
+						{
+							Key: ottltest.Strp("intAttr"),
+							Value: &value{
+								Literal: &mathExprLiteral{
+									Int: ottltest.Intp(3),
+								},
+							},
+						},
+						{
+							Key: ottltest.Strp("floatAttr"),
+							Value: &value{
+								Literal: &mathExprLiteral{
+									Float: ottltest.Floatp(2.5),
+								},
+							},
+						},
+						{
+							Key:   ottltest.Strp("boolAttr"),
+							Value: &value{Bool: (*boolean)(ottltest.Boolp(true))},
+						},
+						{
+							Key:   ottltest.Strp("byteAttr"),
+							Value: &value{Bytes: (*byteSlice)(&[]byte{1, 2, 3, 4, 5, 6, 7, 8})},
+						},
+						{
+							Key:   ottltest.Strp("enumAttr"),
+							Value: &value{Enum: (*enumSymbol)(ottltest.Strp("TEST_ENUM_ONE"))},
+						},
+						{
+							Key: ottltest.Strp("pathAttr"),
+							Value: &value{
+								Literal: &mathExprLiteral{
+									Path: &path{
+										Fields: []field{
+											{
+												Name: "name",
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Key: ottltest.Strp("mapAttr"),
+							Value: &value{
+								Map: &mapValue{
+									Values: []mapItem{
+										{
+											Key: ottltest.Strp("foo"),
+											Value: &value{
+												Map: &mapValue{
+													Values: []mapItem{
+														{
+															Key:   ottltest.Strp("test"),
+															Value: &value{String: ottltest.Strp("value")},
+														},
+													},
+												},
+											},
+										},
+										{
+											Key: ottltest.Strp("listAttr"),
+											Value: &value{
+												List: &list{
+													Values: []value{
+														{
+															String: ottltest.Strp("test0"),
+														},
+														{
+															Literal: &mathExprLiteral{
+																Int: ottltest.Intp(1),
+															},
+														},
+														{
+															Map: &mapValue{
+																Values: []mapItem{
+																	{
+																		Key:   ottltest.Strp("stringAttr"),
+																		Value: &value{String: ottltest.Strp("value")},
+																	},
+																},
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			ctx: "bear",
+			want: map[string]any{
+				"enumAttr": int64(1),
+				"pathAttr": "bear",
+				"mapAttr": map[string]any{
+					"foo": map[string]any{
+						"test": "value",
+					},
+					"listAttr": []any{"test0", int64(1), map[string]any{"stringAttr": "value"}},
+				},
+				"stringAttr": "value",
+				"intAttr":    int64(3),
+				"floatAttr":  2.5,
+				"boolAttr":   true,
+				"byteAttr":   []byte{1, 2, 3, 4, 5, 6, 7, 8},
+			},
+		},
 	}
 
 	functions := CreateFactoryMap(
@@ -422,11 +687,16 @@ func Test_newGetter(t *testing.T) {
 		createFactory("Map", &struct{}{}, basicMap),
 		createFactory("PSlice", &struct{}{}, pslice),
 		createFactory("Slice", &struct{}{}, basicSlice),
+		createFactory("SliceString", &struct{}{}, basicSliceString),
+		createFactory("SliceBool", &struct{}{}, basicSliceBool),
+		createFactory("SliceInteger", &struct{}{}, basicSliceInteger),
+		createFactory("SliceFloat", &struct{}{}, basicSliceFloat),
+		createFactory("SliceByte", &struct{}{}, basicSliceByte),
 	)
 
 	p, _ := NewParser[any](
 		functions,
-		testParsePath,
+		testParsePath[any],
 		componenttest.NewNopTelemetrySettings(),
 		WithEnumParser[any](testParseEnum),
 	)
@@ -444,7 +714,15 @@ func Test_newGetter(t *testing.T) {
 
 			val, err := reader.Get(context.Background(), tCtx)
 			assert.NoError(t, err)
-			assert.Equal(t, tt.want, val)
+
+			switch v := val.(type) {
+			case pcommon.Map:
+				// need to compare the raw map here as require.EqualValues can not seem to handle
+				// the comparison of pcommon.Map
+				assert.EqualValues(t, tt.want, v.AsRaw())
+			default:
+				assert.Equal(t, tt.want, v)
+			}
 		})
 	}
 
@@ -453,6 +731,7 @@ func Test_newGetter(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
 func Test_exprGetter_Get_Invalid(t *testing.T) {
 	tests := []struct {
 		name string
@@ -465,7 +744,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "PMap",
-						Keys: []Key{
+						Keys: []key{
 							{
 								String: ottltest.Strp("unknown key"),
 							},
@@ -473,7 +752,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 					},
 				},
 			},
-			err: fmt.Errorf("key not found in map"),
+			err: errors.New("key not found in map"),
 		},
 		{
 			name: "key not in map",
@@ -481,7 +760,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "Map",
-						Keys: []Key{
+						Keys: []key{
 							{
 								String: ottltest.Strp("unknown key"),
 							},
@@ -489,7 +768,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 					},
 				},
 			},
-			err: fmt.Errorf("key not found in map"),
+			err: errors.New("key not found in map"),
 		},
 		{
 			name: "index too large for pcommon slice",
@@ -497,7 +776,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "PSlice",
-						Keys: []Key{
+						Keys: []key{
 							{
 								Int: ottltest.Intp(100),
 							},
@@ -505,7 +784,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 					},
 				},
 			},
-			err: fmt.Errorf("index 100 out of bounds"),
+			err: errors.New("index 100 out of bounds"),
 		},
 		{
 			name: "negative for pcommon slice",
@@ -513,7 +792,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "PSlice",
-						Keys: []Key{
+						Keys: []key{
 							{
 								Int: ottltest.Intp(-1),
 							},
@@ -521,7 +800,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 					},
 				},
 			},
-			err: fmt.Errorf("index -1 out of bounds"),
+			err: errors.New("index -1 out of bounds"),
 		},
 		{
 			name: "index too large for Go slice",
@@ -529,7 +808,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "Slice",
-						Keys: []Key{
+						Keys: []key{
 							{
 								Int: ottltest.Intp(100),
 							},
@@ -537,7 +816,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 					},
 				},
 			},
-			err: fmt.Errorf("index 100 out of bounds"),
+			err: errors.New("index 100 out of bounds"),
 		},
 		{
 			name: "negative for Go slice",
@@ -545,7 +824,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "Slice",
-						Keys: []Key{
+						Keys: []key{
 							{
 								Int: ottltest.Intp(-1),
 							},
@@ -553,7 +832,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 					},
 				},
 			},
-			err: fmt.Errorf("index -1 out of bounds"),
+			err: errors.New("index -1 out of bounds"),
 		},
 		{
 			name: "invalid int indexing type",
@@ -561,7 +840,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "Hello",
-						Keys: []Key{
+						Keys: []key{
 							{
 								Int: ottltest.Intp(-1),
 							},
@@ -569,7 +848,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 					},
 				},
 			},
-			err: fmt.Errorf("type, string, does not support int indexing"),
+			err: errors.New("type, string, does not support int indexing"),
 		},
 		{
 			name: "invalid string indexing type",
@@ -577,7 +856,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 				Literal: &mathExprLiteral{
 					Converter: &converter{
 						Function: "Hello",
-						Keys: []Key{
+						Keys: []key{
 							{
 								String: ottltest.Strp("test"),
 							},
@@ -585,7 +864,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 					},
 				},
 			},
-			err: fmt.Errorf("type, string, does not support string indexing"),
+			err: errors.New("type, string, does not support string indexing"),
 		},
 	}
 
@@ -599,7 +878,7 @@ func Test_exprGetter_Get_Invalid(t *testing.T) {
 
 	p, _ := NewParser[any](
 		functions,
-		testParsePath,
+		testParsePath[any],
 		componenttest.NewNopTelemetrySettings(),
 		WithEnumParser[any](testParseEnum),
 	)
@@ -625,7 +904,7 @@ func Test_StandardStringGetter(t *testing.T) {
 		{
 			name: "string type",
 			getter: StandardStringGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return "str", nil
 				},
 			},
@@ -635,7 +914,7 @@ func Test_StandardStringGetter(t *testing.T) {
 		{
 			name: "ValueTypeString type",
 			getter: StandardStringGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return pcommon.NewValueStr("str"), nil
 				},
 			},
@@ -645,7 +924,7 @@ func Test_StandardStringGetter(t *testing.T) {
 		{
 			name: "Incorrect type",
 			getter: StandardStringGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return true, nil
 				},
 			},
@@ -655,7 +934,7 @@ func Test_StandardStringGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardStringGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -716,7 +995,7 @@ func Test_FunctionGetter(t *testing.T) {
 		{
 			name: "function getter",
 			getter: StandardStringGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return "str", nil
 				},
 			},
@@ -727,7 +1006,7 @@ func Test_FunctionGetter(t *testing.T) {
 		{
 			name: "function getter nil",
 			getter: StandardStringGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -739,7 +1018,7 @@ func Test_FunctionGetter(t *testing.T) {
 		{
 			name: "function arg mismatch",
 			getter: StandardStringGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -751,7 +1030,7 @@ func Test_FunctionGetter(t *testing.T) {
 		{
 			name: "Cannot create function",
 			getter: StandardStringGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -781,10 +1060,10 @@ func Test_FunctionGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardStringGetter_WrappedError(t *testing.T) {
 	getter := StandardStringGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -805,7 +1084,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "string type",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return "str", nil
 				},
 			},
@@ -815,7 +1094,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "bool type",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return true, nil
 				},
 			},
@@ -825,7 +1104,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "int64 type",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return int64(1), nil
 				},
 			},
@@ -835,7 +1114,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "float64 type",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return 1.1, nil
 				},
 			},
@@ -845,7 +1124,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "byte[] type",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return []byte{0}, nil
 				},
 			},
@@ -855,7 +1134,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.map type",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					m := pcommon.NewMap()
 					m.PutStr("test", "passed")
 					return m, nil
@@ -867,7 +1146,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.slice type",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					s := pcommon.NewSlice()
 					v := s.AppendEmpty()
 					v.SetStr("test")
@@ -880,7 +1159,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueInt(int64(100))
 					return v, nil
 				},
@@ -891,7 +1170,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -901,7 +1180,7 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 		{
 			name: "invalid type",
 			getter: StandardStringLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return make(chan int), nil
 				},
 			},
@@ -928,10 +1207,10 @@ func Test_StandardStringLikeGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardStringLikeGetter_WrappedError(t *testing.T) {
 	getter := StandardStringLikeGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -952,7 +1231,7 @@ func Test_StandardFloatGetter(t *testing.T) {
 		{
 			name: "float64 type",
 			getter: StandardFloatGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return 1.1, nil
 				},
 			},
@@ -962,7 +1241,7 @@ func Test_StandardFloatGetter(t *testing.T) {
 		{
 			name: "ValueTypeFloat type",
 			getter: StandardFloatGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return pcommon.NewValueDouble(1.1), nil
 				},
 			},
@@ -972,7 +1251,7 @@ func Test_StandardFloatGetter(t *testing.T) {
 		{
 			name: "Incorrect type",
 			getter: StandardFloatGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return true, nil
 				},
 			},
@@ -982,7 +1261,7 @@ func Test_StandardFloatGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardFloatGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -1005,10 +1284,10 @@ func Test_StandardFloatGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardFloatGetter_WrappedError(t *testing.T) {
 	getter := StandardFloatGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -1029,7 +1308,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "string type",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return "1.0", nil
 				},
 			},
@@ -1039,7 +1318,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "int64 type",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return int64(1), nil
 				},
 			},
@@ -1049,7 +1328,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "float64 type",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return 1.1, nil
 				},
 			},
@@ -1059,7 +1338,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "float64 bool true",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return true, nil
 				},
 			},
@@ -1069,7 +1348,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "float64 bool false",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return false, nil
 				},
 			},
@@ -1079,7 +1358,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type int",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueInt(int64(100))
 					return v, nil
 				},
@@ -1090,7 +1369,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type float",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueDouble(float64(1.1))
 					return v, nil
 				},
@@ -1101,7 +1380,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type string",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueStr("1.1")
 					return v, nil
 				},
@@ -1112,7 +1391,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type bool true",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueBool(true)
 					return v, nil
 				},
@@ -1123,7 +1402,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type bool false",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueBool(false)
 					return v, nil
 				},
@@ -1134,7 +1413,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -1144,7 +1423,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "invalid type",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return []byte{}, nil
 				},
 			},
@@ -1154,7 +1433,7 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 		{
 			name: "invalid pcommon.Value type",
 			getter: StandardFloatLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueMap()
 					return v, nil
 				},
@@ -1182,10 +1461,10 @@ func Test_StandardFloatLikeGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardFloatLikeGetter_WrappedError(t *testing.T) {
 	getter := StandardFloatLikeGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -1206,7 +1485,7 @@ func Test_StandardIntGetter(t *testing.T) {
 		{
 			name: "int64 type",
 			getter: StandardIntGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return int64(1), nil
 				},
 			},
@@ -1216,7 +1495,7 @@ func Test_StandardIntGetter(t *testing.T) {
 		{
 			name: "ValueTypeInt type",
 			getter: StandardIntGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return pcommon.NewValueInt(1), nil
 				},
 			},
@@ -1226,7 +1505,7 @@ func Test_StandardIntGetter(t *testing.T) {
 		{
 			name: "Incorrect type",
 			getter: StandardIntGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return true, nil
 				},
 			},
@@ -1236,7 +1515,7 @@ func Test_StandardIntGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardIntGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -1259,10 +1538,10 @@ func Test_StandardIntGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardIntGetter_WrappedError(t *testing.T) {
 	getter := StandardIntGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -1283,7 +1562,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "string type",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return "1", nil
 				},
 			},
@@ -1293,7 +1572,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "int64 type",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return int64(1), nil
 				},
 			},
@@ -1303,7 +1582,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "float64 type",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return 1.1, nil
 				},
 			},
@@ -1313,7 +1592,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "primitive bool true",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return true, nil
 				},
 			},
@@ -1323,7 +1602,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "primitive bool false",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return false, nil
 				},
 			},
@@ -1333,7 +1612,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type int",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueInt(int64(100))
 					return v, nil
 				},
@@ -1344,7 +1623,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type float",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueDouble(float64(1.9))
 					return v, nil
 				},
@@ -1355,7 +1634,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type string",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueStr("1")
 					return v, nil
 				},
@@ -1366,7 +1645,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type bool true",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueBool(true)
 					return v, nil
 				},
@@ -1377,7 +1656,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type bool false",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueBool(false)
 					return v, nil
 				},
@@ -1388,7 +1667,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -1398,7 +1677,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "invalid type",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return []byte{}, nil
 				},
 			},
@@ -1408,7 +1687,7 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 		{
 			name: "invalid pcommon.Value type",
 			getter: StandardIntLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueMap()
 					return v, nil
 				},
@@ -1436,10 +1715,209 @@ func Test_StandardIntLikeGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardIntLikeGetter_WrappedError(t *testing.T) {
 	getter := StandardIntLikeGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
+			return nil, TypeError("")
+		},
+	}
+	_, err := getter.Get(context.Background(), nil)
+	assert.Error(t, err)
+	_, ok := err.(TypeError)
+	assert.False(t, ok)
+}
+
+func Test_StandardByteSliceLikeGetter(t *testing.T) {
+	tests := []struct {
+		name             string
+		getter           ByteSliceLikeGetter[any]
+		want             any
+		valid            bool
+		expectedErrorMsg string
+	}{
+		{
+			name: "string type",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					return "1", nil
+				},
+			},
+			want:  []byte{49},
+			valid: true,
+		},
+		{
+			name: "byte type",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					return []byte{49}, nil
+				},
+			},
+			want:  []byte{49},
+			valid: true,
+		},
+		{
+			name: "int64 type",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					return int64(12), nil
+				},
+			},
+			want:  []byte{0, 0, 0, 0, 0, 0, 0, 12},
+			valid: true,
+		},
+		{
+			name: "float64 type",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					return 1.1, nil
+				},
+			},
+			want:  []byte{63, 241, 153, 153, 153, 153, 153, 154},
+			valid: true,
+		},
+		{
+			name: "primitive bool true",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					return true, nil
+				},
+			},
+			want:  []byte{1},
+			valid: true,
+		},
+		{
+			name: "primitive bool false",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					return false, nil
+				},
+			},
+			want:  []byte{0},
+			valid: true,
+		},
+		{
+			name: "pcommon.value type int",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					v := pcommon.NewValueInt(int64(100))
+					return v, nil
+				},
+			},
+			want:  []byte{0, 0, 0, 0, 0, 0, 0, 100},
+			valid: true,
+		},
+		{
+			name: "pcommon.value type float",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					v := pcommon.NewValueDouble(float64(1.9))
+					return v, nil
+				},
+			},
+			want:  []byte{63, 254, 102, 102, 102, 102, 102, 102},
+			valid: true,
+		},
+		{
+			name: "pcommon.value type string",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					v := pcommon.NewValueStr("1")
+					return v, nil
+				},
+			},
+			want:  []byte{49},
+			valid: true,
+		},
+		{
+			name: "pcommon.value type bytes",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					v := pcommon.NewValueBytes()
+					v.SetEmptyBytes().Append(byte(12))
+					return v, nil
+				},
+			},
+			want:  []byte{12},
+			valid: true,
+		},
+		{
+			name: "pcommon.value type bool true",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					v := pcommon.NewValueBool(true)
+					return v, nil
+				},
+			},
+			want:  []byte{1},
+			valid: true,
+		},
+		{
+			name: "pcommon.value type bool false",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					v := pcommon.NewValueBool(false)
+					return v, nil
+				},
+			},
+			want:  []byte{0},
+			valid: true,
+		},
+		{
+			name: "nil",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					return nil, nil
+				},
+			},
+			want:  nil,
+			valid: true,
+		},
+		{
+			name: "invalid type",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					return map[string]string{}, nil
+				},
+			},
+			valid:            false,
+			expectedErrorMsg: "unsupported type: map[string]string",
+		},
+		{
+			name: "invalid pcommon.Value type",
+			getter: StandardByteSliceLikeGetter[any]{
+				Getter: func(_ context.Context, _ any) (any, error) {
+					v := pcommon.NewValueMap()
+					return v, nil
+				},
+			},
+			valid:            false,
+			expectedErrorMsg: "unsupported value type: Map",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, err := tt.getter.Get(context.Background(), nil)
+			if tt.valid {
+				assert.NoError(t, err)
+				if tt.want == nil {
+					assert.Nil(t, val)
+				} else {
+					assert.Equal(t, tt.want, val)
+				}
+			} else {
+				assert.IsType(t, TypeError(""), err)
+				assert.EqualError(t, err, tt.expectedErrorMsg)
+			}
+		})
+	}
+}
+
+//nolint:errorlint
+func Test_StandardByteSliceLikeGetter_WrappedError(t *testing.T) {
+	getter := StandardByteSliceLikeGetter[any]{
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -1460,7 +1938,7 @@ func Test_StandardBoolGetter(t *testing.T) {
 		{
 			name: "primitive bool type",
 			getter: StandardBoolGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return true, nil
 				},
 			},
@@ -1470,7 +1948,7 @@ func Test_StandardBoolGetter(t *testing.T) {
 		{
 			name: "ValueTypeBool type",
 			getter: StandardBoolGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return pcommon.NewValueBool(true), nil
 				},
 			},
@@ -1480,7 +1958,7 @@ func Test_StandardBoolGetter(t *testing.T) {
 		{
 			name: "Incorrect type",
 			getter: StandardBoolGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return 1, nil
 				},
 			},
@@ -1490,7 +1968,7 @@ func Test_StandardBoolGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardBoolGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -1513,10 +1991,10 @@ func Test_StandardBoolGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardBoolGetter_WrappedError(t *testing.T) {
 	getter := StandardBoolGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -1537,7 +2015,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "string type true",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return "true", nil
 				},
 			},
@@ -1547,7 +2025,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "string type false",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return "false", nil
 				},
 			},
@@ -1557,7 +2035,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "int type",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return 0, nil
 				},
 			},
@@ -1567,7 +2045,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "float64 type",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return float64(0.0), nil
 				},
 			},
@@ -1577,7 +2055,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type int",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueInt(int64(0))
 					return v, nil
 				},
@@ -1588,7 +2066,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type string",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueStr("false")
 					return v, nil
 				},
@@ -1599,7 +2077,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type bool",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueBool(true)
 					return v, nil
 				},
@@ -1610,7 +2088,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "pcommon.value type double",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueDouble(float64(0.0))
 					return v, nil
 				},
@@ -1621,7 +2099,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -1631,7 +2109,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "invalid type",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return []byte{}, nil
 				},
 			},
@@ -1641,7 +2119,7 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 		{
 			name: "invalid pcommon.value type",
 			getter: StandardBoolLikeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					v := pcommon.NewValueMap()
 					return v, nil
 				},
@@ -1669,10 +2147,10 @@ func Test_StandardBoolLikeGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardBoolLikeGetter_WrappedError(t *testing.T) {
 	getter := StandardBoolLikeGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -1693,7 +2171,7 @@ func Test_StandardPMapGetter(t *testing.T) {
 		{
 			name: "pcommon.map type",
 			getter: StandardPMapGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return pcommon.NewMap(), nil
 				},
 			},
@@ -1703,7 +2181,7 @@ func Test_StandardPMapGetter(t *testing.T) {
 		{
 			name: "map[string]any type",
 			getter: StandardPMapGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return make(map[string]any), nil
 				},
 			},
@@ -1713,7 +2191,7 @@ func Test_StandardPMapGetter(t *testing.T) {
 		{
 			name: "ValueTypeMap type",
 			getter: StandardPMapGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return pcommon.NewValueMap(), nil
 				},
 			},
@@ -1723,7 +2201,7 @@ func Test_StandardPMapGetter(t *testing.T) {
 		{
 			name: "Incorrect type",
 			getter: StandardPMapGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return true, nil
 				},
 			},
@@ -1733,7 +2211,7 @@ func Test_StandardPMapGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardPMapGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -1756,10 +2234,10 @@ func Test_StandardPMapGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardPMapGetter_WrappedError(t *testing.T) {
 	getter := StandardPMapGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -1789,7 +2267,7 @@ func Test_StandardDurationGetter(t *testing.T) {
 		{
 			name: "complex duration",
 			getter: StandardDurationGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return time.ParseDuration("1h1m1s")
 				},
 			},
@@ -1799,7 +2277,7 @@ func Test_StandardDurationGetter(t *testing.T) {
 		{
 			name: "simple duration",
 			getter: StandardDurationGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return time.ParseDuration("100ns")
 				},
 			},
@@ -1809,7 +2287,7 @@ func Test_StandardDurationGetter(t *testing.T) {
 		{
 			name: "complex duation values less than 1 seconc",
 			getter: StandardDurationGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return time.ParseDuration("10ms66us7000ns")
 				},
 			},
@@ -1819,7 +2297,7 @@ func Test_StandardDurationGetter(t *testing.T) {
 		{
 			name: "invalid duration units",
 			getter: StandardDurationGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return time.ParseDuration("70ps")
 				},
 			},
@@ -1829,7 +2307,7 @@ func Test_StandardDurationGetter(t *testing.T) {
 		{
 			name: "wrong type - int",
 			getter: StandardDurationGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return 1, nil
 				},
 			},
@@ -1839,7 +2317,7 @@ func Test_StandardDurationGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardDurationGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -1861,10 +2339,10 @@ func Test_StandardDurationGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardDurationGetter_WrappedError(t *testing.T) {
 	getter := StandardDurationGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}
@@ -1885,7 +2363,7 @@ func Test_StandardTimeGetter(t *testing.T) {
 		{
 			name: "2023 time",
 			getter: StandardTimeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return time.Date(2023, 8, 17, 1, 1, 1, 1, time.UTC), nil
 				},
 			},
@@ -1895,7 +2373,7 @@ func Test_StandardTimeGetter(t *testing.T) {
 		{
 			name: "before 2000 time",
 			getter: StandardTimeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return time.Date(1999, 12, 1, 10, 59, 58, 57, time.UTC), nil
 				},
 			},
@@ -1905,7 +2383,7 @@ func Test_StandardTimeGetter(t *testing.T) {
 		{
 			name: "wrong type - duration",
 			getter: StandardTimeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return time.ParseDuration("70ns")
 				},
 			},
@@ -1915,7 +2393,7 @@ func Test_StandardTimeGetter(t *testing.T) {
 		{
 			name: "wrong type - bool",
 			getter: StandardTimeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return true, nil
 				},
 			},
@@ -1925,7 +2403,7 @@ func Test_StandardTimeGetter(t *testing.T) {
 		{
 			name: "nil",
 			getter: StandardTimeGetter[any]{
-				Getter: func(ctx context.Context, tCtx any) (any, error) {
+				Getter: func(_ context.Context, _ any) (any, error) {
 					return nil, nil
 				},
 			},
@@ -1950,10 +2428,10 @@ func Test_StandardTimeGetter(t *testing.T) {
 	}
 }
 
-// nolint:errorlint
+//nolint:errorlint
 func Test_StandardTimeGetter_WrappedError(t *testing.T) {
 	getter := StandardTimeGetter[any]{
-		Getter: func(ctx context.Context, tCtx any) (any, error) {
+		Getter: func(_ context.Context, _ any) (any, error) {
 			return nil, TypeError("")
 		},
 	}

@@ -5,7 +5,6 @@ package cassandraexporter // import "github.com/open-telemetry/opentelemetry-col
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
@@ -41,24 +40,16 @@ func createDefaultConfig() component.Config {
 	}
 }
 
-func createTracesExporter(ctx context.Context, set exporter.CreateSettings, cfg component.Config) (exporter.Traces, error) {
+func createTracesExporter(ctx context.Context, set exporter.Settings, cfg component.Config) (exporter.Traces, error) {
 	c := cfg.(*Config)
-	exp, err := newTracesExporter(set.Logger, c)
+	exp := newTracesExporter(set.Logger, c)
 
-	if err != nil {
-		return nil, fmt.Errorf("cannot configure cassandra traces exporter: %w", err)
-	}
-
-	return exporterhelper.NewTracesExporter(ctx, set, cfg, exp.pushTraceData, exporterhelper.WithShutdown(exp.Shutdown), exporterhelper.WithStart(exp.Start))
+	return exporterhelper.NewTraces(ctx, set, cfg, exp.pushTraceData, exporterhelper.WithShutdown(exp.Shutdown), exporterhelper.WithStart(exp.Start))
 }
 
-func createLogsExporter(ctx context.Context, set exporter.CreateSettings, cfg component.Config) (exporter.Logs, error) {
+func createLogsExporter(ctx context.Context, set exporter.Settings, cfg component.Config) (exporter.Logs, error) {
 	c := cfg.(*Config)
-	exp, err := newLogsExporter(set.Logger, c)
+	exp := newLogsExporter(set.Logger, c)
 
-	if err != nil {
-		return nil, fmt.Errorf("cannot configure cassandra traces exporter: %w", err)
-	}
-
-	return exporterhelper.NewLogsExporter(ctx, set, cfg, exp.pushLogsData, exporterhelper.WithShutdown(exp.Shutdown), exporterhelper.WithStart(exp.Start))
+	return exporterhelper.NewLogs(ctx, set, cfg, exp.pushLogsData, exporterhelper.WithShutdown(exp.Shutdown), exporterhelper.WithStart(exp.Start))
 }

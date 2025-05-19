@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"go.opentelemetry.io/collector/component"
@@ -54,8 +55,8 @@ type flinkClient struct {
 	logger       *zap.Logger
 }
 
-func newClient(cfg *Config, host component.Host, settings component.TelemetrySettings, logger *zap.Logger) (client, error) {
-	httpClient, err := cfg.ToClient(host, settings)
+func newClient(ctx context.Context, cfg *Config, host component.Host, settings component.TelemetrySettings, logger *zap.Logger) (client, error) {
+	httpClient, err := cfg.ToClient(ctx, host, settings)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP Client: %w", err)
 	}
@@ -313,7 +314,7 @@ func (c *flinkClient) getSubtasksMetricsByIDs(ctx context.Context, jobsResponse 
 						TaskmanagerID: getTaskmanagerID(subtask.TaskmanagerID),
 						JobName:       jobsWithIDResponse.Name,
 						TaskName:      vertex.Name,
-						SubtaskIndex:  fmt.Sprintf("%v", subtask.Subtask),
+						SubtaskIndex:  strconv.Itoa(subtask.Subtask),
 						Metrics:       *subtaskMetrics,
 					})
 			}

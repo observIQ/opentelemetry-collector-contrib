@@ -15,6 +15,7 @@ import (
 	"github.com/influxdata/influxdb-observability/influx2otel"
 	"github.com/influxdata/line-protocol/v2/lineprotocol"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumererror"
@@ -26,7 +27,7 @@ import (
 
 type metricsReceiver struct {
 	nextConsumer       consumer.Metrics
-	httpServerSettings *confighttp.HTTPServerSettings
+	httpServerSettings *confighttp.ServerConfig
 	converter          *influx2otel.LineProtocolToOtelMetrics
 
 	server *http.Server
@@ -39,8 +40,8 @@ type metricsReceiver struct {
 	settings component.TelemetrySettings
 }
 
-func newMetricsReceiver(config *Config, settings receiver.CreateSettings, nextConsumer consumer.Metrics) (*metricsReceiver, error) {
-	influxLogger := newZapInfluxLogger(settings.TelemetrySettings.Logger)
+func newMetricsReceiver(config *Config, settings receiver.Settings, nextConsumer consumer.Metrics) (*metricsReceiver, error) {
+	influxLogger := newZapInfluxLogger(settings.Logger)
 	converter, err := influx2otel.NewLineProtocolToOtelMetrics(influxLogger)
 	if err != nil {
 		return nil, err
@@ -56,7 +57,7 @@ func newMetricsReceiver(config *Config, settings receiver.CreateSettings, nextCo
 
 	return &metricsReceiver{
 		nextConsumer:       nextConsumer,
-		httpServerSettings: &config.HTTPServerSettings,
+		httpServerSettings: &config.ServerConfig,
 		converter:          converter,
 		logger:             influxLogger,
 		obsrecv:            obsrecv,
@@ -64,8 +65,8 @@ func newMetricsReceiver(config *Config, settings receiver.CreateSettings, nextCo
 	}, err
 }
 
-func (r *metricsReceiver) Start(_ context.Context, host component.Host) error {
-	ln, err := r.httpServerSettings.ToListener()
+func (r *metricsReceiver) Start(ctx context.Context, host component.Host) error {
+	ln, err := r.httpServerSettings.ToListener(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to bind to address %s: %w", r.httpServerSettings.Endpoint, err)
 	}
@@ -76,14 +77,14 @@ func (r *metricsReceiver) Start(_ context.Context, host component.Host) error {
 	router.HandleFunc("/ping", r.handlePing)
 
 	r.wg.Add(1)
-	r.server, err = r.httpServerSettings.ToServer(host, r.settings, router)
+	r.server, err = r.httpServerSettings.ToServer(ctx, host, r.settings, router)
 	if err != nil {
 		return err
 	}
 	go func() {
 		defer r.wg.Done()
 		if errHTTP := r.server.Serve(ln); !errors.Is(errHTTP, http.ErrServerClosed) && errHTTP != nil {
-			host.ReportFatalError(errHTTP)
+			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(errHTTP))
 		}
 	}()
 
@@ -183,7 +184,7 @@ func (r *metricsReceiver) handleWrite(w http.ResponseWriter, req *http.Request) 
 		err = batch.AddPoint(string(measurement), tags, fields, ts, common.InfluxMetricValueTypeUntyped)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = fmt.Fprintf(w, "failed to append to the batch")
+			_, _ = fmt.Fprintf(w, "failed to append to the batch: %v", err)
 			return
 		}
 	}

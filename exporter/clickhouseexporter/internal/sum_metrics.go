@@ -6,6 +6,7 @@ package internal // import "github.com/open-telemetry/opentelemetry-collector-co
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 const (
 	// language=ClickHouse SQL
 	createSumTableSQL = `
-CREATE TABLE IF NOT EXISTS %s_sum (
+CREATE TABLE IF NOT EXISTS %s %s (
     ResourceAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     ResourceSchemaUrl String CODEC(ZSTD(1)),
     ScopeName String CODEC(ZSTD(1)),
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS %s_sum (
     ScopeAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     ScopeDroppedAttrCount UInt32 CODEC(ZSTD(1)),
     ScopeSchemaUrl String CODEC(ZSTD(1)),
+    ServiceName LowCardinality(String) CODEC(ZSTD(1)),
     MetricName String CODEC(ZSTD(1)),
     MetricDescription String CODEC(ZSTD(1)),
     MetricUnit String CODEC(ZSTD(1)),
@@ -40,7 +42,7 @@ CREATE TABLE IF NOT EXISTS %s_sum (
 		SpanId String,
 		TraceId String
     ) CODEC(ZSTD(1)),
-    AggTemp Int32 CODEC(ZSTD(1)),
+    AggregationTemporality Int32 CODEC(ZSTD(1)),
 	IsMonotonic Boolean CODEC(Delta, ZSTD(1)),
 	INDEX idx_res_attr_key mapKeys(ResourceAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_res_attr_value mapValues(ResourceAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
@@ -48,14 +50,14 @@ CREATE TABLE IF NOT EXISTS %s_sum (
 	INDEX idx_scope_attr_value mapValues(ScopeAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_attr_key mapKeys(Attributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_attr_value mapValues(Attributes) TYPE bloom_filter(0.01) GRANULARITY 1
-) ENGINE MergeTree()
+) ENGINE = %s
 %s
 PARTITION BY toDate(TimeUnix)
-ORDER BY (MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
 `
 	// language=ClickHouse SQL
-	insertSumTableSQL = `INSERT INTO %s_sum (
+	insertSumTableSQL = `INSERT INTO %s (
     ResourceAttributes,
     ResourceSchemaUrl,
     ScopeName,
@@ -63,6 +65,7 @@ SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
     ScopeAttributes,
 	ScopeDroppedAttrCount,
     ScopeSchemaUrl,
+    ServiceName,
     MetricName,
     MetricDescription,
     MetricUnit,
@@ -76,8 +79,8 @@ SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
     Exemplars.Value,
     Exemplars.SpanId,
     Exemplars.TraceId,
-	AggTemp,
-	IsMonotonic) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+	AggregationTemporality,
+	IsMonotonic) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 )
 
 type sumModel struct {
@@ -110,21 +113,26 @@ func (s *sumMetrics) insert(ctx context.Context, db *sql.DB) error {
 		}()
 
 		for _, model := range s.sumModel {
+			resAttr := AttributesToMap(model.metadata.ResAttr)
+			scopeAttr := AttributesToMap(model.metadata.ScopeInstr.Attributes())
+			serviceName := GetServiceName(model.metadata.ResAttr)
+
 			for i := 0; i < model.sum.DataPoints().Len(); i++ {
 				dp := model.sum.DataPoints().At(i)
 				attrs, times, values, traceIDs, spanIDs := convertExemplars(dp.Exemplars())
 				_, err = statement.ExecContext(ctx,
-					model.metadata.ResAttr,
+					resAttr,
 					model.metadata.ResURL,
 					model.metadata.ScopeInstr.Name(),
 					model.metadata.ScopeInstr.Version(),
-					attributesToMap(model.metadata.ScopeInstr.Attributes()),
+					scopeAttr,
 					model.metadata.ScopeInstr.DroppedAttributesCount(),
 					model.metadata.ScopeURL,
+					serviceName,
 					model.metricName,
 					model.metricDescription,
 					model.metricUnit,
-					attributesToMap(dp.Attributes()),
+					AttributesToMap(dp.Attributes()),
 					dp.StartTimestamp().AsTime(),
 					dp.Timestamp().AsTime(),
 					getValue(dp.IntValue(), dp.DoubleValue(), dp.ValueType()),
@@ -132,8 +140,8 @@ func (s *sumMetrics) insert(ctx context.Context, db *sql.DB) error {
 					attrs,
 					times,
 					values,
-					traceIDs,
 					spanIDs,
+					traceIDs,
 					int32(model.sum.AggregationTemporality()),
 					model.sum.IsMonotonic(),
 				)
@@ -156,10 +164,10 @@ func (s *sumMetrics) insert(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func (s *sumMetrics) Add(resAttr map[string]string, resURL string, scopeInstr pcommon.InstrumentationScope, scopeURL string, metrics any, name string, description string, unit string) error {
+func (s *sumMetrics) Add(resAttr pcommon.Map, resURL string, scopeInstr pcommon.InstrumentationScope, scopeURL string, metrics any, name string, description string, unit string) error {
 	sum, ok := metrics.(pmetric.Sum)
 	if !ok {
-		return fmt.Errorf("metrics param is not type of Sum")
+		return errors.New("metrics param is not type of Sum")
 	}
 	s.count += sum.DataPoints().Len()
 	s.sumModel = append(s.sumModel, &sumModel{

@@ -3,8 +3,13 @@ type: carbon
 status:
   class: receiver
   stability:
-    beta: [metrics]
-  distributions: [contrib, splunk, observiq, sumo]
+    unmaintained: [metrics]
+  distributions: [contrib]
   codeowners:
-    active: [aboguszewski-sumo]
+    active: []
+    emeritus: [aboguszewski-sumo]
+    seeking_new: true
 
+# TODO: Update the exporter to pass the tests
+tests:
+  skip_lifecycle: true

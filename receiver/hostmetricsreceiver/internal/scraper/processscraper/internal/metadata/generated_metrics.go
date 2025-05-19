@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/filter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	"go.opentelemetry.io/collector/receiver"
-	conventions "go.opentelemetry.io/collector/semconv/v1.9.0"
+	"go.opentelemetry.io/collector/scraper"
+	conventions "go.opentelemetry.io/otel/semconv/v1.9.0"
 )
 
-// AttributeContextSwitchType specifies the a value context_switch_type attribute.
+// AttributeContextSwitchType specifies the value context_switch_type attribute.
 type AttributeContextSwitchType int
 
 const (
@@ -38,7 +39,7 @@ var MapAttributeContextSwitchType = map[string]AttributeContextSwitchType{
 	"voluntary":   AttributeContextSwitchTypeVoluntary,
 }
 
-// AttributeDirection specifies the a value direction attribute.
+// AttributeDirection specifies the value direction attribute.
 type AttributeDirection int
 
 const (
@@ -64,7 +65,7 @@ var MapAttributeDirection = map[string]AttributeDirection{
 	"write": AttributeDirectionWrite,
 }
 
-// AttributePagingFaultType specifies the a value paging_fault_type attribute.
+// AttributePagingFaultType specifies the value paging_fault_type attribute.
 type AttributePagingFaultType int
 
 const (
@@ -90,7 +91,7 @@ var MapAttributePagingFaultType = map[string]AttributePagingFaultType{
 	"minor": AttributePagingFaultTypeMinor,
 }
 
-// AttributeState specifies the a value state attribute.
+// AttributeState specifies the value state attribute.
 type AttributeState int
 
 const (
@@ -118,6 +119,72 @@ var MapAttributeState = map[string]AttributeState{
 	"system": AttributeStateSystem,
 	"user":   AttributeStateUser,
 	"wait":   AttributeStateWait,
+}
+
+var MetricsInfo = metricsInfo{
+	ProcessContextSwitches: metricInfo{
+		Name: "process.context_switches",
+	},
+	ProcessCPUTime: metricInfo{
+		Name: "process.cpu.time",
+	},
+	ProcessCPUUtilization: metricInfo{
+		Name: "process.cpu.utilization",
+	},
+	ProcessDiskIo: metricInfo{
+		Name: "process.disk.io",
+	},
+	ProcessDiskOperations: metricInfo{
+		Name: "process.disk.operations",
+	},
+	ProcessHandles: metricInfo{
+		Name: "process.handles",
+	},
+	ProcessMemoryUsage: metricInfo{
+		Name: "process.memory.usage",
+	},
+	ProcessMemoryUtilization: metricInfo{
+		Name: "process.memory.utilization",
+	},
+	ProcessMemoryVirtual: metricInfo{
+		Name: "process.memory.virtual",
+	},
+	ProcessOpenFileDescriptors: metricInfo{
+		Name: "process.open_file_descriptors",
+	},
+	ProcessPagingFaults: metricInfo{
+		Name: "process.paging.faults",
+	},
+	ProcessSignalsPending: metricInfo{
+		Name: "process.signals_pending",
+	},
+	ProcessThreads: metricInfo{
+		Name: "process.threads",
+	},
+	ProcessUptime: metricInfo{
+		Name: "process.uptime",
+	},
+}
+
+type metricsInfo struct {
+	ProcessContextSwitches     metricInfo
+	ProcessCPUTime             metricInfo
+	ProcessCPUUtilization      metricInfo
+	ProcessDiskIo              metricInfo
+	ProcessDiskOperations      metricInfo
+	ProcessHandles             metricInfo
+	ProcessMemoryUsage         metricInfo
+	ProcessMemoryUtilization   metricInfo
+	ProcessMemoryVirtual       metricInfo
+	ProcessOpenFileDescriptors metricInfo
+	ProcessPagingFaults        metricInfo
+	ProcessSignalsPending      metricInfo
+	ProcessThreads             metricInfo
+	ProcessUptime              metricInfo
+}
+
+type metricInfo struct {
+	Name string
 }
 
 type metricProcessContextSwitches struct {
@@ -392,7 +459,7 @@ type metricProcessHandles struct {
 // init fills process.handles metric with initial data.
 func (m *metricProcessHandles) init() {
 	m.data.SetName("process.handles")
-	m.data.SetDescription("Number of handles held by the process.")
+	m.data.SetDescription("Number of open handles held by the process.")
 	m.data.SetUnit("{count}")
 	m.data.SetEmptySum()
 	m.data.Sum().SetIsMonotonic(false)
@@ -791,6 +858,55 @@ func newMetricProcessThreads(cfg MetricConfig) metricProcessThreads {
 	return m
 }
 
+type metricProcessUptime struct {
+	data     pmetric.Metric // data buffer for generated metric.
+	config   MetricConfig   // metric config provided by user.
+	capacity int            // max observed number of data points added to the metric.
+}
+
+// init fills process.uptime metric with initial data.
+func (m *metricProcessUptime) init() {
+	m.data.SetName("process.uptime")
+	m.data.SetDescription("The time the process has been running.")
+	m.data.SetUnit("s")
+	m.data.SetEmptyGauge()
+}
+
+func (m *metricProcessUptime) recordDataPoint(start pcommon.Timestamp, ts pcommon.Timestamp, val float64) {
+	if !m.config.Enabled {
+		return
+	}
+	dp := m.data.Gauge().DataPoints().AppendEmpty()
+	dp.SetStartTimestamp(start)
+	dp.SetTimestamp(ts)
+	dp.SetDoubleValue(val)
+}
+
+// updateCapacity saves max length of data point slices that will be used for the slice capacity.
+func (m *metricProcessUptime) updateCapacity() {
+	if m.data.Gauge().DataPoints().Len() > m.capacity {
+		m.capacity = m.data.Gauge().DataPoints().Len()
+	}
+}
+
+// emit appends recorded metric data to a metrics slice and prepares it for recording another set of data points.
+func (m *metricProcessUptime) emit(metrics pmetric.MetricSlice) {
+	if m.config.Enabled && m.data.Gauge().DataPoints().Len() > 0 {
+		m.updateCapacity()
+		m.data.MoveTo(metrics.AppendEmpty())
+		m.init()
+	}
+}
+
+func newMetricProcessUptime(cfg MetricConfig) metricProcessUptime {
+	m := metricProcessUptime{config: cfg}
+	if cfg.Enabled {
+		m.data = pmetric.NewMetric()
+		m.init()
+	}
+	return m
+}
+
 // MetricsBuilder provides an interface for scrapers to report metrics while taking care of all the transformations
 // required to produce metric representation defined in metadata and user config.
 type MetricsBuilder struct {
@@ -799,6 +915,8 @@ type MetricsBuilder struct {
 	metricsCapacity                  int                  // maximum observed number of metrics per resource.
 	metricsBuffer                    pmetric.Metrics      // accumulates metrics data before emitting.
 	buildInfo                        component.BuildInfo  // contains version information.
+	resourceAttributeIncludeFilter   map[string]filter.Filter
+	resourceAttributeExcludeFilter   map[string]filter.Filter
 	metricProcessContextSwitches     metricProcessContextSwitches
 	metricProcessCPUTime             metricProcessCPUTime
 	metricProcessCPUUtilization      metricProcessCPUUtilization
@@ -812,19 +930,27 @@ type MetricsBuilder struct {
 	metricProcessPagingFaults        metricProcessPagingFaults
 	metricProcessSignalsPending      metricProcessSignalsPending
 	metricProcessThreads             metricProcessThreads
+	metricProcessUptime              metricProcessUptime
 }
 
-// metricBuilderOption applies changes to default metrics builder.
-type metricBuilderOption func(*MetricsBuilder)
+// MetricBuilderOption applies changes to default metrics builder.
+type MetricBuilderOption interface {
+	apply(*MetricsBuilder)
+}
+
+type metricBuilderOptionFunc func(mb *MetricsBuilder)
+
+func (mbof metricBuilderOptionFunc) apply(mb *MetricsBuilder) {
+	mbof(mb)
+}
 
 // WithStartTime sets startTime on the metrics builder.
-func WithStartTime(startTime pcommon.Timestamp) metricBuilderOption {
-	return func(mb *MetricsBuilder) {
+func WithStartTime(startTime pcommon.Timestamp) MetricBuilderOption {
+	return metricBuilderOptionFunc(func(mb *MetricsBuilder) {
 		mb.startTime = startTime
-	}
+	})
 }
-
-func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSettings, options ...metricBuilderOption) *MetricsBuilder {
+func NewMetricsBuilder(mbc MetricsBuilderConfig, settings scraper.Settings, options ...MetricBuilderOption) *MetricsBuilder {
 	mb := &MetricsBuilder{
 		config:                           mbc,
 		startTime:                        pcommon.NewTimestampFromTime(time.Now()),
@@ -843,9 +969,61 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricProcessPagingFaults:        newMetricProcessPagingFaults(mbc.Metrics.ProcessPagingFaults),
 		metricProcessSignalsPending:      newMetricProcessSignalsPending(mbc.Metrics.ProcessSignalsPending),
 		metricProcessThreads:             newMetricProcessThreads(mbc.Metrics.ProcessThreads),
+		metricProcessUptime:              newMetricProcessUptime(mbc.Metrics.ProcessUptime),
+		resourceAttributeIncludeFilter:   make(map[string]filter.Filter),
+		resourceAttributeExcludeFilter:   make(map[string]filter.Filter),
 	}
+	if mbc.ResourceAttributes.ProcessCgroup.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["process.cgroup"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessCgroup.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ProcessCgroup.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["process.cgroup"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessCgroup.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.ProcessCommand.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["process.command"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessCommand.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ProcessCommand.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["process.command"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessCommand.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.ProcessCommandLine.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["process.command_line"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessCommandLine.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ProcessCommandLine.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["process.command_line"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessCommandLine.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.ProcessExecutableName.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["process.executable.name"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessExecutableName.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ProcessExecutableName.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["process.executable.name"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessExecutableName.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.ProcessExecutablePath.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["process.executable.path"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessExecutablePath.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ProcessExecutablePath.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["process.executable.path"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessExecutablePath.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.ProcessOwner.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["process.owner"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessOwner.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ProcessOwner.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["process.owner"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessOwner.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.ProcessParentPid.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["process.parent_pid"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessParentPid.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ProcessParentPid.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["process.parent_pid"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessParentPid.MetricsExclude)
+	}
+	if mbc.ResourceAttributes.ProcessPid.MetricsInclude != nil {
+		mb.resourceAttributeIncludeFilter["process.pid"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessPid.MetricsInclude)
+	}
+	if mbc.ResourceAttributes.ProcessPid.MetricsExclude != nil {
+		mb.resourceAttributeExcludeFilter["process.pid"] = filter.CreateFilter(mbc.ResourceAttributes.ProcessPid.MetricsExclude)
+	}
+
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 	return mb
 }
@@ -863,20 +1041,28 @@ func (mb *MetricsBuilder) updateCapacity(rm pmetric.ResourceMetrics) {
 }
 
 // ResourceMetricsOption applies changes to provided resource metrics.
-type ResourceMetricsOption func(pmetric.ResourceMetrics)
+type ResourceMetricsOption interface {
+	apply(pmetric.ResourceMetrics)
+}
+
+type resourceMetricsOptionFunc func(pmetric.ResourceMetrics)
+
+func (rmof resourceMetricsOptionFunc) apply(rm pmetric.ResourceMetrics) {
+	rmof(rm)
+}
 
 // WithResource sets the provided resource on the emitted ResourceMetrics.
 // It's recommended to use ResourceBuilder to create the resource.
 func WithResource(res pcommon.Resource) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		res.CopyTo(rm.Resource())
-	}
+	})
 }
 
 // WithStartTimeOverride overrides start time for all the resource metrics data points.
 // This option should be only used if different start time has to be set on metrics coming from different resources.
 func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		var dps pmetric.NumberDataPointSlice
 		metrics := rm.ScopeMetrics().At(0).Metrics()
 		for i := 0; i < metrics.Len(); i++ {
@@ -890,7 +1076,7 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 				dps.At(j).SetStartTimestamp(start)
 			}
 		}
-	}
+	})
 }
 
 // EmitForResource saves all the generated metrics under a new resource and updates the internal state to be ready for
@@ -898,11 +1084,11 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 // needs to emit metrics from several resources. Otherwise calling this function is not required,
 // just `Emit` function can be called instead.
 // Resource attributes should be provided as ResourceMetricsOption arguments.
-func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
+func (mb *MetricsBuilder) EmitForResource(options ...ResourceMetricsOption) {
 	rm := pmetric.NewResourceMetrics()
 	rm.SetSchemaUrl(conventions.SchemaURL)
 	ils := rm.ScopeMetrics().AppendEmpty()
-	ils.Scope().SetName("otelcol/hostmetricsreceiver/process")
+	ils.Scope().SetName(ScopeName)
 	ils.Scope().SetVersion(mb.buildInfo.Version)
 	ils.Metrics().EnsureCapacity(mb.metricsCapacity)
 	mb.metricProcessContextSwitches.emit(ils.Metrics())
@@ -918,10 +1104,22 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricProcessPagingFaults.emit(ils.Metrics())
 	mb.metricProcessSignalsPending.emit(ils.Metrics())
 	mb.metricProcessThreads.emit(ils.Metrics())
+	mb.metricProcessUptime.emit(ils.Metrics())
 
-	for _, op := range rmo {
-		op(rm)
+	for _, op := range options {
+		op.apply(rm)
 	}
+	for attr, filter := range mb.resourceAttributeIncludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && !filter.Matches(val.AsString()) {
+			return
+		}
+	}
+	for attr, filter := range mb.resourceAttributeExcludeFilter {
+		if val, ok := rm.Resource().Attributes().Get(attr); ok && filter.Matches(val.AsString()) {
+			return
+		}
+	}
+
 	if ils.Metrics().Len() > 0 {
 		mb.updateCapacity(rm)
 		rm.MoveTo(mb.metricsBuffer.ResourceMetrics().AppendEmpty())
@@ -931,8 +1129,8 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 // Emit returns all the metrics accumulated by the metrics builder and updates the internal state to be ready for
 // recording another set of metrics. This function will be responsible for applying all the transformations required to
 // produce metric representation defined in metadata and user config, e.g. delta or cumulative.
-func (mb *MetricsBuilder) Emit(rmo ...ResourceMetricsOption) pmetric.Metrics {
-	mb.EmitForResource(rmo...)
+func (mb *MetricsBuilder) Emit(options ...ResourceMetricsOption) pmetric.Metrics {
+	mb.EmitForResource(options...)
 	metrics := mb.metricsBuffer
 	mb.metricsBuffer = pmetric.NewMetrics()
 	return metrics
@@ -1003,11 +1201,16 @@ func (mb *MetricsBuilder) RecordProcessThreadsDataPoint(ts pcommon.Timestamp, va
 	mb.metricProcessThreads.recordDataPoint(mb.startTime, ts, val)
 }
 
+// RecordProcessUptimeDataPoint adds a data point to process.uptime metric.
+func (mb *MetricsBuilder) RecordProcessUptimeDataPoint(ts pcommon.Timestamp, val float64) {
+	mb.metricProcessUptime.recordDataPoint(mb.startTime, ts, val)
+}
+
 // Reset resets metrics builder to its initial state. It should be used when external metrics source is restarted,
 // and metrics builder should update its startTime and reset it's internal state accordingly.
-func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
+func (mb *MetricsBuilder) Reset(options ...MetricBuilderOption) {
 	mb.startTime = pcommon.NewTimestampFromTime(time.Now())
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 }

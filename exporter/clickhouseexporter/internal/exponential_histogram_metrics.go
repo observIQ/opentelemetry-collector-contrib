@@ -6,6 +6,7 @@ package internal // import "github.com/open-telemetry/opentelemetry-collector-co
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 const (
 	// language=ClickHouse SQL
 	createExpHistogramTableSQL = `
-CREATE TABLE IF NOT EXISTS %s_exponential_histogram (
+CREATE TABLE IF NOT EXISTS %s %s (
     ResourceAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     ResourceSchemaUrl String CODEC(ZSTD(1)),
     ScopeName String CODEC(ZSTD(1)),
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS %s_exponential_histogram (
     ScopeAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     ScopeDroppedAttrCount UInt32 CODEC(ZSTD(1)),
     ScopeSchemaUrl String CODEC(ZSTD(1)),
+    ServiceName LowCardinality(String) CODEC(ZSTD(1)),
     MetricName String CODEC(ZSTD(1)),
     MetricDescription String CODEC(ZSTD(1)),
     MetricUnit String CODEC(ZSTD(1)),
@@ -49,20 +51,21 @@ CREATE TABLE IF NOT EXISTS %s_exponential_histogram (
     Flags UInt32  CODEC(ZSTD(1)),
     Min Float64 CODEC(ZSTD(1)),
     Max Float64 CODEC(ZSTD(1)),
+		AggregationTemporality Int32 CODEC(ZSTD(1)),
 	INDEX idx_res_attr_key mapKeys(ResourceAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_res_attr_value mapValues(ResourceAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_scope_attr_key mapKeys(ScopeAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_scope_attr_value mapValues(ScopeAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_attr_key mapKeys(Attributes) TYPE bloom_filter(0.01) GRANULARITY 1,
 	INDEX idx_attr_value mapValues(Attributes) TYPE bloom_filter(0.01) GRANULARITY 1
-) ENGINE MergeTree()
+) ENGINE = %s
 %s
 PARTITION BY toDate(TimeUnix)
-ORDER BY (MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
 `
 	// language=ClickHouse SQL
-	insertExpHistogramTableSQL = `INSERT INTO %s_exponential_histogram (
+	insertExpHistogramTableSQL = `INSERT INTO %s (
 	ResourceAttributes,
     ResourceSchemaUrl,
     ScopeName,
@@ -70,6 +73,7 @@ SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
     ScopeAttributes,
     ScopeDroppedAttrCount,
     ScopeSchemaUrl,
+    ServiceName,
     MetricName,
     MetricDescription,
     MetricUnit,
@@ -77,7 +81,7 @@ SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
 	StartTimeUnix,
 	TimeUnix,
 	Count,
-	Sum,                   
+	Sum,
     Scale,
     ZeroCount,
 	PositiveOffset,
@@ -91,7 +95,8 @@ SETTINGS index_granularity=8192, ttl_only_drop_parts = 1;
     Exemplars.TraceId,
 	Flags,
 	Min,
-	Max) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+	Max,
+	AggregationTemporality) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 )
 
 type expHistogramModel struct {
@@ -125,22 +130,26 @@ func (e *expHistogramMetrics) insert(ctx context.Context, db *sql.DB) error {
 		}()
 
 		for _, model := range e.expHistogramModels {
+			resAttr := AttributesToMap(model.metadata.ResAttr)
+			scopeAttr := AttributesToMap(model.metadata.ScopeInstr.Attributes())
+			serviceName := GetServiceName(model.metadata.ResAttr)
+
 			for i := 0; i < model.expHistogram.DataPoints().Len(); i++ {
 				dp := model.expHistogram.DataPoints().At(i)
-
 				attrs, times, values, traceIDs, spanIDs := convertExemplars(dp.Exemplars())
 				_, err = statement.ExecContext(ctx,
-					model.metadata.ResAttr,
+					resAttr,
 					model.metadata.ResURL,
 					model.metadata.ScopeInstr.Name(),
 					model.metadata.ScopeInstr.Version(),
-					attributesToMap(model.metadata.ScopeInstr.Attributes()),
+					scopeAttr,
 					model.metadata.ScopeInstr.DroppedAttributesCount(),
 					model.metadata.ScopeURL,
+					serviceName,
 					model.metricName,
 					model.metricDescription,
 					model.metricUnit,
-					attributesToMap(dp.Attributes()),
+					AttributesToMap(dp.Attributes()),
 					dp.StartTimestamp().AsTime(),
 					dp.Timestamp().AsTime(),
 					dp.Count(),
@@ -154,11 +163,12 @@ func (e *expHistogramMetrics) insert(ctx context.Context, db *sql.DB) error {
 					attrs,
 					times,
 					values,
-					traceIDs,
 					spanIDs,
+					traceIDs,
 					uint32(dp.Flags()),
 					dp.Min(),
 					dp.Max(),
+					int32(model.expHistogram.AggregationTemporality()),
 				)
 				if err != nil {
 					return fmt.Errorf("ExecContext:%w", err)
@@ -179,10 +189,10 @@ func (e *expHistogramMetrics) insert(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func (e *expHistogramMetrics) Add(resAttr map[string]string, resURL string, scopeInstr pcommon.InstrumentationScope, scopeURL string, metrics any, name string, description string, unit string) error {
+func (e *expHistogramMetrics) Add(resAttr pcommon.Map, resURL string, scopeInstr pcommon.InstrumentationScope, scopeURL string, metrics any, name string, description string, unit string) error {
 	expHistogram, ok := metrics.(pmetric.ExponentialHistogram)
 	if !ok {
-		return fmt.Errorf("metrics param is not type of ExponentialHistogram")
+		return errors.New("metrics param is not type of ExponentialHistogram")
 	}
 	e.count += expHistogram.DataPoints().Len()
 	e.expHistogramModels = append(e.expHistogramModels, &expHistogramModel{

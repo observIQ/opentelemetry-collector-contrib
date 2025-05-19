@@ -4,6 +4,8 @@
 package testutils // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/k8sclusterreceiver/internal/testutils"
 
 import (
+	"time"
+
 	quotav1 "github.com/openshift/api/quota/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -29,6 +31,11 @@ func NewHPA(id string) *autoscalingv2.HorizontalPodAutoscaler {
 		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
 			MinReplicas: &minReplicas,
 			MaxReplicas: 10,
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
+				Kind:       "Deployment",
+				Name:       "test-deployment",
+				APIVersion: "apps/v1",
+			},
 		},
 	}
 }
@@ -201,8 +208,10 @@ func NewNode(id string) *corev1.Node {
 				"hugepages-5Mi":                 *resource.NewQuantity(2048, resource.DecimalSI),
 			},
 			NodeInfo: corev1.NodeSystemInfo{
-				KubeletVersion:   "v1.25.3",
-				KubeProxyVersion: "v1.25.3",
+				KubeletVersion:          "v1.25.3",
+				OSImage:                 "Ubuntu 22.04.1 LTS",
+				ContainerRuntimeVersion: "containerd://1.6.9",
+				OperatingSystem:         "linux",
 			},
 		},
 	}
@@ -255,7 +264,9 @@ func NewPodStatusWithContainer(containerName, containerID string) *corev1.PodSta
 				Image:        "container-image-name",
 				ContainerID:  containerID,
 				State: corev1.ContainerState{
-					Running: &corev1.ContainerStateRunning{},
+					Running: &corev1.ContainerStateRunning{
+						StartedAt: v1.Time{Time: time.Date(1, time.January, 1, 1, 1, 1, 1, time.UTC)},
+					},
 				},
 			},
 		},
@@ -277,10 +288,16 @@ func NewEvictedTerminatedPodStatusWithContainer(containerName, containerID strin
 				State: corev1.ContainerState{
 					Terminated: &corev1.ContainerStateTerminated{},
 				},
+				LastTerminationState: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{
+						Reason: "Evicted",
+					},
+				},
 			},
 		},
 	}
 }
+
 func WithOwnerReferences(or []v1.OwnerReference, obj any) any {
 	switch o := obj.(type) {
 	case *corev1.Pod:

@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 
@@ -125,8 +126,7 @@ func BenchmarkFromPdataConverter(b *testing.B) {
 	for _, wc := range workerCounts {
 		b.Run(fmt.Sprintf("worker_count=%d", wc), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-
-				converter := NewFromPdataConverter(wc, nil)
+				converter := NewFromPdataConverter(componenttest.NewNopTelemetrySettings(), wc)
 				converter.Start()
 				defer converter.Stop()
 				b.ResetTimer()
@@ -143,18 +143,14 @@ func BenchmarkFromPdataConverter(b *testing.B) {
 
 				var n int
 			forLoop:
-				for {
-					if n == entryCount {
-						break
-					}
-
+				for n != entryCount {
 					select {
 					case entries, ok := <-ch:
 						if !ok {
 							break forLoop
 						}
 
-						require.Equal(b, 250_000, len(entries))
+						require.Len(b, entries, 250_000)
 						n += len(entries)
 
 					case <-timeoutTimer.C:

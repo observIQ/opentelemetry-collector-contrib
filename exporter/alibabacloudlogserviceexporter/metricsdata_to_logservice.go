@@ -113,7 +113,8 @@ func newMetricLogFromRaw(
 	name string,
 	labels KeyValues,
 	nsec int64,
-	value float64) *sls.Log {
+	value float64,
+) *sls.Log {
 	labels.Sort()
 	return &sls.Log{
 		Time: proto.Uint32(uint32(nsec / 1e9)),
@@ -138,19 +139,11 @@ func newMetricLogFromRaw(
 	}
 }
 
-func min(l, r int) int {
-	if l < r {
-		return l
-	}
-	return r
-}
-
 func resourceToMetricLabels(labels *KeyValues, resource pcommon.Resource) {
 	attrs := resource.Attributes()
-	attrs.Range(func(k string, v pcommon.Value) bool {
+	for k, v := range attrs.All() {
 		labels.Append(k, v.AsString())
-		return true
-	})
+	}
 }
 
 func numberMetricsToLogs(name string, data pmetric.NumberDataPointSlice, defaultLabels KeyValues) (logs []*sls.Log) {
@@ -158,10 +151,9 @@ func numberMetricsToLogs(name string, data pmetric.NumberDataPointSlice, default
 		dataPoint := data.At(i)
 		attributeMap := dataPoint.Attributes()
 		labels := defaultLabels.Clone()
-		attributeMap.Range(func(k string, v pcommon.Value) bool {
+		for k, v := range attributeMap.All() {
 			labels.Append(k, v.AsString())
-			return true
-		})
+		}
 		switch dataPoint.ValueType() {
 		case pmetric.NumberDataPointValueTypeInt:
 			logs = append(logs,
@@ -189,10 +181,9 @@ func doubleHistogramMetricsToLogs(name string, data pmetric.HistogramDataPointSl
 		dataPoint := data.At(i)
 		attributeMap := dataPoint.Attributes()
 		labels := defaultLabels.Clone()
-		attributeMap.Range(func(k string, v pcommon.Value) bool {
+		for k, v := range attributeMap.All() {
 			labels.Append(k, v.AsString())
-			return true
-		})
+		}
 		logs = append(logs, newMetricLogFromRaw(name+"_sum",
 			labels,
 			int64(dataPoint.Timestamp()),
@@ -227,7 +218,6 @@ func doubleHistogramMetricsToLogs(name string, data pmetric.HistogramDataPointSl
 					float64(bucket),
 				))
 		}
-
 	}
 	return logs
 }
@@ -237,10 +227,9 @@ func doubleSummaryMetricsToLogs(name string, data pmetric.SummaryDataPointSlice,
 		dataPoint := data.At(i)
 		attributeMap := dataPoint.Attributes()
 		labels := defaultLabels.Clone()
-		attributeMap.Range(func(k string, v pcommon.Value) bool {
+		for k, v := range attributeMap.All() {
 			labels.Append(k, v.AsString())
-			return true
-		})
+		}
 		logs = append(logs, newMetricLogFromRaw(name+"_sum",
 			labels,
 			int64(dataPoint.Timestamp()),
@@ -289,7 +278,6 @@ func metricsDataToLogServiceData(
 	_ *zap.Logger,
 	md pmetric.Metrics,
 ) (logs []*sls.Log) {
-
 	resMetrics := md.ResourceMetrics()
 	for i := 0; i < resMetrics.Len(); i++ {
 		resMetricSlice := resMetrics.At(i)

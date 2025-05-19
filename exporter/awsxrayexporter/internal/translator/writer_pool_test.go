@@ -6,13 +6,14 @@ package translator
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	conventionsv112 "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.uber.org/zap"
 )
 
@@ -59,16 +60,16 @@ func BenchmarkWithPool(b *testing.B) {
 		w := wp.borrow()
 		segment, _ := MakeSegment(span, pcommon.NewResource(), nil, false, nil, false)
 		err := w.Encode(*segment)
-		assert.Nil(b, err)
+		assert.NoError(b, err)
 		logger.Info(w.String())
 	}
 }
 
 func constructWriterPoolSpan() ptrace.Span {
 	attributes := make(map[string]any)
-	attributes[conventions.AttributeHTTPMethod] = "GET"
-	attributes[conventions.AttributeHTTPURL] = "https://api.example.com/users/junit"
-	attributes[conventions.AttributeHTTPClientIP] = "192.168.15.32"
-	attributes[conventions.AttributeHTTPStatusCode] = 200
+	attributes[string(conventionsv112.HTTPMethodKey)] = http.MethodGet
+	attributes[string(conventionsv112.HTTPURLKey)] = "https://api.example.com/users/junit"
+	attributes[string(conventionsv112.HTTPClientIPKey)] = "192.168.15.32"
+	attributes[string(conventionsv112.HTTPStatusCodeKey)] = 200
 	return constructHTTPServerSpan(attributes)
 }

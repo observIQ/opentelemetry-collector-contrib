@@ -4,7 +4,7 @@
 package k8sobserver // import "github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer/k8sobserver"
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/k8sconfig"
 )
@@ -36,12 +36,16 @@ type Config struct {
 	ObserveNodes bool `mapstructure:"observe_nodes"`
 	// ObserveServices determines whether to report observer service and port endpoints. `false` by default.
 	ObserveServices bool `mapstructure:"observe_services"`
+	// ObserveIngresses determines whether to report observer ingress. `false` by default.
+	ObserveIngresses bool `mapstructure:"observe_ingresses"`
+	// Namespaces limits the namespaces for the observed resources. By default, all namespaces will be observed.
+	Namespaces []string `mapstructure:"namespaces"`
 }
 
 // Validate checks if the extension configuration is valid
 func (cfg *Config) Validate() error {
-	if !cfg.ObservePods && !cfg.ObserveNodes && !cfg.ObserveServices {
-		return fmt.Errorf("one of observe_pods, observe_nodes and observe_services must be true")
+	if !cfg.ObservePods && !cfg.ObserveNodes && !cfg.ObserveServices && !cfg.ObserveIngresses {
+		return errors.New("one of observe_pods, observe_nodes, observe_services and observe_ingresses must be true")
 	}
 	return nil
 }

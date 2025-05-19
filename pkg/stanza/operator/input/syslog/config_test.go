@@ -39,8 +39,8 @@ func TestUnmarshal(t *testing.T) {
 					cfg.TCP.Encoding = "utf-16"
 					cfg.TCP.SplitConfig.LineStartPattern = "ABC"
 					cfg.TCP.SplitConfig.LineEndPattern = ""
-					cfg.TCP.TLS = &configtls.TLSServerSetting{
-						TLSSetting: configtls.TLSSetting{
+					cfg.TCP.TLS = &configtls.ServerConfig{
+						Config: configtls.Config{
 							CertFile: "foo",
 							KeyFile:  "foo2",
 							CAFile:   "foo3",
@@ -57,6 +57,7 @@ func TestUnmarshal(t *testing.T) {
 					cfg := NewConfig()
 					cfg.Protocol = "rfc5424"
 					cfg.Location = "foo"
+					cfg.OnError = "send_quiet"
 					cfg.UDP = &udp.NewConfig().BaseConfig
 					cfg.UDP.ListenAddress = "10.0.0.1:9000"
 					cfg.UDP.AddAttributes = true

@@ -12,8 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/sqlquery"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sqlqueryreceiver/internal/metadata"
 )
 
@@ -30,25 +32,27 @@ func TestLoadConfig(t *testing.T) {
 			id:    component.NewIDWithName(metadata.Type, ""),
 			fname: "config.yaml",
 			expected: &Config{
-				ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
-					CollectionInterval: 10 * time.Second,
-					InitialDelay:       time.Second,
-				},
-				Driver:     "mydriver",
-				DataSource: "host=localhost port=5432 user=me password=s3cr3t sslmode=disable",
-				Queries: []Query{
-					{
-						SQL: "select count(*) as count, type from mytable group by type",
-						Metrics: []MetricCfg{
-							{
-								MetricName:       "val.count",
-								ValueColumn:      "count",
-								AttributeColumns: []string{"type"},
-								Monotonic:        false,
-								ValueType:        MetricValueTypeInt,
-								DataType:         MetricTypeSum,
-								Aggregation:      MetricAggregationCumulative,
-								StaticAttributes: map[string]string{"foo": "bar"},
+				Config: sqlquery.Config{
+					ControllerConfig: scraperhelper.ControllerConfig{
+						CollectionInterval: 10 * time.Second,
+						InitialDelay:       time.Second,
+					},
+					Driver:     "mydriver",
+					DataSource: "host=localhost port=5432 user=me password=s3cr3t sslmode=disable",
+					Queries: []sqlquery.Query{
+						{
+							SQL: "select count(*) as count, type from mytable group by type",
+							Metrics: []sqlquery.MetricCfg{
+								{
+									MetricName:       "val.count",
+									ValueColumn:      "count",
+									AttributeColumns: []string{"type"},
+									Monotonic:        false,
+									ValueType:        sqlquery.MetricValueTypeInt,
+									DataType:         sqlquery.MetricTypeSum,
+									Aggregation:      sqlquery.MetricAggregationCumulative,
+									StaticAttributes: map[string]string{"foo": "bar"},
+								},
 							},
 						},
 					},
@@ -109,20 +113,23 @@ func TestLoadConfig(t *testing.T) {
 			fname: "config-logs.yaml",
 			id:    component.NewIDWithName(metadata.Type, ""),
 			expected: &Config{
-				ScraperControllerSettings: scraperhelper.ScraperControllerSettings{
-					CollectionInterval: 10 * time.Second,
-					InitialDelay:       time.Second,
-				},
-				Driver:     "mydriver",
-				DataSource: "host=localhost port=5432 user=me password=s3cr3t sslmode=disable",
-				Queries: []Query{
-					{
-						SQL:                "select * from test_logs where log_id > ?",
-						TrackingColumn:     "log_id",
-						TrackingStartValue: "10",
-						Logs: []LogsCfg{
-							{
-								BodyColumn: "log_body",
+				Config: sqlquery.Config{
+					ControllerConfig: scraperhelper.ControllerConfig{
+						CollectionInterval: 10 * time.Second,
+						InitialDelay:       time.Second,
+					},
+					Driver:     "mydriver",
+					DataSource: "host=localhost port=5432 user=me password=s3cr3t sslmode=disable",
+					Queries: []sqlquery.Query{
+						{
+							SQL:                "select * from test_logs where log_id > ?",
+							TrackingColumn:     "log_id",
+							TrackingStartValue: "10",
+							Logs: []sqlquery.LogsCfg{
+								{
+									BodyColumn:       "log_body",
+									AttributeColumns: []string{"log_attribute_1", "log_attribute_2"},
+								},
 							},
 						},
 					},
@@ -151,13 +158,13 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
 			if tt.expected == nil {
-				assert.ErrorContains(t, component.ValidateConfig(cfg), tt.errorMessage)
+				assert.ErrorContains(t, xconfmap.Validate(cfg), tt.errorMessage)
 				return
 			}
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
@@ -165,7 +172,7 @@ func TestLoadConfig(t *testing.T) {
 
 func TestCreateDefaultConfig(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
-	assert.Equal(t, 10*time.Second, cfg.ScraperControllerSettings.CollectionInterval)
+	assert.Equal(t, 10*time.Second, cfg.CollectionInterval)
 }
 
 func TestConfig_Validate_Multierr(t *testing.T) {
@@ -177,9 +184,9 @@ func TestConfig_Validate_Multierr(t *testing.T) {
 
 	sub, err := cm.Sub(component.NewIDWithName(metadata.Type, "").String())
 	require.NoError(t, err)
-	require.NoError(t, component.UnmarshalConfig(sub, cfg))
+	require.NoError(t, sub.Unmarshal(cfg))
 
-	err = component.ValidateConfig(cfg)
+	err = xconfmap.Validate(cfg)
 
 	assert.ErrorContains(t, err, "invalid metric config with metric_name 'my.metric'")
 	assert.ErrorContains(t, err, "metric config has unsupported value_type: 'xint'")

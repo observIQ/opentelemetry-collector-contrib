@@ -11,6 +11,120 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 )
 
+var MetricsInfo = metricsInfo{
+	ProcessRuntimeMemstatsBuckHashSys: metricInfo{
+		Name: "process.runtime.memstats.buck_hash_sys",
+	},
+	ProcessRuntimeMemstatsFrees: metricInfo{
+		Name: "process.runtime.memstats.frees",
+	},
+	ProcessRuntimeMemstatsGcCPUFraction: metricInfo{
+		Name: "process.runtime.memstats.gc_cpu_fraction",
+	},
+	ProcessRuntimeMemstatsGcSys: metricInfo{
+		Name: "process.runtime.memstats.gc_sys",
+	},
+	ProcessRuntimeMemstatsHeapAlloc: metricInfo{
+		Name: "process.runtime.memstats.heap_alloc",
+	},
+	ProcessRuntimeMemstatsHeapIdle: metricInfo{
+		Name: "process.runtime.memstats.heap_idle",
+	},
+	ProcessRuntimeMemstatsHeapInuse: metricInfo{
+		Name: "process.runtime.memstats.heap_inuse",
+	},
+	ProcessRuntimeMemstatsHeapObjects: metricInfo{
+		Name: "process.runtime.memstats.heap_objects",
+	},
+	ProcessRuntimeMemstatsHeapReleased: metricInfo{
+		Name: "process.runtime.memstats.heap_released",
+	},
+	ProcessRuntimeMemstatsHeapSys: metricInfo{
+		Name: "process.runtime.memstats.heap_sys",
+	},
+	ProcessRuntimeMemstatsLastPause: metricInfo{
+		Name: "process.runtime.memstats.last_pause",
+	},
+	ProcessRuntimeMemstatsLookups: metricInfo{
+		Name: "process.runtime.memstats.lookups",
+	},
+	ProcessRuntimeMemstatsMallocs: metricInfo{
+		Name: "process.runtime.memstats.mallocs",
+	},
+	ProcessRuntimeMemstatsMcacheInuse: metricInfo{
+		Name: "process.runtime.memstats.mcache_inuse",
+	},
+	ProcessRuntimeMemstatsMcacheSys: metricInfo{
+		Name: "process.runtime.memstats.mcache_sys",
+	},
+	ProcessRuntimeMemstatsMspanInuse: metricInfo{
+		Name: "process.runtime.memstats.mspan_inuse",
+	},
+	ProcessRuntimeMemstatsMspanSys: metricInfo{
+		Name: "process.runtime.memstats.mspan_sys",
+	},
+	ProcessRuntimeMemstatsNextGc: metricInfo{
+		Name: "process.runtime.memstats.next_gc",
+	},
+	ProcessRuntimeMemstatsNumForcedGc: metricInfo{
+		Name: "process.runtime.memstats.num_forced_gc",
+	},
+	ProcessRuntimeMemstatsNumGc: metricInfo{
+		Name: "process.runtime.memstats.num_gc",
+	},
+	ProcessRuntimeMemstatsOtherSys: metricInfo{
+		Name: "process.runtime.memstats.other_sys",
+	},
+	ProcessRuntimeMemstatsPauseTotal: metricInfo{
+		Name: "process.runtime.memstats.pause_total",
+	},
+	ProcessRuntimeMemstatsStackInuse: metricInfo{
+		Name: "process.runtime.memstats.stack_inuse",
+	},
+	ProcessRuntimeMemstatsStackSys: metricInfo{
+		Name: "process.runtime.memstats.stack_sys",
+	},
+	ProcessRuntimeMemstatsSys: metricInfo{
+		Name: "process.runtime.memstats.sys",
+	},
+	ProcessRuntimeMemstatsTotalAlloc: metricInfo{
+		Name: "process.runtime.memstats.total_alloc",
+	},
+}
+
+type metricsInfo struct {
+	ProcessRuntimeMemstatsBuckHashSys   metricInfo
+	ProcessRuntimeMemstatsFrees         metricInfo
+	ProcessRuntimeMemstatsGcCPUFraction metricInfo
+	ProcessRuntimeMemstatsGcSys         metricInfo
+	ProcessRuntimeMemstatsHeapAlloc     metricInfo
+	ProcessRuntimeMemstatsHeapIdle      metricInfo
+	ProcessRuntimeMemstatsHeapInuse     metricInfo
+	ProcessRuntimeMemstatsHeapObjects   metricInfo
+	ProcessRuntimeMemstatsHeapReleased  metricInfo
+	ProcessRuntimeMemstatsHeapSys       metricInfo
+	ProcessRuntimeMemstatsLastPause     metricInfo
+	ProcessRuntimeMemstatsLookups       metricInfo
+	ProcessRuntimeMemstatsMallocs       metricInfo
+	ProcessRuntimeMemstatsMcacheInuse   metricInfo
+	ProcessRuntimeMemstatsMcacheSys     metricInfo
+	ProcessRuntimeMemstatsMspanInuse    metricInfo
+	ProcessRuntimeMemstatsMspanSys      metricInfo
+	ProcessRuntimeMemstatsNextGc        metricInfo
+	ProcessRuntimeMemstatsNumForcedGc   metricInfo
+	ProcessRuntimeMemstatsNumGc         metricInfo
+	ProcessRuntimeMemstatsOtherSys      metricInfo
+	ProcessRuntimeMemstatsPauseTotal    metricInfo
+	ProcessRuntimeMemstatsStackInuse    metricInfo
+	ProcessRuntimeMemstatsStackSys      metricInfo
+	ProcessRuntimeMemstatsSys           metricInfo
+	ProcessRuntimeMemstatsTotalAlloc    metricInfo
+}
+
+type metricInfo struct {
+	Name string
+}
+
 type metricProcessRuntimeMemstatsBuckHashSys struct {
 	data     pmetric.Metric // data buffer for generated metric.
 	config   MetricConfig   // metric config provided by user.
@@ -1369,17 +1483,24 @@ type MetricsBuilder struct {
 	metricProcessRuntimeMemstatsTotalAlloc    metricProcessRuntimeMemstatsTotalAlloc
 }
 
-// metricBuilderOption applies changes to default metrics builder.
-type metricBuilderOption func(*MetricsBuilder)
-
-// WithStartTime sets startTime on the metrics builder.
-func WithStartTime(startTime pcommon.Timestamp) metricBuilderOption {
-	return func(mb *MetricsBuilder) {
-		mb.startTime = startTime
-	}
+// MetricBuilderOption applies changes to default metrics builder.
+type MetricBuilderOption interface {
+	apply(*MetricsBuilder)
 }
 
-func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSettings, options ...metricBuilderOption) *MetricsBuilder {
+type metricBuilderOptionFunc func(mb *MetricsBuilder)
+
+func (mbof metricBuilderOptionFunc) apply(mb *MetricsBuilder) {
+	mbof(mb)
+}
+
+// WithStartTime sets startTime on the metrics builder.
+func WithStartTime(startTime pcommon.Timestamp) MetricBuilderOption {
+	return metricBuilderOptionFunc(func(mb *MetricsBuilder) {
+		mb.startTime = startTime
+	})
+}
+func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.Settings, options ...MetricBuilderOption) *MetricsBuilder {
 	mb := &MetricsBuilder{
 		config:                                  mbc,
 		startTime:                               pcommon.NewTimestampFromTime(time.Now()),
@@ -1412,8 +1533,9 @@ func NewMetricsBuilder(mbc MetricsBuilderConfig, settings receiver.CreateSetting
 		metricProcessRuntimeMemstatsSys:           newMetricProcessRuntimeMemstatsSys(mbc.Metrics.ProcessRuntimeMemstatsSys),
 		metricProcessRuntimeMemstatsTotalAlloc:    newMetricProcessRuntimeMemstatsTotalAlloc(mbc.Metrics.ProcessRuntimeMemstatsTotalAlloc),
 	}
+
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 	return mb
 }
@@ -1426,20 +1548,28 @@ func (mb *MetricsBuilder) updateCapacity(rm pmetric.ResourceMetrics) {
 }
 
 // ResourceMetricsOption applies changes to provided resource metrics.
-type ResourceMetricsOption func(pmetric.ResourceMetrics)
+type ResourceMetricsOption interface {
+	apply(pmetric.ResourceMetrics)
+}
+
+type resourceMetricsOptionFunc func(pmetric.ResourceMetrics)
+
+func (rmof resourceMetricsOptionFunc) apply(rm pmetric.ResourceMetrics) {
+	rmof(rm)
+}
 
 // WithResource sets the provided resource on the emitted ResourceMetrics.
 // It's recommended to use ResourceBuilder to create the resource.
 func WithResource(res pcommon.Resource) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		res.CopyTo(rm.Resource())
-	}
+	})
 }
 
 // WithStartTimeOverride overrides start time for all the resource metrics data points.
 // This option should be only used if different start time has to be set on metrics coming from different resources.
 func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
-	return func(rm pmetric.ResourceMetrics) {
+	return resourceMetricsOptionFunc(func(rm pmetric.ResourceMetrics) {
 		var dps pmetric.NumberDataPointSlice
 		metrics := rm.ScopeMetrics().At(0).Metrics()
 		for i := 0; i < metrics.Len(); i++ {
@@ -1453,7 +1583,7 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 				dps.At(j).SetStartTimestamp(start)
 			}
 		}
-	}
+	})
 }
 
 // EmitForResource saves all the generated metrics under a new resource and updates the internal state to be ready for
@@ -1461,10 +1591,10 @@ func WithStartTimeOverride(start pcommon.Timestamp) ResourceMetricsOption {
 // needs to emit metrics from several resources. Otherwise calling this function is not required,
 // just `Emit` function can be called instead.
 // Resource attributes should be provided as ResourceMetricsOption arguments.
-func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
+func (mb *MetricsBuilder) EmitForResource(options ...ResourceMetricsOption) {
 	rm := pmetric.NewResourceMetrics()
 	ils := rm.ScopeMetrics().AppendEmpty()
-	ils.Scope().SetName("otelcol/expvarreceiver")
+	ils.Scope().SetName(ScopeName)
 	ils.Scope().SetVersion(mb.buildInfo.Version)
 	ils.Metrics().EnsureCapacity(mb.metricsCapacity)
 	mb.metricProcessRuntimeMemstatsBuckHashSys.emit(ils.Metrics())
@@ -1494,9 +1624,10 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 	mb.metricProcessRuntimeMemstatsSys.emit(ils.Metrics())
 	mb.metricProcessRuntimeMemstatsTotalAlloc.emit(ils.Metrics())
 
-	for _, op := range rmo {
-		op(rm)
+	for _, op := range options {
+		op.apply(rm)
 	}
+
 	if ils.Metrics().Len() > 0 {
 		mb.updateCapacity(rm)
 		rm.MoveTo(mb.metricsBuffer.ResourceMetrics().AppendEmpty())
@@ -1506,8 +1637,8 @@ func (mb *MetricsBuilder) EmitForResource(rmo ...ResourceMetricsOption) {
 // Emit returns all the metrics accumulated by the metrics builder and updates the internal state to be ready for
 // recording another set of metrics. This function will be responsible for applying all the transformations required to
 // produce metric representation defined in metadata and user config, e.g. delta or cumulative.
-func (mb *MetricsBuilder) Emit(rmo ...ResourceMetricsOption) pmetric.Metrics {
-	mb.EmitForResource(rmo...)
+func (mb *MetricsBuilder) Emit(options ...ResourceMetricsOption) pmetric.Metrics {
+	mb.EmitForResource(options...)
 	metrics := mb.metricsBuffer
 	mb.metricsBuffer = pmetric.NewMetrics()
 	return metrics
@@ -1645,9 +1776,9 @@ func (mb *MetricsBuilder) RecordProcessRuntimeMemstatsTotalAllocDataPoint(ts pco
 
 // Reset resets metrics builder to its initial state. It should be used when external metrics source is restarted,
 // and metrics builder should update its startTime and reset it's internal state accordingly.
-func (mb *MetricsBuilder) Reset(options ...metricBuilderOption) {
+func (mb *MetricsBuilder) Reset(options ...MetricBuilderOption) {
 	mb.startTime = pcommon.NewTimestampFromTime(time.Now())
 	for _, op := range options {
-		op(mb)
+		op.apply(mb)
 	}
 }

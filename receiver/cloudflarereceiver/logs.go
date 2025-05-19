@@ -8,6 +8,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -17,12 +18,15 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	rcvr "go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/receiver/receiverhelper"
 	"go.uber.org/zap"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/errorutil"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/cloudflarereceiver/internal/metadata"
 )
 
@@ -33,17 +37,27 @@ type logsReceiver struct {
 	consumer consumer.Logs
 	wg       *sync.WaitGroup
 	id       component.ID // ID of the receiver component
+	obsrecv  *receiverhelper.ObsReport
 }
 
 const secretHeaderName = "X-CF-Secret"
-const receiverScopeName = "otelcol/" + metadata.Type
 
-func newLogsReceiver(params rcvr.CreateSettings, cfg *Config, consumer consumer.Logs) (*logsReceiver, error) {
+func newLogsReceiver(params rcvr.Settings, cfg *Config, consumer consumer.Logs) (*logsReceiver, error) {
+	obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
+		ReceiverID:             params.ID,
+		Transport:              "http",
+		ReceiverCreateSettings: params,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	recv := &logsReceiver{
 		cfg:      &cfg.Logs,
 		consumer: consumer,
 		logger:   params.Logger,
 		wg:       &sync.WaitGroup{},
+		obsrecv:  obsrecv,
 		id:       params.ID,
 	}
 
@@ -53,7 +67,7 @@ func newLogsReceiver(params rcvr.CreateSettings, cfg *Config, consumer consumer.
 	}
 
 	if recv.cfg.TLS != nil {
-		tlsConfig, err := recv.cfg.TLS.LoadTLSConfig()
+		tlsConfig, err := recv.cfg.TLS.LoadTLSConfig(context.Background())
 		if err != nil {
 			return nil, err
 		}
@@ -105,11 +119,10 @@ func (l *logsReceiver) startListening(ctx context.Context, host component.Host) 
 
 			l.logger.Debug("ServeTLS done")
 
-			if err != http.ErrServerClosed {
+			if !errors.Is(err, http.ErrServerClosed) {
 				l.logger.Error("ServeTLS failed", zap.Error(err))
-				host.ReportFatalError(err)
+				componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(err))
 			}
-
 		} else {
 			l.logger.Debug("Starting Serve",
 				zap.String("address", l.cfg.Endpoint))
@@ -118,11 +131,10 @@ func (l *logsReceiver) startListening(ctx context.Context, host component.Host) 
 
 			l.logger.Debug("Serve done")
 
-			if err != http.ErrServerClosed {
+			if !errors.Is(err, http.ErrServerClosed) {
 				l.logger.Error("Serve failed", zap.Error(err))
-				host.ReportFatalError(err)
+				componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(err))
 			}
-
 		}
 	}()
 	return nil
@@ -181,12 +193,16 @@ func (l *logsReceiver) handleRequest(rw http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	if err := l.consumer.ConsumeLogs(req.Context(), l.processLogs(pcommon.NewTimestampFromTime(time.Now()), logs)); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
+	pLogs := l.processLogs(pcommon.NewTimestampFromTime(time.Now()), logs)
+	obsCtx := l.obsrecv.StartLogsOp(req.Context())
+	if err := l.consumer.ConsumeLogs(obsCtx, pLogs); err != nil {
+		l.obsrecv.EndLogsOp(obsCtx, metadata.Type.String(), pLogs.LogRecordCount(), err)
+		errorutil.HTTPError(rw, err)
 		l.logger.Error("Failed to consumer alert as log", zap.Error(err))
 		return
 	}
 
+	l.obsrecv.EndLogsOp(obsCtx, metadata.Type.String(), pLogs.LogRecordCount(), nil)
 	rw.WriteHeader(http.StatusOK)
 }
 
@@ -229,7 +245,7 @@ func (l *logsReceiver) processLogs(now pcommon.Timestamp, logs []map[string]any)
 			resource.Attributes().PutStr("cloudflare.zone", zone)
 		}
 		scopeLogs := resourceLogs.ScopeLogs().AppendEmpty()
-		scopeLogs.Scope().SetName(receiverScopeName)
+		scopeLogs.Scope().SetName(metadata.ScopeName)
 
 		for _, log := range logGroup {
 			logRecord := scopeLogs.LogRecords().AppendEmpty()
@@ -239,12 +255,12 @@ func (l *logsReceiver) processLogs(now pcommon.Timestamp, logs []map[string]any)
 				if stringV, ok := v.(string); ok {
 					ts, err := time.Parse(time.RFC3339, stringV)
 					if err != nil {
-						l.logger.Warn(fmt.Sprintf("unable to parse %s", l.cfg.TimestampField), zap.Error(err), zap.String("value", stringV))
+						l.logger.Warn("unable to parse "+l.cfg.TimestampField, zap.Error(err), zap.String("value", stringV))
 					} else {
 						logRecord.SetTimestamp(pcommon.NewTimestampFromTime(ts))
 					}
 				} else {
-					l.logger.Warn(fmt.Sprintf("unable to parse %s", l.cfg.TimestampField), zap.Any("value", v))
+					l.logger.Warn("unable to parse "+l.cfg.TimestampField, zap.Any("value", v))
 				}
 			}
 
@@ -270,22 +286,35 @@ func (l *logsReceiver) processLogs(now pcommon.Timestamp, logs []map[string]any)
 			}
 
 			attrs := logRecord.Attributes()
-			for field, attribute := range l.cfg.Attributes {
-				if v, ok := log[field]; ok {
-					switch v := v.(type) {
-					case string:
-						attrs.PutStr(attribute, v)
-					case int:
-						attrs.PutInt(attribute, int64(v))
-					case int64:
-						attrs.PutInt(attribute, v)
-					case float64:
-						attrs.PutDouble(attribute, v)
-					case bool:
-						attrs.PutBool(attribute, v)
-					default:
-						l.logger.Warn("unable to translate field to attribute, unsupported type", zap.String("field", field), zap.Any("value", v), zap.String("type", fmt.Sprintf("%T", v)))
+			for field, v := range log {
+				attrName := field
+				if len(l.cfg.Attributes) != 0 {
+					// Only process fields that are in the config mapping
+					mappedAttr, ok := l.cfg.Attributes[field]
+					if !ok {
+						// Skip fields not in mapping when we have a config
+						continue
 					}
+					attrName = mappedAttr
+				}
+				// else if l.cfg.Attributes is empty, default to processing all fields with no renaming
+
+				switch v := v.(type) {
+				case string:
+					attrs.PutStr(attrName, v)
+				case int:
+					attrs.PutInt(attrName, int64(v))
+				case int64:
+					attrs.PutInt(attrName, v)
+				case float64:
+					attrs.PutDouble(attrName, v)
+				case bool:
+					attrs.PutBool(attrName, v)
+				default:
+					l.logger.Warn("unable to translate field to attribute, unsupported type",
+						zap.String("field", field),
+						zap.Any("value", v),
+						zap.String("type", fmt.Sprintf("%T", v)))
 				}
 			}
 

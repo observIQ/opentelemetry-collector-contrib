@@ -37,7 +37,6 @@ func TestTransformObject(t *testing.T) {
 					testutils.NewPodStatusWithContainer("container-name", "container-id"),
 				)
 				pod.Spec.Containers[0].Image = ""
-				pod.Status.ContainerStatuses[0].State = corev1.ContainerState{}
 				return pod
 			}(),
 			same: false,

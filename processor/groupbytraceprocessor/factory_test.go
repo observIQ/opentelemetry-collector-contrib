@@ -8,7 +8,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/processor/processortest"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/groupbytraceprocessor/internal/metadata"
 )
 
 func TestDefaultConfiguration(t *testing.T) {
@@ -26,10 +29,8 @@ func TestDefaultConfiguration(t *testing.T) {
 func TestCreateTestProcessor(t *testing.T) {
 	c := createDefaultConfig().(*Config)
 
-	next := &mockProcessor{}
-
 	// test
-	p, err := createTracesProcessor(context.Background(), processortest.NewNopCreateSettings(), c, next)
+	p, err := createTracesProcessor(context.Background(), processortest.NewNopSettings(metadata.Type), c, consumertest.NewNop())
 
 	// verify
 	assert.NoError(t, err)
@@ -39,7 +40,6 @@ func TestCreateTestProcessor(t *testing.T) {
 func TestCreateTestProcessorWithNotImplementedOptions(t *testing.T) {
 	// prepare
 	f := NewFactory()
-	next := &mockProcessor{}
 
 	// test
 	for _, tt := range []struct {
@@ -59,10 +59,10 @@ func TestCreateTestProcessorWithNotImplementedOptions(t *testing.T) {
 			errDiskStorageNotSupported,
 		},
 	} {
-		p, err := f.CreateTracesProcessor(context.Background(), processortest.NewNopCreateSettings(), tt.config, next)
+		p, err := f.CreateTraces(context.Background(), processortest.NewNopSettings(metadata.Type), tt.config, consumertest.NewNop())
 
 		// verify
-		assert.Error(t, tt.expectedErr, err)
+		assert.ErrorIs(t, tt.expectedErr, err)
 		assert.Nil(t, p)
 	}
 }

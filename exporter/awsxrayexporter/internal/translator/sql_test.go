@@ -4,7 +4,6 @@
 package translator
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -12,18 +11,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	conventionsv112 "go.opentelemetry.io/otel/semconv/v1.12.0"
 )
 
 func TestClientSpanWithStatementAttribute(t *testing.T) {
 	attributes := make(map[string]pcommon.Value)
-	attributes[conventions.AttributeDBSystem] = pcommon.NewValueStr("mysql")
-	attributes[conventions.AttributeDBName] = pcommon.NewValueStr("customers")
-	attributes[conventions.AttributeDBStatement] = pcommon.NewValueStr("SELECT * FROM user WHERE user_id = ?")
-	attributes[conventions.AttributeDBUser] = pcommon.NewValueStr("readonly_user")
-	attributes[conventions.AttributeDBConnectionString] = pcommon.NewValueStr("mysql://db.example.com:3306")
-	attributes[conventions.AttributeNetPeerName] = pcommon.NewValueStr("db.example.com")
-	attributes[conventions.AttributeNetPeerPort] = pcommon.NewValueStr("3306")
+	attributes[string(conventionsv112.DBSystemKey)] = pcommon.NewValueStr("mysql")
+	attributes[string(conventionsv112.DBNameKey)] = pcommon.NewValueStr("customers")
+	attributes[string(conventionsv112.DBStatementKey)] = pcommon.NewValueStr("SELECT * FROM user WHERE user_id = ?")
+	attributes[string(conventionsv112.DBUserKey)] = pcommon.NewValueStr("readonly_user")
+	attributes[string(conventionsv112.DBConnectionStringKey)] = pcommon.NewValueStr("mysql://db.example.com:3306")
+	attributes[string(conventionsv112.NetPeerNameKey)] = pcommon.NewValueStr("db.example.com")
+	attributes[string(conventionsv112.NetPeerPortKey)] = pcommon.NewValueStr("3306")
 	span := constructSQLSpan(attributes)
 
 	filtered, sqlData := makeSQL(span, attributes)
@@ -35,18 +34,18 @@ func TestClientSpanWithStatementAttribute(t *testing.T) {
 	require.NoError(t, w.Encode(sqlData))
 	jsonStr := w.String()
 	testWriters.release(w)
-	assert.True(t, strings.Contains(jsonStr, "mysql://db.example.com:3306/customers"))
+	assert.Contains(t, jsonStr, "mysql://db.example.com:3306/customers")
 }
 
 func TestClientSpanWithNonSQLDatabase(t *testing.T) {
 	attributes := make(map[string]pcommon.Value)
-	attributes[conventions.AttributeDBSystem] = pcommon.NewValueStr("redis")
-	attributes[conventions.AttributeDBName] = pcommon.NewValueStr("0")
-	attributes[conventions.AttributeDBStatement] = pcommon.NewValueStr("SET key value")
-	attributes[conventions.AttributeDBUser] = pcommon.NewValueStr("readonly_user")
-	attributes[conventions.AttributeDBConnectionString] = pcommon.NewValueStr("redis://db.example.com:3306")
-	attributes[conventions.AttributeNetPeerName] = pcommon.NewValueStr("db.example.com")
-	attributes[conventions.AttributeNetPeerPort] = pcommon.NewValueStr("3306")
+	attributes[string(conventionsv112.DBSystemKey)] = pcommon.NewValueStr("redis")
+	attributes[string(conventionsv112.DBNameKey)] = pcommon.NewValueStr("0")
+	attributes[string(conventionsv112.DBStatementKey)] = pcommon.NewValueStr("SET key value")
+	attributes[string(conventionsv112.DBUserKey)] = pcommon.NewValueStr("readonly_user")
+	attributes[string(conventionsv112.DBConnectionStringKey)] = pcommon.NewValueStr("redis://db.example.com:3306")
+	attributes[string(conventionsv112.NetPeerNameKey)] = pcommon.NewValueStr("db.example.com")
+	attributes[string(conventionsv112.NetPeerPortKey)] = pcommon.NewValueStr("3306")
 	span := constructSQLSpan(attributes)
 
 	filtered, sqlData := makeSQL(span, attributes)
@@ -56,13 +55,13 @@ func TestClientSpanWithNonSQLDatabase(t *testing.T) {
 
 func TestClientSpanWithoutDBurlAttribute(t *testing.T) {
 	attributes := make(map[string]pcommon.Value)
-	attributes[conventions.AttributeDBSystem] = pcommon.NewValueStr("postgresql")
-	attributes[conventions.AttributeDBName] = pcommon.NewValueStr("customers")
-	attributes[conventions.AttributeDBStatement] = pcommon.NewValueStr("SELECT * FROM user WHERE user_id = ?")
-	attributes[conventions.AttributeDBUser] = pcommon.NewValueStr("readonly_user")
-	attributes[conventions.AttributeDBConnectionString] = pcommon.NewValueStr("")
-	attributes[conventions.AttributeNetPeerName] = pcommon.NewValueStr("db.example.com")
-	attributes[conventions.AttributeNetPeerPort] = pcommon.NewValueStr("3306")
+	attributes[string(conventionsv112.DBSystemKey)] = pcommon.NewValueStr("postgresql")
+	attributes[string(conventionsv112.DBNameKey)] = pcommon.NewValueStr("customers")
+	attributes[string(conventionsv112.DBStatementKey)] = pcommon.NewValueStr("SELECT * FROM user WHERE user_id = ?")
+	attributes[string(conventionsv112.DBUserKey)] = pcommon.NewValueStr("readonly_user")
+	attributes[string(conventionsv112.DBConnectionStringKey)] = pcommon.NewValueStr("")
+	attributes[string(conventionsv112.NetPeerNameKey)] = pcommon.NewValueStr("db.example.com")
+	attributes[string(conventionsv112.NetPeerPortKey)] = pcommon.NewValueStr("3306")
 	span := constructSQLSpan(attributes)
 
 	filtered, sqlData := makeSQL(span, attributes)

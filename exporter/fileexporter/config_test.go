@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/fileexporter/internal/metadata"
 )
@@ -39,6 +40,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 				FormatType:    formatTypeJSON,
 				FlushInterval: time.Second,
+				GroupBy: &GroupBy{
+					MaxOpenFiles:      defaultMaxOpenFiles,
+					ResourceAttribute: defaultResourceAttribute,
+				},
 			},
 		},
 		{
@@ -54,6 +59,10 @@ func TestLoadConfig(t *testing.T) {
 				FormatType:    formatTypeProto,
 				Compression:   compressionZSTD,
 				FlushInterval: time.Second,
+				GroupBy: &GroupBy{
+					MaxOpenFiles:      defaultMaxOpenFiles,
+					ResourceAttribute: defaultResourceAttribute,
+				},
 			},
 		},
 		{
@@ -65,6 +74,10 @@ func TestLoadConfig(t *testing.T) {
 					MaxBackups: defaultMaxBackups,
 				},
 				FlushInterval: time.Second,
+				GroupBy: &GroupBy{
+					MaxOpenFiles:      defaultMaxOpenFiles,
+					ResourceAttribute: defaultResourceAttribute,
+				},
 			},
 		},
 		{
@@ -77,6 +90,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 				FormatType:    formatTypeJSON,
 				FlushInterval: time.Second,
+				GroupBy: &GroupBy{
+					MaxOpenFiles:      defaultMaxOpenFiles,
+					ResourceAttribute: defaultResourceAttribute,
+				},
 			},
 		},
 		{
@@ -93,6 +110,10 @@ func TestLoadConfig(t *testing.T) {
 				Path:          "./flushed",
 				FlushInterval: 5,
 				FormatType:    formatTypeJSON,
+				GroupBy: &GroupBy{
+					MaxOpenFiles:      defaultMaxOpenFiles,
+					ResourceAttribute: defaultResourceAttribute,
+				},
 			},
 		},
 		{
@@ -101,6 +122,10 @@ func TestLoadConfig(t *testing.T) {
 				Path:          "./flushed",
 				FlushInterval: 5 * time.Second,
 				FormatType:    formatTypeJSON,
+				GroupBy: &GroupBy{
+					MaxOpenFiles:      defaultMaxOpenFiles,
+					ResourceAttribute: defaultResourceAttribute,
+				},
 			},
 		},
 		{
@@ -109,6 +134,10 @@ func TestLoadConfig(t *testing.T) {
 				Path:          "./flushed",
 				FlushInterval: 500 * time.Millisecond,
 				FormatType:    formatTypeJSON,
+				GroupBy: &GroupBy{
+					MaxOpenFiles:      defaultMaxOpenFiles,
+					ResourceAttribute: defaultResourceAttribute,
+				},
 			},
 		},
 		{
@@ -119,6 +148,44 @@ func TestLoadConfig(t *testing.T) {
 			id:           component.NewIDWithName(metadata.Type, ""),
 			errorMessage: "path must be non-empty",
 		},
+		{
+			id: component.NewIDWithName(metadata.Type, "group_by"),
+			expected: &Config{
+				Path:          "./group_by/*.json",
+				FlushInterval: time.Second,
+				FormatType:    formatTypeJSON,
+				GroupBy: &GroupBy{
+					Enabled:           true,
+					MaxOpenFiles:      10,
+					ResourceAttribute: "dummy",
+				},
+			},
+		},
+		{
+			id: component.NewIDWithName(metadata.Type, "group_by_defaults"),
+			expected: &Config{
+				Path:          "./group_by/*.json",
+				FlushInterval: time.Second,
+				FormatType:    formatTypeJSON,
+				GroupBy: &GroupBy{
+					Enabled:           true,
+					MaxOpenFiles:      defaultMaxOpenFiles,
+					ResourceAttribute: defaultResourceAttribute,
+				},
+			},
+		},
+		{
+			id:           component.NewIDWithName(metadata.Type, "group_by_invalid_path"),
+			errorMessage: "path must contain exactly one * when group_by is enabled",
+		},
+		{
+			id:           component.NewIDWithName(metadata.Type, "group_by_invalid_path2"),
+			errorMessage: "path must not start with * when group_by is enabled",
+		},
+		{
+			id:           component.NewIDWithName(metadata.Type, "group_by_empty_resource_attribute"),
+			errorMessage: "resource_attribute must not be empty when group_by is enabled",
+		},
 	}
 
 	for _, tt := range tests {
@@ -128,14 +195,14 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
 			if tt.expected == nil {
-				assert.EqualError(t, component.ValidateConfig(cfg), tt.errorMessage)
+				assert.EqualError(t, xconfmap.Validate(cfg), tt.errorMessage)
 				return
 			}
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}

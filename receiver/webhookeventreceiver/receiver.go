@@ -10,12 +10,14 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"regexp"
 	"sync"
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/julienschmidt/httprouter"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/receiverhelper"
@@ -26,7 +28,6 @@ import (
 
 var (
 	errNilLogsConsumer       = errors.New("missing a logs consumer")
-	errMissingEndpoint       = errors.New("missing a receiver endpoint")
 	errInvalidRequestMethod  = errors.New("invalid method. Valid method is POST")
 	errInvalidEncodingType   = errors.New("invalid encoding type")
 	errEmptyResponseBody     = errors.New("request body content length is zero")
@@ -36,22 +37,28 @@ var (
 const healthyResponse = `{"text": "Webhookevent receiver is healthy"}`
 
 type eventReceiver struct {
-	settings    receiver.CreateSettings
-	cfg         *Config
-	logConsumer consumer.Logs
-	server      *http.Server
-	shutdownWG  sync.WaitGroup
-	obsrecv     *receiverhelper.ObsReport
-	gzipPool    *sync.Pool
+	settings            receiver.Settings
+	cfg                 *Config
+	logConsumer         consumer.Logs
+	server              *http.Server
+	shutdownWG          sync.WaitGroup
+	obsrecv             *receiverhelper.ObsReport
+	gzipPool            *sync.Pool
+	includeHeadersRegex *regexp.Regexp
 }
 
-func newLogsReceiver(params receiver.CreateSettings, cfg Config, consumer consumer.Logs) (receiver.Logs, error) {
+func newLogsReceiver(params receiver.Settings, cfg Config, consumer consumer.Logs) (receiver.Logs, error) {
 	if consumer == nil {
 		return nil, errNilLogsConsumer
 	}
 
-	if cfg.Endpoint == "" {
-		return nil, errMissingEndpoint
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	var includeHeaderRegex *regexp.Regexp
+	if cfg.HeaderAttributeRegex != "" {
+		// Valdiate() call above has already ensured this will compile
+		includeHeaderRegex, _ = regexp.Compile(cfg.HeaderAttributeRegex)
 	}
 
 	transport := "http"
@@ -64,32 +71,32 @@ func newLogsReceiver(params receiver.CreateSettings, cfg Config, consumer consum
 		Transport:              transport,
 		ReceiverCreateSettings: params,
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
 	// create eventReceiver instance
 	er := &eventReceiver{
-		settings:    params,
-		cfg:         &cfg,
-		logConsumer: consumer,
-		obsrecv:     obsrecv,
-		gzipPool:    &sync.Pool{New: func() any { return new(gzip.Reader) }},
+		settings:            params,
+		cfg:                 &cfg,
+		logConsumer:         consumer,
+		obsrecv:             obsrecv,
+		gzipPool:            &sync.Pool{New: func() any { return new(gzip.Reader) }},
+		includeHeadersRegex: includeHeaderRegex,
 	}
 
 	return er, nil
 }
 
 // Start function manages receiver startup tasks. part of the receiver.Logs interface.
-func (er *eventReceiver) Start(_ context.Context, host component.Host) error {
+func (er *eventReceiver) Start(ctx context.Context, host component.Host) error {
 	// noop if not nil. if start has not been called before these values should be nil.
 	if er.server != nil && er.server.Handler != nil {
 		return nil
 	}
 
 	// create listener from config
-	ln, err := er.cfg.HTTPServerSettings.ToListener()
+	ln, err := er.cfg.ToListener(ctx)
 	if err != nil {
 		return err
 	}
@@ -101,7 +108,7 @@ func (er *eventReceiver) Start(_ context.Context, host component.Host) error {
 	router.GET(er.cfg.HealthPath, er.handleHealthCheck)
 
 	// webhook server standup and configuration
-	er.server, err = er.cfg.HTTPServerSettings.ToServer(host, er.settings.TelemetrySettings, router)
+	er.server, err = er.cfg.ToServer(ctx, host, er.settings.TelemetrySettings, router)
 	if err != nil {
 		return err
 	}
@@ -125,7 +132,7 @@ func (er *eventReceiver) Start(_ context.Context, host component.Host) error {
 	go func() {
 		defer er.shutdownWG.Done()
 		if errHTTP := er.server.Serve(ln); !errors.Is(errHTTP, http.ErrServerClosed) && errHTTP != nil {
-			host.ReportFatalError(errHTTP)
+			componentstatus.ReportStatus(host, componentstatus.NewFatalErrorEvent(errHTTP))
 		}
 	}()
 
@@ -170,7 +177,7 @@ func (er *eventReceiver) handleReq(w http.ResponseWriter, r *http.Request, _ htt
 	}
 
 	if r.ContentLength == 0 {
-		er.obsrecv.EndLogsOp(ctx, metadata.Type, 0, nil)
+		er.obsrecv.EndLogsOp(ctx, metadata.Type.String(), 0, nil)
 		er.failBadReq(ctx, w, http.StatusBadRequest, errEmptyResponseBody)
 	}
 
@@ -179,7 +186,6 @@ func (er *eventReceiver) handleReq(w http.ResponseWriter, r *http.Request, _ htt
 	if encoding == "gzip" || encoding == "x-gzip" {
 		reader := er.gzipPool.Get().(*gzip.Reader)
 		err := reader.Reset(bodyReader)
-
 		if err != nil {
 			er.failBadReq(ctx, w, http.StatusBadRequest, err)
 			_, _ = io.ReadAll(r.Body)
@@ -190,20 +196,19 @@ func (er *eventReceiver) handleReq(w http.ResponseWriter, r *http.Request, _ htt
 		defer er.gzipPool.Put(reader)
 	}
 
-	// finish reading the body into a log
+	// send body into a scanner and then convert the request body into a log
 	sc := bufio.NewScanner(bodyReader)
-	ld, numLogs := reqToLog(sc, r.URL.Query(), er.cfg, er.settings)
+	ld, numLogs := er.reqToLog(sc, r.Header, r.URL.Query())
 	consumerErr := er.logConsumer.ConsumeLogs(ctx, ld)
 
 	_ = bodyReader.Close()
 
 	if consumerErr != nil {
 		er.failBadReq(ctx, w, http.StatusInternalServerError, consumerErr)
-		er.obsrecv.EndLogsOp(ctx, metadata.Type, numLogs, nil)
 	} else {
 		w.WriteHeader(http.StatusOK)
-		er.obsrecv.EndLogsOp(ctx, metadata.Type, numLogs, nil)
 	}
+	er.obsrecv.EndLogsOp(ctx, metadata.Type.String(), numLogs, consumerErr)
 }
 
 // Simple healthcheck endpoint.
@@ -220,7 +225,8 @@ func (er *eventReceiver) handleHealthCheck(w http.ResponseWriter, _ *http.Reques
 func (er *eventReceiver) failBadReq(_ context.Context,
 	w http.ResponseWriter,
 	httpStatusCode int,
-	err error) {
+	err error,
+) {
 	jsonResp, err := jsoniter.Marshal(err.Error())
 	if err != nil {
 		er.settings.Logger.Warn("failed to marshall error to json")

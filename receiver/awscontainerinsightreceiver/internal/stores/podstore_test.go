@@ -351,7 +351,7 @@ func TestPodStore_addContainerID(t *testing.T) {
 	expected := map[string]any{}
 	expected["docker"] = map[string]string{"container_id": "637631e2634ea92c0c1aa5d24734cfe794f09c57933026592c12acafbaf6972c"}
 	assert.Equal(t, expected, kubernetesBlob)
-	assert.Equal(t, metric.GetTag(ci.ContainerNamekey), "ubuntu")
+	assert.Equal(t, "ubuntu", metric.GetTag(ci.ContainerNamekey))
 
 	tags = map[string]string{ci.ContainerNamekey: "notUbuntu", ci.ContainerIDkey: "123"}
 	kubernetesBlob = map[string]any{}
@@ -361,7 +361,7 @@ func TestPodStore_addContainerID(t *testing.T) {
 	expected = map[string]any{}
 	expected["container_id"] = "123"
 	assert.Equal(t, expected, kubernetesBlob)
-	assert.Equal(t, metric.GetTag(ci.ContainerNamekey), "notUbuntu")
+	assert.Equal(t, "notUbuntu", metric.GetTag(ci.ContainerNamekey))
 }
 
 func TestPodStore_addLabel(t *testing.T) {
@@ -382,8 +382,8 @@ func TestGetJobNamePrefix(t *testing.T) {
 	assert.Equal(t, "abcd", getJobNamePrefix("abcd.-efg"))
 	assert.Equal(t, "abcdefg", getJobNamePrefix("abcdefg"))
 	assert.Equal(t, "abcdefg", getJobNamePrefix("abcdefg-"))
-	assert.Equal(t, "", getJobNamePrefix(".abcd-efg"))
-	assert.Equal(t, "", getJobNamePrefix(""))
+	assert.Empty(t, getJobNamePrefix(".abcd-efg"))
+	assert.Empty(t, getJobNamePrefix(""))
 }
 
 type mockReplicaSetInfo1 struct{}
@@ -496,7 +496,7 @@ func TestPodStore_addPodOwnersAndPodName(t *testing.T) {
 	expectedOwner["pod_owners"] = []any{map[string]string{"owner_kind": ci.ReplicationController, "owner_name": rcName}}
 	expectedOwnerName = rcName
 	assert.Equal(t, expectedOwnerName, metric.GetTag(ci.PodNameKey))
-	assert.Equal(t, "", metric.GetTag(ci.FullPodNameKey))
+	assert.Empty(t, metric.GetTag(ci.FullPodNameKey))
 	assert.Equal(t, expectedOwner, kubernetesBlob)
 
 	// Test Job
@@ -505,13 +505,13 @@ func TestPodStore_addPodOwnersAndPodName(t *testing.T) {
 	metric = generateMetric(fields, tags)
 	jobName := "JobTest"
 	pod.OwnerReferences[0].Kind = ci.Job
-	surfixHash := ".088123x12"
-	pod.Name = jobName + surfixHash
-	pod.OwnerReferences[0].Name = jobName + surfixHash
+	suffixHash := ".088123x12"
+	pod.Name = jobName + suffixHash
+	pod.OwnerReferences[0].Name = jobName + suffixHash
 	kubernetesBlob = map[string]any{}
 	podStore.addPodOwnersAndPodName(metric, pod, kubernetesBlob)
-	expectedOwner["pod_owners"] = []any{map[string]string{"owner_kind": ci.Job, "owner_name": jobName + surfixHash}}
-	expectedOwnerName = jobName + surfixHash
+	expectedOwner["pod_owners"] = []any{map[string]string{"owner_kind": ci.Job, "owner_name": jobName + suffixHash}}
+	expectedOwnerName = jobName + suffixHash
 	assert.Equal(t, expectedOwnerName, metric.GetTag(ci.PodNameKey))
 	assert.Equal(t, pod.Name, metric.GetTag(ci.FullPodNameKey))
 	assert.Equal(t, expectedOwner, kubernetesBlob)
@@ -557,7 +557,7 @@ func TestPodStore_addPodOwnersAndPodName(t *testing.T) {
 	kubernetesBlob = map[string]any{}
 	podStore.addPodOwnersAndPodName(metric, pod, kubernetesBlob)
 	assert.Equal(t, kpName, metric.GetTag(ci.PodNameKey))
-	assert.True(t, len(kubernetesBlob) == 0)
+	assert.Empty(t, kubernetesBlob)
 
 	podStore.prefFullPodName = false
 	metric = generateMetric(fields, tags)
@@ -566,11 +566,10 @@ func TestPodStore_addPodOwnersAndPodName(t *testing.T) {
 	kubernetesBlob = map[string]any{}
 	podStore.addPodOwnersAndPodName(metric, pod, kubernetesBlob)
 	assert.Equal(t, kubeProxy, metric.GetTag(ci.PodNameKey))
-	assert.True(t, len(kubernetesBlob) == 0)
+	assert.Empty(t, kubernetesBlob)
 }
 
-type mockPodClient struct {
-}
+type mockPodClient struct{}
 
 func (m *mockPodClient) ListPods() ([]corev1.Pod, error) {
 	pod := getBaseTestPodInfo()

@@ -26,17 +26,17 @@ func TestLoadConfig(t *testing.T) {
 
 	sub, err := cm.Sub(component.NewIDWithName(metadata.Type, "").String())
 	require.NoError(t, err)
-	require.NoError(t, component.UnmarshalConfig(sub, cfg))
+	require.NoError(t, sub.Unmarshal(cfg))
 
 	assert.Equal(t, sanitize(cfg.(*Config)), sanitize(factory.CreateDefaultConfig().(*Config)))
 
 	sub, err = cm.Sub(component.NewIDWithName(metadata.Type, "customname").String())
 	require.NoError(t, err)
-	require.NoError(t, component.UnmarshalConfig(sub, cfg))
+	require.NoError(t, sub.Unmarshal(cfg))
 
 	assert.Equal(t,
 		&Config{
-			TimeoutSettings: exporterhelper.TimeoutSettings{
+			TimeoutSettings: exporterhelper.TimeoutConfig{
 				Timeout: 20 * time.Second,
 			},
 			Config: collector.Config{
@@ -64,17 +64,19 @@ func TestLoadConfig(t *testing.T) {
 					},
 				},
 			},
-			QueueSettings: exporterhelper.QueueSettings{
+			QueueSettings: exporterhelper.QueueBatchConfig{
 				Enabled:      true,
 				NumConsumers: 2,
 				QueueSize:    10,
+				Sizer:        exporterhelper.RequestSizerTypeRequests,
 			},
 		},
 		sanitize(cfg.(*Config)))
 }
 
 func sanitize(cfg *Config) *Config {
-	cfg.Config.MetricConfig.MapMonitoredResource = nil
-	cfg.Config.MetricConfig.GetMetricName = nil
+	cfg.MetricConfig.MapMonitoredResource = nil
+	cfg.LogConfig.MapMonitoredResource = nil
+	cfg.MetricConfig.GetMetricName = nil
 	return cfg
 }

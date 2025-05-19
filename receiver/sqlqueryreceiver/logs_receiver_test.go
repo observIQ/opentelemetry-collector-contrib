@@ -10,20 +10,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/pdata/pcommon"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/sqlquery"
 )
 
 func TestLogsQueryReceiver_Collect(t *testing.T) {
 	now := time.Now()
 
-	fakeClient := &fakeDBClient{
-		stringMaps: [][]stringMap{
+	fakeClient := &sqlquery.FakeDBClient{
+		StringMaps: [][]sqlquery.StringMap{
 			{{"col1": "42"}, {"col1": "63"}},
 		},
 	}
 	queryReceiver := logsQueryReceiver{
 		client: fakeClient,
-		query: Query{
-			Logs: []LogsCfg{
+		query: sqlquery.Query{
+			Logs: []sqlquery.LogsCfg{
 				{
 					BodyColumn: "col1",
 				},
@@ -48,4 +50,27 @@ func TestLogsQueryReceiver_Collect(t *testing.T) {
 		logs.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(1).ObservedTimestamp(),
 		"Observed timestamps of all log records collected in a single scrape should be equal",
 	)
+}
+
+func TestLogsQueryReceiver_MissingColumnInResultSet(t *testing.T) {
+	fakeClient := &sqlquery.FakeDBClient{
+		StringMaps: [][]sqlquery.StringMap{
+			{{"col1": "42"}},
+		},
+	}
+	queryReceiver := logsQueryReceiver{
+		client: fakeClient,
+		query: sqlquery.Query{
+			Logs: []sqlquery.LogsCfg{
+				{
+					BodyColumn:       "expected_body_column",
+					AttributeColumns: []string{"expected_column", "expected_column_2"},
+				},
+			},
+		},
+	}
+	_, err := queryReceiver.collect(context.Background())
+	assert.ErrorContains(t, err, "rowToLog: attribute_column 'expected_column' not found in result set")
+	assert.ErrorContains(t, err, "rowToLog: attribute_column 'expected_column_2' not found in result set")
+	assert.ErrorContains(t, err, "rowToLog: body_column 'expected_body_column' not found in result set")
 }

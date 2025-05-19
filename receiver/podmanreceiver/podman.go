@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build !windows
-// +build !windows
 
 package podmanreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/podmanreceiver"
 
@@ -99,7 +98,6 @@ EVENT_LOOP:
 	for {
 		eventCh, errCh := pc.events(ctx, filters)
 		for {
-
 			select {
 			case <-ctx.Done():
 				return
@@ -133,7 +131,6 @@ EVENT_LOOP:
 					}
 				}
 			}
-
 		}
 	}
 }

@@ -45,7 +45,7 @@ for ISSUE in ${ISSUES}; do
     LABELS=$(gh issue view "${ISSUE}" --json labels --jq '.labels.[].name')
 
     for LABEL in ${LABELS}; do
-        COMPONENT="${LABEL}"
+        COMPONENT=$(awk -v path="${LABEL}" '$1 == path || $2 == path {print $1}' .github/component_labels.txt)
         OWNERS=$(COMPONENT=${LABEL} bash "${CUR_DIRECTORY}/get-codeowners.sh")
 
         if [[ -z "${OWNERS}" ]]; then
@@ -60,10 +60,10 @@ for ISSUE in ${ISSUES}; do
 
         gh issue comment "${ISSUE}" -b "${STALE_MESSAGE}"
     else
-        printf "Pinging code owners for issue #${ISSUE}:\n${OWNER_MENTIONS}"
+        echo -e "Pinging code owners for issue #${ISSUE}:\n${OWNER_MENTIONS}"
 
         # The GitHub CLI only offers multiline strings through file input.
-        printf "${STALE_MESSAGE}\n\nPinging code owners:\n${OWNER_MENTIONS}\nSee [Adding Labels via Comments](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md#adding-labels-via-comments) if you do not have permissions to add labels yourself." \
+        echo -e "${STALE_MESSAGE}\n\nPinging code owners:\n${OWNER_MENTIONS}\nSee [Adding Labels via Comments](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md#adding-labels-via-comments) if you do not have permissions to add labels yourself." \
           | gh issue comment "${ISSUE}" -F -
     fi
 

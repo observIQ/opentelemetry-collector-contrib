@@ -1,6 +1,12 @@
-type: hostmetricsreceiver/paging
+type: paging
 
-parent: hostmetrics
+status:
+  class: scraper
+  stability:
+    beta: [metrics]
+  distributions: [core, contrib, k8s]
+  codeowners:
+    active: [dmitryax, braydonk]
 
 sem_conv_version: 1.9.0
 
@@ -58,7 +64,7 @@ metrics:
   system.paging.utilization:
     enabled: false
     description: Swap (unix) or pagefile (windows) utilization.
-    unit: 1
+    unit: "1"
     gauge:
       value_type: double
     attributes: [device, state]

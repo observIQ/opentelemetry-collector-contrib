@@ -10,7 +10,8 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/scraperhelper"
+	"go.opentelemetry.io/collector/scraper"
+	"go.opentelemetry.io/collector/scraper/scraperhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/aerospikereceiver/internal/metadata"
 )
@@ -33,38 +34,36 @@ func NewFactory() receiver.Factory {
 // createMetricsReceiver creates a new MetricsReceiver using scraperhelper
 func createMetricsReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	rConf component.Config,
 	consumer consumer.Metrics,
 ) (receiver.Metrics, error) {
 	cfg := rConf.(*Config)
-	receiver, err := newAerospikeReceiver(params, cfg, consumer)
+	r, err := newAerospikeReceiver(params, cfg, consumer)
 	if err != nil {
 		return nil, err
 	}
 
-	scraper, err := scraperhelper.NewScraper(
-		metadata.Type,
-		receiver.scrape,
-		scraperhelper.WithStart(receiver.start),
-		scraperhelper.WithShutdown(receiver.shutdown),
+	s, err := scraper.NewMetrics(r.scrape,
+		scraper.WithStart(r.start),
+		scraper.WithShutdown(r.shutdown),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return scraperhelper.NewScraperControllerReceiver(
-		&cfg.ScraperControllerSettings, params, consumer,
-		scraperhelper.AddScraper(scraper),
+	return scraperhelper.NewMetricsController(
+		&cfg.ControllerConfig, params, consumer,
+		scraperhelper.AddScraper(metadata.Type, s),
 	)
 }
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		ScraperControllerSettings: scraperhelper.NewDefaultScraperControllerSettings(metadata.Type),
-		Endpoint:                  defaultEndpoint,
-		Timeout:                   defaultTimeout,
-		CollectClusterMetrics:     defaultCollectClusterMetrics,
-		MetricsBuilderConfig:      metadata.DefaultMetricsBuilderConfig(),
+		ControllerConfig:      scraperhelper.NewDefaultControllerConfig(),
+		Endpoint:              defaultEndpoint,
+		Timeout:               defaultTimeout,
+		CollectClusterMetrics: defaultCollectClusterMetrics,
+		MetricsBuilderConfig:  metadata.DefaultMetricsBuilderConfig(),
 	}
 }

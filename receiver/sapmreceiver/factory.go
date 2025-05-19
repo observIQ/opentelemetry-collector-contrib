@@ -7,6 +7,7 @@ package sapmreceiver // import "github.com/open-telemetry/opentelemetry-collecto
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -20,8 +21,8 @@ import (
 )
 
 const (
-	// Default endpoints to bind to.
-	defaultEndpoint = ":7276"
+	// Default endpoint to bind to.
+	defaultEndpoint = "localhost:7276"
 )
 
 // NewFactory creates a factory for SAPM receiver.
@@ -34,7 +35,7 @@ func NewFactory() receiver.Factory {
 
 func createDefaultConfig() component.Config {
 	return &Config{
-		HTTPServerSettings: confighttp.HTTPServerSettings{
+		ServerConfig: confighttp.ServerConfig{
 			Endpoint: defaultEndpoint,
 		},
 	}
@@ -53,7 +54,7 @@ func extractPortFromEndpoint(endpoint string) (int, error) {
 		return 0, fmt.Errorf("endpoint port is not a number: %w", err)
 	}
 	if port < 1 || port > 65535 {
-		return 0, fmt.Errorf("port number must be between 1 and 65535")
+		return 0, errors.New("port number must be between 1 and 65535")
 	}
 	return int(port), nil
 }
@@ -67,10 +68,10 @@ func (rCfg *Config) validate() error {
 	return nil
 }
 
-// CreateTracesReceiver creates a trace receiver based on provided config.
+// CreateTraces creates a trace receiver based on provided config.
 func createTracesReceiver(
 	_ context.Context,
-	params receiver.CreateSettings,
+	params receiver.Settings,
 	cfg component.Config,
 	nextConsumer consumer.Traces,
 ) (receiver.Traces, error) {

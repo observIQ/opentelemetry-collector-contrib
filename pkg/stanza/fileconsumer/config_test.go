@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/featuregate"
-	"go.uber.org/zap"
+	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componenttest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/internal/emittest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/fileconsumer/internal/fingerprint"
@@ -22,7 +22,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/helper"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/operatortest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/parser/regex"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/testutil"
 )
 
 func TestNewConfig(t *testing.T) {
@@ -38,6 +37,10 @@ func TestNewConfig(t *testing.T) {
 	assert.False(t, cfg.IncludeFilePath)
 	assert.False(t, cfg.IncludeFileNameResolved)
 	assert.False(t, cfg.IncludeFilePathResolved)
+	assert.False(t, cfg.IncludeFileOwnerName)
+	assert.False(t, cfg.IncludeFileOwnerGroupName)
+	assert.False(t, cfg.IncludeFileRecordNumber)
+	assert.False(t, cfg.AcquireFSLock)
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -206,6 +209,23 @@ func TestUnmarshal(t *testing.T) {
 					cfg := NewConfig()
 					cfg.OrderingCriteria = matcher.OrderingCriteria{
 						Regex: `err\.(?P<file_num>[a-zA-Z])\.\d+\.\d{10}\.log`,
+						SortBy: []matcher.Sort{
+							{
+								SortType: "numeric",
+								RegexKey: "file_num",
+							},
+						},
+					}
+					return newMockOperatorConfig(cfg)
+				}(),
+			},
+			{
+				Name: "sort_by_group_by",
+				Expect: func() *mockOperatorConfig {
+					cfg := NewConfig()
+					cfg.OrderingCriteria = matcher.OrderingCriteria{
+						Regex:   `err\.(?P<file_num>[a-zA-Z])\.\d+\.\d{10}\.log`,
+						GroupBy: `err\.(?P<value>[a-z]+).[0-9]*.*log`,
 						SortBy: []matcher.Sort{
 							{
 								SortType: "numeric",
@@ -449,10 +469,10 @@ func TestBuild(t *testing.T) {
 	}{
 		{
 			"Basic",
-			func(cfg *Config) {},
+			func(_ *Config) {},
 			require.NoError,
 			func(t *testing.T, m *Manager) {
-				require.Equal(t, m.pollInterval, 10*time.Millisecond)
+				require.Equal(t, 10*time.Millisecond, m.pollInterval)
 			},
 		},
 		{
@@ -486,7 +506,7 @@ func TestBuild(t *testing.T) {
 				cfg.SplitConfig.LineStartPattern = "START.*"
 			},
 			require.NoError,
-			func(t *testing.T, f *Manager) {},
+			func(_ *testing.T, _ *Manager) {},
 		},
 		{
 			"MultilineConfiguredEndPattern",
@@ -494,7 +514,7 @@ func TestBuild(t *testing.T) {
 				cfg.SplitConfig.LineEndPattern = "END.*"
 			},
 			require.NoError,
-			func(t *testing.T, f *Manager) {},
+			func(_ *testing.T, _ *Manager) {},
 		},
 		{
 			"InvalidEncoding",
@@ -515,9 +535,9 @@ func TestBuild(t *testing.T) {
 		},
 		{
 			"NoLineStartOrEnd",
-			func(cfg *Config) {},
+			func(_ *Config) {},
 			require.NoError,
-			func(t *testing.T, f *Manager) {},
+			func(_ *testing.T, _ *Manager) {},
 		},
 		{
 			"InvalidLineStartRegex",
@@ -616,97 +636,18 @@ func TestBuild(t *testing.T) {
 				}
 			},
 			require.NoError,
-			func(t *testing.T, f *Manager) {},
+			func(_ *testing.T, _ *Manager) {},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 			cfg := basicConfig()
 			tc.modifyBaseConfig(cfg)
 
-			input, err := cfg.Build(testutil.Logger(t), emittest.Nop)
-			tc.errorRequirement(t, err)
-			if err != nil {
-				return
-			}
-
-			tc.validate(t, input)
-		})
-	}
-}
-
-func TestBuildWithSplitFunc(t *testing.T) {
-	t.Parallel()
-
-	basicConfig := func() *Config {
-		cfg := NewConfig()
-		cfg.Include = []string{"/var/log/testpath.*"}
-		cfg.Exclude = []string{"/var/log/testpath.ex*"}
-		cfg.PollInterval = 10 * time.Millisecond
-		return cfg
-	}
-
-	cases := []struct {
-		name             string
-		modifyBaseConfig func(*Config)
-		errorRequirement require.ErrorAssertionFunc
-		validate         func(*testing.T, *Manager)
-	}{
-		{
-			"Basic",
-			func(cfg *Config) {},
-			require.NoError,
-			func(t *testing.T, m *Manager) {
-				require.Equal(t, m.pollInterval, 10*time.Millisecond)
-			},
-		},
-		{
-			"BadIncludeGlob",
-			func(cfg *Config) {
-				cfg.Include = []string{"["}
-			},
-			require.Error,
-			nil,
-		},
-		{
-			"BadExcludeGlob",
-			func(cfg *Config) {
-				cfg.Include = []string{"["}
-			},
-			require.Error,
-			nil,
-		},
-		{
-			"InvalidEncoding",
-			func(cfg *Config) {
-				cfg.Encoding = "UTF-3233"
-			},
-			require.Error,
-			nil,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			tc := tc
-			t.Parallel()
-			cfg := basicConfig()
-			tc.modifyBaseConfig(cfg)
-
-			splitNone := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-				if !atEOF {
-					return 0, nil, nil
-				}
-				if len(data) == 0 {
-					return 0, nil, nil
-				}
-				return len(data), data, nil
-			}
-
-			input, err := cfg.BuildWithSplitFunc(testutil.Logger(t), emittest.Nop, splitNone)
+			set := componenttest.NewNopTelemetrySettings()
+			input, err := cfg.Build(set, emittest.Nop)
 			tc.errorRequirement(t, err)
 			if err != nil {
 				return
@@ -718,11 +659,6 @@ func TestBuildWithSplitFunc(t *testing.T) {
 }
 
 func TestBuildWithHeader(t *testing.T) {
-	require.NoError(t, featuregate.GlobalRegistry().Set(AllowHeaderMetadataParsing.ID(), true))
-	t.Cleanup(func() {
-		require.NoError(t, featuregate.GlobalRegistry().Set(AllowHeaderMetadataParsing.ID(), false))
-	})
-
 	basicConfig := func() *Config {
 		cfg := NewConfig()
 		cfg.Include = []string{"/var/log/testpath.*"}
@@ -788,12 +724,12 @@ func TestBuildWithHeader(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tc := tc
 			t.Parallel()
 			cfg := basicConfig()
 			tc.modifyBaseConfig(cfg)
 
-			input, err := cfg.Build(testutil.Logger(t), emittest.Nop)
+			set := componenttest.NewNopTelemetrySettings()
+			input, err := cfg.Build(set, emittest.Nop)
 			tc.errorRequirement(t, err)
 			if err != nil {
 				return
@@ -826,6 +762,12 @@ func (c *Config) withHeader(headerMatchPattern, extractRegex string) *Config {
 	return c
 }
 
+// withGzipFileSuffix is a builder-like helper for quickly setting up support for gzip compressed log files
+func (c *Config) withGzip() *Config {
+	c.Compression = "gzip"
+	return c
+}
+
 const mockOperatorType = "mock"
 
 func init() {
@@ -846,6 +788,6 @@ func newMockOperatorConfig(cfg *Config) *mockOperatorConfig {
 
 // This function is impelmented for compatibility with operatortest
 // but is not meant to be used directly
-func (h *mockOperatorConfig) Build(*zap.SugaredLogger) (operator.Operator, error) {
+func (h *mockOperatorConfig) Build(_ component.TelemetrySettings) (operator.Operator, error) {
 	panic("not impelemented")
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterconfig"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/filter/filterset"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/plogtest"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor/internal/metadata"
 )
 
 // Common structure for all the Tests
@@ -75,20 +76,19 @@ func TestLogProcessor_NilEmptyData(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 	oCfg := cfg.(*Config)
-	oCfg.Settings.Actions = []attraction.ActionKeyValue{
+	oCfg.Actions = []attraction.ActionKeyValue{
 		{Key: "attribute1", Action: attraction.INSERT, Value: 123},
 		{Key: "attribute1", Action: attraction.DELETE},
 	}
 
-	tp, err := factory.CreateLogsProcessor(
-		context.Background(), processortest.NewNopCreateSettings(), oCfg, consumertest.NewNop())
-	require.Nil(t, err)
+	tp, err := factory.CreateLogs(
+		context.Background(), processortest.NewNopSettings(metadata.Type), oCfg, consumertest.NewNop())
+	require.NoError(t, err)
 	require.NotNil(t, tp)
-	for i := range testCases {
-		tt := testCases[i]
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.NoError(t, tp.ConsumeLogs(context.Background(), tt.input))
-			assert.EqualValues(t, tt.output, tt.input)
+			assert.Equal(t, tt.output, tt.input)
 		})
 	}
 }
@@ -136,7 +136,7 @@ func TestAttributes_FilterLogs(t *testing.T) {
 	}
 	oCfg.Include = &filterconfig.MatchProperties{
 		Resources: []filterconfig.Attribute{{Key: "name", Value: "^[^i].*"}},
-		//Libraries: []filterconfig.InstrumentationLibrary{{Name: "^[^i].*"}},
+		// Libraries: []filterconfig.InstrumentationLibrary{{Name: "^[^i].*"}},
 		Config: *createConfig(filterset.Regexp),
 	}
 	oCfg.Exclude = &filterconfig.MatchProperties{
@@ -145,7 +145,7 @@ func TestAttributes_FilterLogs(t *testing.T) {
 		},
 		Config: *createConfig(filterset.Strict),
 	}
-	tp, err := factory.CreateLogsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
+	tp, err := factory.CreateLogs(context.Background(), processortest.NewNopSettings(metadata.Type), cfg, consumertest.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, tp)
 
@@ -208,8 +208,8 @@ func TestAttributes_FilterLogsByNameStrict(t *testing.T) {
 		Resources: []filterconfig.Attribute{{Key: "name", Value: "dont_apply"}},
 		Config:    *createConfig(filterset.Strict),
 	}
-	tp, err := factory.CreateLogsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
-	require.Nil(t, err)
+	tp, err := factory.CreateLogs(context.Background(), processortest.NewNopSettings(metadata.Type), cfg, consumertest.NewNop())
+	require.NoError(t, err)
 	require.NotNil(t, tp)
 
 	for _, tt := range testCases {
@@ -271,8 +271,8 @@ func TestAttributes_FilterLogsByNameRegexp(t *testing.T) {
 		Resources: []filterconfig.Attribute{{Key: "name", Value: ".*dont_apply$"}},
 		Config:    *createConfig(filterset.Regexp),
 	}
-	tp, err := factory.CreateLogsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
-	require.Nil(t, err)
+	tp, err := factory.CreateLogs(context.Background(), processortest.NewNopSettings(metadata.Type), cfg, consumertest.NewNop())
+	require.NoError(t, err)
 	require.NotNil(t, tp)
 
 	for _, tt := range testCases {
@@ -330,8 +330,8 @@ func TestLogAttributes_Hash(t *testing.T) {
 		{Key: "user.authenticated", Action: attraction.HASH},
 	}
 
-	tp, err := factory.CreateLogsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
-	require.Nil(t, err)
+	tp, err := factory.CreateLogs(context.Background(), processortest.NewNopSettings(metadata.Type), cfg, consumertest.NewNop())
+	require.NoError(t, err)
 	require.NotNil(t, tp)
 
 	for _, tt := range testCases {
@@ -406,8 +406,8 @@ func TestLogAttributes_Convert(t *testing.T) {
 		{Key: "to.string", Action: attraction.CONVERT, ConvertedType: "string"},
 	}
 
-	tp, err := factory.CreateLogsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
-	require.Nil(t, err)
+	tp, err := factory.CreateLogs(context.Background(), processortest.NewNopSettings(metadata.Type), cfg, consumertest.NewNop())
+	require.NoError(t, err)
 	require.NotNil(t, tp)
 
 	for _, tt := range testCases {
@@ -451,7 +451,7 @@ func BenchmarkAttributes_FilterLogsByName(b *testing.B) {
 		Config:    *createConfig(filterset.Regexp),
 		Resources: []filterconfig.Attribute{{Key: "name", Value: "^apply.*"}},
 	}
-	tp, err := factory.CreateLogsProcessor(context.Background(), processortest.NewNopCreateSettings(), cfg, consumertest.NewNop())
+	tp, err := factory.CreateLogs(context.Background(), processortest.NewNopSettings(metadata.Type), cfg, consumertest.NewNop())
 	require.NoError(b, err)
 	require.NotNil(b, tp)
 

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aws/aws-xray-sdk-go/xray"
+	"github.com/aws/aws-xray-sdk-go/v2/xray"
 )
 
 func main() {
@@ -15,7 +15,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/", xray.Handler(
 		xray.NewFixedSegmentNamer("SampleServer"), http.HandlerFunc(
-			func(w http.ResponseWriter, r *http.Request) {
+			func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte("Hello!"))
 			},
 		),

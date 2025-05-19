@@ -9,7 +9,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
+
+	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
 
@@ -26,33 +27,47 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			name: "all_set",
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
-					OracledbConsistentGets:        MetricConfig{Enabled: true},
-					OracledbCPUTime:               MetricConfig{Enabled: true},
-					OracledbDbBlockGets:           MetricConfig{Enabled: true},
-					OracledbDmlLocksLimit:         MetricConfig{Enabled: true},
-					OracledbDmlLocksUsage:         MetricConfig{Enabled: true},
-					OracledbEnqueueDeadlocks:      MetricConfig{Enabled: true},
-					OracledbEnqueueLocksLimit:     MetricConfig{Enabled: true},
-					OracledbEnqueueLocksUsage:     MetricConfig{Enabled: true},
-					OracledbEnqueueResourcesLimit: MetricConfig{Enabled: true},
-					OracledbEnqueueResourcesUsage: MetricConfig{Enabled: true},
-					OracledbExchangeDeadlocks:     MetricConfig{Enabled: true},
-					OracledbExecutions:            MetricConfig{Enabled: true},
-					OracledbHardParses:            MetricConfig{Enabled: true},
-					OracledbLogicalReads:          MetricConfig{Enabled: true},
-					OracledbParseCalls:            MetricConfig{Enabled: true},
-					OracledbPgaMemory:             MetricConfig{Enabled: true},
-					OracledbPhysicalReads:         MetricConfig{Enabled: true},
-					OracledbProcessesLimit:        MetricConfig{Enabled: true},
-					OracledbProcessesUsage:        MetricConfig{Enabled: true},
-					OracledbSessionsLimit:         MetricConfig{Enabled: true},
-					OracledbSessionsUsage:         MetricConfig{Enabled: true},
-					OracledbTablespaceSizeLimit:   MetricConfig{Enabled: true},
-					OracledbTablespaceSizeUsage:   MetricConfig{Enabled: true},
-					OracledbTransactionsLimit:     MetricConfig{Enabled: true},
-					OracledbTransactionsUsage:     MetricConfig{Enabled: true},
-					OracledbUserCommits:           MetricConfig{Enabled: true},
-					OracledbUserRollbacks:         MetricConfig{Enabled: true},
+					OracledbConsistentGets:                        MetricConfig{Enabled: true},
+					OracledbCPUTime:                               MetricConfig{Enabled: true},
+					OracledbDbBlockGets:                           MetricConfig{Enabled: true},
+					OracledbDdlStatementsParallelized:             MetricConfig{Enabled: true},
+					OracledbDmlLocksLimit:                         MetricConfig{Enabled: true},
+					OracledbDmlLocksUsage:                         MetricConfig{Enabled: true},
+					OracledbDmlStatementsParallelized:             MetricConfig{Enabled: true},
+					OracledbEnqueueDeadlocks:                      MetricConfig{Enabled: true},
+					OracledbEnqueueLocksLimit:                     MetricConfig{Enabled: true},
+					OracledbEnqueueLocksUsage:                     MetricConfig{Enabled: true},
+					OracledbEnqueueResourcesLimit:                 MetricConfig{Enabled: true},
+					OracledbEnqueueResourcesUsage:                 MetricConfig{Enabled: true},
+					OracledbExchangeDeadlocks:                     MetricConfig{Enabled: true},
+					OracledbExecutions:                            MetricConfig{Enabled: true},
+					OracledbHardParses:                            MetricConfig{Enabled: true},
+					OracledbLogicalReads:                          MetricConfig{Enabled: true},
+					OracledbParallelOperationsDowngraded1To25Pct:  MetricConfig{Enabled: true},
+					OracledbParallelOperationsDowngraded25To50Pct: MetricConfig{Enabled: true},
+					OracledbParallelOperationsDowngraded50To75Pct: MetricConfig{Enabled: true},
+					OracledbParallelOperationsDowngraded75To99Pct: MetricConfig{Enabled: true},
+					OracledbParallelOperationsDowngradedToSerial:  MetricConfig{Enabled: true},
+					OracledbParallelOperationsNotDowngraded:       MetricConfig{Enabled: true},
+					OracledbParseCalls:                            MetricConfig{Enabled: true},
+					OracledbPgaMemory:                             MetricConfig{Enabled: true},
+					OracledbPhysicalReadIoRequests:                MetricConfig{Enabled: true},
+					OracledbPhysicalReads:                         MetricConfig{Enabled: true},
+					OracledbPhysicalReadsDirect:                   MetricConfig{Enabled: true},
+					OracledbPhysicalWriteIoRequests:               MetricConfig{Enabled: true},
+					OracledbPhysicalWrites:                        MetricConfig{Enabled: true},
+					OracledbPhysicalWritesDirect:                  MetricConfig{Enabled: true},
+					OracledbProcessesLimit:                        MetricConfig{Enabled: true},
+					OracledbProcessesUsage:                        MetricConfig{Enabled: true},
+					OracledbQueriesParallelized:                   MetricConfig{Enabled: true},
+					OracledbSessionsLimit:                         MetricConfig{Enabled: true},
+					OracledbSessionsUsage:                         MetricConfig{Enabled: true},
+					OracledbTablespaceSizeLimit:                   MetricConfig{Enabled: true},
+					OracledbTablespaceSizeUsage:                   MetricConfig{Enabled: true},
+					OracledbTransactionsLimit:                     MetricConfig{Enabled: true},
+					OracledbTransactionsUsage:                     MetricConfig{Enabled: true},
+					OracledbUserCommits:                           MetricConfig{Enabled: true},
+					OracledbUserRollbacks:                         MetricConfig{Enabled: true},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
 					OracledbInstanceName: ResourceAttributeConfig{Enabled: true},
@@ -63,33 +78,47 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			name: "none_set",
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
-					OracledbConsistentGets:        MetricConfig{Enabled: false},
-					OracledbCPUTime:               MetricConfig{Enabled: false},
-					OracledbDbBlockGets:           MetricConfig{Enabled: false},
-					OracledbDmlLocksLimit:         MetricConfig{Enabled: false},
-					OracledbDmlLocksUsage:         MetricConfig{Enabled: false},
-					OracledbEnqueueDeadlocks:      MetricConfig{Enabled: false},
-					OracledbEnqueueLocksLimit:     MetricConfig{Enabled: false},
-					OracledbEnqueueLocksUsage:     MetricConfig{Enabled: false},
-					OracledbEnqueueResourcesLimit: MetricConfig{Enabled: false},
-					OracledbEnqueueResourcesUsage: MetricConfig{Enabled: false},
-					OracledbExchangeDeadlocks:     MetricConfig{Enabled: false},
-					OracledbExecutions:            MetricConfig{Enabled: false},
-					OracledbHardParses:            MetricConfig{Enabled: false},
-					OracledbLogicalReads:          MetricConfig{Enabled: false},
-					OracledbParseCalls:            MetricConfig{Enabled: false},
-					OracledbPgaMemory:             MetricConfig{Enabled: false},
-					OracledbPhysicalReads:         MetricConfig{Enabled: false},
-					OracledbProcessesLimit:        MetricConfig{Enabled: false},
-					OracledbProcessesUsage:        MetricConfig{Enabled: false},
-					OracledbSessionsLimit:         MetricConfig{Enabled: false},
-					OracledbSessionsUsage:         MetricConfig{Enabled: false},
-					OracledbTablespaceSizeLimit:   MetricConfig{Enabled: false},
-					OracledbTablespaceSizeUsage:   MetricConfig{Enabled: false},
-					OracledbTransactionsLimit:     MetricConfig{Enabled: false},
-					OracledbTransactionsUsage:     MetricConfig{Enabled: false},
-					OracledbUserCommits:           MetricConfig{Enabled: false},
-					OracledbUserRollbacks:         MetricConfig{Enabled: false},
+					OracledbConsistentGets:                        MetricConfig{Enabled: false},
+					OracledbCPUTime:                               MetricConfig{Enabled: false},
+					OracledbDbBlockGets:                           MetricConfig{Enabled: false},
+					OracledbDdlStatementsParallelized:             MetricConfig{Enabled: false},
+					OracledbDmlLocksLimit:                         MetricConfig{Enabled: false},
+					OracledbDmlLocksUsage:                         MetricConfig{Enabled: false},
+					OracledbDmlStatementsParallelized:             MetricConfig{Enabled: false},
+					OracledbEnqueueDeadlocks:                      MetricConfig{Enabled: false},
+					OracledbEnqueueLocksLimit:                     MetricConfig{Enabled: false},
+					OracledbEnqueueLocksUsage:                     MetricConfig{Enabled: false},
+					OracledbEnqueueResourcesLimit:                 MetricConfig{Enabled: false},
+					OracledbEnqueueResourcesUsage:                 MetricConfig{Enabled: false},
+					OracledbExchangeDeadlocks:                     MetricConfig{Enabled: false},
+					OracledbExecutions:                            MetricConfig{Enabled: false},
+					OracledbHardParses:                            MetricConfig{Enabled: false},
+					OracledbLogicalReads:                          MetricConfig{Enabled: false},
+					OracledbParallelOperationsDowngraded1To25Pct:  MetricConfig{Enabled: false},
+					OracledbParallelOperationsDowngraded25To50Pct: MetricConfig{Enabled: false},
+					OracledbParallelOperationsDowngraded50To75Pct: MetricConfig{Enabled: false},
+					OracledbParallelOperationsDowngraded75To99Pct: MetricConfig{Enabled: false},
+					OracledbParallelOperationsDowngradedToSerial:  MetricConfig{Enabled: false},
+					OracledbParallelOperationsNotDowngraded:       MetricConfig{Enabled: false},
+					OracledbParseCalls:                            MetricConfig{Enabled: false},
+					OracledbPgaMemory:                             MetricConfig{Enabled: false},
+					OracledbPhysicalReadIoRequests:                MetricConfig{Enabled: false},
+					OracledbPhysicalReads:                         MetricConfig{Enabled: false},
+					OracledbPhysicalReadsDirect:                   MetricConfig{Enabled: false},
+					OracledbPhysicalWriteIoRequests:               MetricConfig{Enabled: false},
+					OracledbPhysicalWrites:                        MetricConfig{Enabled: false},
+					OracledbPhysicalWritesDirect:                  MetricConfig{Enabled: false},
+					OracledbProcessesLimit:                        MetricConfig{Enabled: false},
+					OracledbProcessesUsage:                        MetricConfig{Enabled: false},
+					OracledbQueriesParallelized:                   MetricConfig{Enabled: false},
+					OracledbSessionsLimit:                         MetricConfig{Enabled: false},
+					OracledbSessionsUsage:                         MetricConfig{Enabled: false},
+					OracledbTablespaceSizeLimit:                   MetricConfig{Enabled: false},
+					OracledbTablespaceSizeUsage:                   MetricConfig{Enabled: false},
+					OracledbTransactionsLimit:                     MetricConfig{Enabled: false},
+					OracledbTransactionsUsage:                     MetricConfig{Enabled: false},
+					OracledbUserCommits:                           MetricConfig{Enabled: false},
+					OracledbUserRollbacks:                         MetricConfig{Enabled: false},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
 					OracledbInstanceName: ResourceAttributeConfig{Enabled: false},
@@ -100,9 +129,8 @@ func TestMetricsBuilderConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadMetricsBuilderConfig(t, tt.name)
-			if diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(MetricConfig{}, ResourceAttributeConfig{})); diff != "" {
-				t.Errorf("Config mismatch (-expected +actual):\n%s", diff)
-			}
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(MetricConfig{}, ResourceAttributeConfig{}))
+			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}
 }
@@ -113,7 +141,7 @@ func loadMetricsBuilderConfig(t *testing.T, name string) MetricsBuilderConfig {
 	sub, err := cm.Sub(name)
 	require.NoError(t, err)
 	cfg := DefaultMetricsBuilderConfig()
-	require.NoError(t, component.UnmarshalConfig(sub, &cfg))
+	require.NoError(t, sub.Unmarshal(&cfg, confmap.WithIgnoreUnused()))
 	return cfg
 }
 
@@ -142,9 +170,8 @@ func TestResourceAttributesConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadResourceAttributesConfig(t, tt.name)
-			if diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(ResourceAttributeConfig{})); diff != "" {
-				t.Errorf("Config mismatch (-expected +actual):\n%s", diff)
-			}
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(ResourceAttributeConfig{}))
+			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}
 }
@@ -157,6 +184,6 @@ func loadResourceAttributesConfig(t *testing.T, name string) ResourceAttributesC
 	sub, err = sub.Sub("resource_attributes")
 	require.NoError(t, err)
 	cfg := DefaultResourceAttributesConfig()
-	require.NoError(t, component.UnmarshalConfig(sub, &cfg))
+	require.NoError(t, sub.Unmarshal(&cfg))
 	return cfg
 }

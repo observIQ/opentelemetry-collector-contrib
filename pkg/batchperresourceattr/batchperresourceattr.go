@@ -5,6 +5,7 @@ package batchperresourceattr // import "github.com/open-telemetry/opentelemetry-
 
 import (
 	"context"
+	"fmt"
 
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/plog"
@@ -13,21 +14,30 @@ import (
 	"go.uber.org/multierr"
 )
 
+var separator = string([]byte{0x0, 0x1})
+
 type batchTraces struct {
-	attrKey string
-	next    consumer.Traces
+	attrKeys []string
+	next     consumer.Traces
 }
 
 func NewBatchPerResourceTraces(attrKey string, next consumer.Traces) consumer.Traces {
 	return &batchTraces{
-		attrKey: attrKey,
-		next:    next,
+		attrKeys: []string{attrKey},
+		next:     next,
 	}
 }
 
-// Capabilities implements the consumer interface.
+func NewMultiBatchPerResourceTraces(attrKeys []string, next consumer.Traces) consumer.Traces {
+	return &batchTraces{
+		attrKeys: attrKeys,
+		next:     next,
+	}
+}
+
+// Capabilities returns the capabilities of the next consumer because batchTraces doesn't mutate data itself.
 func (bt *batchTraces) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: false}
+	return bt.next.Capabilities()
 }
 
 func (bt *batchTraces) ConsumeTraces(ctx context.Context, td ptrace.Traces) error {
@@ -42,9 +52,13 @@ func (bt *batchTraces) ConsumeTraces(ctx context.Context, td ptrace.Traces) erro
 	for i := 0; i < lenRss; i++ {
 		rs := rss.At(i)
 		var attrVal string
-		if attributeValue, ok := rs.Resource().Attributes().Get(bt.attrKey); ok {
-			attrVal = attributeValue.Str()
+
+		for _, k := range bt.attrKeys {
+			if attributeValue, ok := rs.Resource().Attributes().Get(k); ok {
+				attrVal = fmt.Sprintf("%s%s%s", attrVal, separator, attributeValue.Str())
+			}
 		}
+
 		indicesByAttr[attrVal] = append(indicesByAttr[attrVal], i)
 	}
 	// If there is a single attribute value, then call next.
@@ -66,20 +80,27 @@ func (bt *batchTraces) ConsumeTraces(ctx context.Context, td ptrace.Traces) erro
 }
 
 type batchMetrics struct {
-	attrKey string
-	next    consumer.Metrics
+	attrKeys []string
+	next     consumer.Metrics
 }
 
 func NewBatchPerResourceMetrics(attrKey string, next consumer.Metrics) consumer.Metrics {
 	return &batchMetrics{
-		attrKey: attrKey,
-		next:    next,
+		attrKeys: []string{attrKey},
+		next:     next,
 	}
 }
 
-// Capabilities implements the consumer interface.
+func NewMultiBatchPerResourceMetrics(attrKeys []string, next consumer.Metrics) consumer.Metrics {
+	return &batchMetrics{
+		attrKeys: attrKeys,
+		next:     next,
+	}
+}
+
+// Capabilities returns the capabilities of the next consumer because batchMetrics doesn't mutate data itself.
 func (bt *batchMetrics) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: false}
+	return bt.next.Capabilities()
 }
 
 func (bt *batchMetrics) ConsumeMetrics(ctx context.Context, td pmetric.Metrics) error {
@@ -94,8 +115,10 @@ func (bt *batchMetrics) ConsumeMetrics(ctx context.Context, td pmetric.Metrics) 
 	for i := 0; i < lenRms; i++ {
 		rm := rms.At(i)
 		var attrVal string
-		if attributeValue, ok := rm.Resource().Attributes().Get(bt.attrKey); ok {
-			attrVal = attributeValue.Str()
+		for _, k := range bt.attrKeys {
+			if attributeValue, ok := rm.Resource().Attributes().Get(k); ok {
+				attrVal = fmt.Sprintf("%s%s%s", attrVal, separator, attributeValue.Str())
+			}
 		}
 		indicesByAttr[attrVal] = append(indicesByAttr[attrVal], i)
 	}
@@ -118,20 +141,27 @@ func (bt *batchMetrics) ConsumeMetrics(ctx context.Context, td pmetric.Metrics) 
 }
 
 type batchLogs struct {
-	attrKey string
-	next    consumer.Logs
+	attrKeys []string
+	next     consumer.Logs
 }
 
 func NewBatchPerResourceLogs(attrKey string, next consumer.Logs) consumer.Logs {
 	return &batchLogs{
-		attrKey: attrKey,
-		next:    next,
+		attrKeys: []string{attrKey},
+		next:     next,
 	}
 }
 
-// Capabilities implements the consumer interface.
+func NewMultiBatchPerResourceLogs(attrKeys []string, next consumer.Logs) consumer.Logs {
+	return &batchLogs{
+		attrKeys: attrKeys,
+		next:     next,
+	}
+}
+
+// Capabilities returns the capabilities of the next consumer because batchLogs doesn't mutate data itself.
 func (bt *batchLogs) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: false}
+	return bt.next.Capabilities()
 }
 
 func (bt *batchLogs) ConsumeLogs(ctx context.Context, td plog.Logs) error {
@@ -146,8 +176,10 @@ func (bt *batchLogs) ConsumeLogs(ctx context.Context, td plog.Logs) error {
 	for i := 0; i < lenRls; i++ {
 		rl := rls.At(i)
 		var attrVal string
-		if attributeValue, ok := rl.Resource().Attributes().Get(bt.attrKey); ok {
-			attrVal = attributeValue.Str()
+		for _, k := range bt.attrKeys {
+			if attributeValue, ok := rl.Resource().Attributes().Get(k); ok {
+				attrVal = fmt.Sprintf("%s%s%s", attrVal, separator, attributeValue.Str())
+			}
 		}
 		indicesByAttr[attrVal] = append(indicesByAttr[attrVal], i)
 	}

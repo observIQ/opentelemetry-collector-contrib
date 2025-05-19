@@ -3,7 +3,12 @@ type: tcplog
 status:
   class: receiver
   stability:
-    alpha: [logs]
-  distributions: [contrib, splunk, observiq, sumo]
+    unmaintained: [logs]
+  distributions: [contrib]
   codeowners:
-    active: [djaglowski]
+    emeritus: [djaglowski]
+    seeking_new: true
+
+tests:
+  config:
+    listen_address: "localhost:0"

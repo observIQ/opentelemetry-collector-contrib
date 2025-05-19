@@ -4,42 +4,55 @@
 package ottl // import "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
+	"github.com/goccy/go-json"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/internal/ottlcommon"
 )
 
+// ExprFunc is a function in OTTL
 type ExprFunc[K any] func(ctx context.Context, tCtx K) (any, error)
 
+// Expr is a struct that represents a function
 type Expr[K any] struct {
 	exprFunc ExprFunc[K]
 }
 
+// Eval invokes the OTTL function
 func (e Expr[K]) Eval(ctx context.Context, tCtx K) (any, error) {
 	return e.exprFunc(ctx, tCtx)
 }
 
+// Getter resolves a value at runtime without performing any type checking on the value that is returned.
 type Getter[K any] interface {
+	// Get retrieves a value of type 'Any' and returns an error if there are any issues during retrieval.
 	Get(ctx context.Context, tCtx K) (any, error)
 }
 
+// Setter allows setting an untyped value on a predefined field within some data at runtime.
 type Setter[K any] interface {
+	// Set sets a value of type 'Any' and returns an error if there are any issues during the setting process.
 	Set(ctx context.Context, tCtx K, val any) error
 }
 
+// GetSetter is an interface that combines the Getter and Setter interfaces.
+// It should be used to represent the ability to both get and set a value.
 type GetSetter[K any] interface {
 	Getter[K]
 	Setter[K]
 }
 
+// StandardGetSetter is a standard way to construct a GetSetter
 type StandardGetSetter[K any] struct {
 	Getter func(ctx context.Context, tCtx K) (any, error)
 	Setter func(ctx context.Context, tCtx K, val any) error
@@ -63,7 +76,7 @@ func (l literal[K]) Get(context.Context, K) (any, error) {
 
 type exprGetter[K any] struct {
 	expr Expr[K]
-	keys []Key
+	keys []key
 }
 
 func (g exprGetter[K]) Get(ctx context.Context, tCtx K) (any, error) {
@@ -83,13 +96,13 @@ func (g exprGetter[K]) Get(ctx context.Context, tCtx K) (any, error) {
 			case pcommon.Map:
 				val, ok := r.Get(*k.String)
 				if !ok {
-					return nil, fmt.Errorf("key not found in map")
+					return nil, errors.New("key not found in map")
 				}
 				result = ottlcommon.GetValue(val)
 			case map[string]any:
 				val, ok := r[*k.String]
 				if !ok {
-					return nil, fmt.Errorf("key not found in map")
+					return nil, errors.New("key not found in map")
 				}
 				result = val
 			default:
@@ -103,18 +116,50 @@ func (g exprGetter[K]) Get(ctx context.Context, tCtx K) (any, error) {
 				}
 				result = ottlcommon.GetValue(r.At(int(*k.Int)))
 			case []any:
-				if int(*k.Int) >= len(r) || int(*k.Int) < 0 {
-					return nil, fmt.Errorf("index %v out of bounds", *k.Int)
+				result, err = getElementByIndex(r, k.Int)
+				if err != nil {
+					return nil, err
 				}
-				result = r[*k.Int]
+			case []string:
+				result, err = getElementByIndex(r, k.Int)
+				if err != nil {
+					return nil, err
+				}
+			case []bool:
+				result, err = getElementByIndex(r, k.Int)
+				if err != nil {
+					return nil, err
+				}
+			case []float64:
+				result, err = getElementByIndex(r, k.Int)
+				if err != nil {
+					return nil, err
+				}
+			case []int64:
+				result, err = getElementByIndex(r, k.Int)
+				if err != nil {
+					return nil, err
+				}
+			case []byte:
+				result, err = getElementByIndex(r, k.Int)
+				if err != nil {
+					return nil, err
+				}
 			default:
 				return nil, fmt.Errorf("type, %T, does not support int indexing", result)
 			}
 		default:
-			return nil, fmt.Errorf("neither map nor slice index were set; this is an error in OTTL")
+			return nil, errors.New("neither map nor slice index were set; this is an error in OTTL")
 		}
 	}
 	return result, nil
+}
+
+func getElementByIndex[T any](r []T, idx *int64) (any, error) {
+	if int(*idx) >= len(r) || int(*idx) < 0 {
+		return nil, fmt.Errorf("index %v out of bounds", *idx)
+	}
+	return r[*idx], nil
 }
 
 type listGetter[K any] struct {
@@ -129,10 +174,50 @@ func (l *listGetter[K]) Get(ctx context.Context, tCtx K) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		evaluated[i] = val
 	}
 
 	return evaluated, nil
+}
+
+type mapGetter[K any] struct {
+	mapValues map[string]Getter[K]
+}
+
+func (m *mapGetter[K]) Get(ctx context.Context, tCtx K) (any, error) {
+	result := pcommon.NewMap()
+	for k, v := range m.mapValues {
+		val, err := v.Get(ctx, tCtx)
+		if err != nil {
+			return nil, err
+		}
+		switch typedVal := val.(type) {
+		case pcommon.Map:
+			target := result.PutEmpty(k).SetEmptyMap()
+			typedVal.CopyTo(target)
+		case []any:
+			target := result.PutEmpty(k).SetEmptySlice()
+			for _, el := range typedVal {
+				switch typedEl := el.(type) {
+				case pcommon.Map:
+					m := target.AppendEmpty().SetEmptyMap()
+					typedEl.CopyTo(m)
+				default:
+					err := target.AppendEmpty().FromRaw(el)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+		default:
+			err := result.PutEmpty(k).FromRaw(val)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return result, nil
 }
 
 // TypeError represents that a value was not an expected type.
@@ -284,6 +369,7 @@ func (g StandardBoolGetter[K]) Get(ctx context.Context, tCtx K) (bool, error) {
 
 // FunctionGetter uses a function factory to return an instantiated function as an Expr.
 type FunctionGetter[K any] interface {
+	// Get returns a function as an Expr[K] built with the provided Arguments
 	Get(args Arguments) (Expr[K], error)
 }
 
@@ -299,7 +385,7 @@ type StandardFunctionGetter[K any] struct {
 // wants to pass to the function, an error is returned.
 func (g StandardFunctionGetter[K]) Get(args Arguments) (Expr[K], error) {
 	if g.Fact == nil {
-		return Expr[K]{}, fmt.Errorf("undefined function")
+		return Expr[K]{}, errors.New("undefined function")
 	}
 	fArgs := g.Fact.CreateDefaultArguments()
 	if reflect.TypeOf(fArgs).Kind() != reflect.Pointer {
@@ -322,6 +408,26 @@ func (g StandardFunctionGetter[K]) Get(args Arguments) (Expr[K], error) {
 		return Expr[K]{}, fmt.Errorf("couldn't create function: %w", err)
 	}
 	return Expr[K]{exprFunc: fn}, nil
+}
+
+// PMapGetSetter is a GetSetter that must interact with a pcommon.Map
+type PMapGetSetter[K any] interface {
+	Get(ctx context.Context, tCtx K) (pcommon.Map, error)
+	Set(ctx context.Context, tCtx K, val pcommon.Map) error
+}
+
+// StandardPMapGetSetter is a basic implementation of PMapGetSetter
+type StandardPMapGetSetter[K any] struct {
+	Getter func(ctx context.Context, tCtx K) (pcommon.Map, error)
+	Setter func(ctx context.Context, tCtx K, val any) error
+}
+
+func (path StandardPMapGetSetter[K]) Get(ctx context.Context, tCtx K) (pcommon.Map, error) {
+	return path.Getter(ctx, tCtx)
+}
+
+func (path StandardPMapGetSetter[K]) Set(ctx context.Context, tCtx K, val pcommon.Map) error {
+	return path.Setter(ctx, tCtx, val)
 }
 
 // PMapGetter is a Getter that must return a pcommon.Map.
@@ -375,6 +481,7 @@ type StringLikeGetter[K any] interface {
 	Get(ctx context.Context, tCtx K) (*string, error)
 }
 
+// StandardStringLikeGetter is a basic implementation of StringLikeGetter
 type StandardStringLikeGetter[K any] struct {
 	Getter func(ctx context.Context, tCtx K) (any, error)
 }
@@ -394,22 +501,25 @@ func (g StandardStringLikeGetter[K]) Get(ctx context.Context, tCtx K) (*string, 
 	case []byte:
 		result = hex.EncodeToString(v)
 	case pcommon.Map:
-		result, err = jsoniter.MarshalToString(v.AsRaw())
+		resultBytes, err := json.Marshal(v.AsRaw())
 		if err != nil {
 			return nil, err
 		}
+		result = string(resultBytes)
 	case pcommon.Slice:
-		result, err = jsoniter.MarshalToString(v.AsRaw())
+		resultBytes, err := json.Marshal(v.AsRaw())
 		if err != nil {
 			return nil, err
 		}
+		result = string(resultBytes)
 	case pcommon.Value:
 		result = v.AsString()
 	default:
-		result, err = jsoniter.MarshalToString(v)
+		resultBytes, err := json.Marshal(v)
 		if err != nil {
 			return nil, TypeError(fmt.Sprintf("unsupported type: %T", v))
 		}
+		result = string(resultBytes)
 	}
 	return &result, nil
 }
@@ -423,6 +533,7 @@ type FloatLikeGetter[K any] interface {
 	Get(ctx context.Context, tCtx K) (*float64, error)
 }
 
+// StandardFloatLikeGetter is a basic implementation of FloatLikeGetter
 type StandardFloatLikeGetter[K any] struct {
 	Getter func(ctx context.Context, tCtx K) (any, error)
 }
@@ -487,6 +598,7 @@ type IntLikeGetter[K any] interface {
 	Get(ctx context.Context, tCtx K) (*int64, error)
 }
 
+// StandardIntLikeGetter is a basic implementation of IntLikeGetter
 type StandardIntLikeGetter[K any] struct {
 	Getter func(ctx context.Context, tCtx K) (any, error)
 }
@@ -542,6 +654,82 @@ func (g StandardIntLikeGetter[K]) Get(ctx context.Context, tCtx K) (*int64, erro
 	return &result, nil
 }
 
+// ByteSliceLikeGetter is a Getter that returns []byte by converting the underlying value to an []byte if necessary
+type ByteSliceLikeGetter[K any] interface {
+	// Get retrieves []byte value.
+	// The expectation is that the underlying value is converted to []byte if possible.
+	// If the value cannot be converted to []byte, nil and an error are returned.
+	// If the value is nil, nil is returned without an error.
+	Get(ctx context.Context, tCtx K) ([]byte, error)
+}
+
+// StandardByteSliceLikeGetter is a basic implementation of ByteSliceLikeGetter
+type StandardByteSliceLikeGetter[K any] struct {
+	Getter func(ctx context.Context, tCtx K) (any, error)
+}
+
+func (g StandardByteSliceLikeGetter[K]) Get(ctx context.Context, tCtx K) ([]byte, error) {
+	val, err := g.Getter(ctx, tCtx)
+	if err != nil {
+		return nil, fmt.Errorf("error getting value in %T: %w", g, err)
+	}
+	if val == nil {
+		return nil, nil
+	}
+	var result []byte
+	switch v := val.(type) {
+	case []byte:
+		result = v
+	case string:
+		result = []byte(v)
+	case float64, int64, bool:
+		result, err = valueToBytes(v)
+		if err != nil {
+			return nil, fmt.Errorf("error converting value %f of %T: %w", v, g, err)
+		}
+	case pcommon.Value:
+		switch v.Type() {
+		case pcommon.ValueTypeBytes:
+			result = v.Bytes().AsRaw()
+		case pcommon.ValueTypeInt:
+			result, err = valueToBytes(v.Int())
+			if err != nil {
+				return nil, fmt.Errorf("error converting value %d of int64: %w", v.Int(), err)
+			}
+		case pcommon.ValueTypeDouble:
+			result, err = valueToBytes(v.Double())
+			if err != nil {
+				return nil, fmt.Errorf("error converting value %f of float64: %w", v.Double(), err)
+			}
+		case pcommon.ValueTypeStr:
+			result = []byte(v.Str())
+		case pcommon.ValueTypeBool:
+			result, err = valueToBytes(v.Bool())
+			if err != nil {
+				return nil, fmt.Errorf("error converting value %s of bool: %w", v.Str(), err)
+			}
+		default:
+			return nil, TypeError(fmt.Sprintf("unsupported value type: %v", v.Type()))
+		}
+	default:
+		return nil, TypeError(fmt.Sprintf("unsupported type: %T", v))
+	}
+	return result, nil
+}
+
+// valueToBytes converts a value to a byte slice of length 8.
+func valueToBytes(n any) ([]byte, error) {
+	// Create a buffer to hold the bytes
+	buf := new(bytes.Buffer)
+	// Write the value to the buffer using binary.Write
+	err := binary.Write(buf, binary.BigEndian, n)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
 // BoolLikeGetter is a Getter that returns a bool by converting the underlying value to a bool if necessary.
 type BoolLikeGetter[K any] interface {
 	// Get retrieves a bool value.
@@ -551,6 +739,7 @@ type BoolLikeGetter[K any] interface {
 	Get(ctx context.Context, tCtx K) (*bool, error)
 }
 
+// StandardBoolLikeGetter is a basic implementation of BoolLikeGetter
 type StandardBoolLikeGetter[K any] struct {
 	Getter func(ctx context.Context, tCtx K) (any, error)
 }
@@ -616,7 +805,7 @@ func (p *Parser[K]) newGetter(val value) (Getter[K], error) {
 	}
 
 	if val.Enum != nil {
-		enum, err := p.enumParser(val.Enum)
+		enum, err := p.enumParser((*EnumSymbol)(val.Enum))
 		if err != nil {
 			return nil, err
 		}
@@ -631,7 +820,11 @@ func (p *Parser[K]) newGetter(val value) (Getter[K], error) {
 			return &literal[K]{value: *i}, nil
 		}
 		if eL.Path != nil {
-			return p.pathParser(eL.Path)
+			np, err := p.newPath(eL.Path)
+			if err != nil {
+				return nil, err
+			}
+			return p.parsePath(np)
 		}
 		if eL.Converter != nil {
 			return p.newGetterFromConverter(*eL.Converter)
@@ -650,9 +843,21 @@ func (p *Parser[K]) newGetter(val value) (Getter[K], error) {
 		return &lg, nil
 	}
 
+	if val.Map != nil {
+		mg := mapGetter[K]{mapValues: map[string]Getter[K]{}}
+		for _, kvp := range val.Map.Values {
+			getter, err := p.newGetter(*kvp.Value)
+			if err != nil {
+				return nil, err
+			}
+			mg.mapValues[*kvp.Key] = getter
+		}
+		return &mg, nil
+	}
+
 	if val.MathExpression == nil {
 		// In practice, can't happen since the DSL grammar guarantees one is set
-		return nil, fmt.Errorf("no value field set. This is a bug in the OpenTelemetry Transformation Language")
+		return nil, errors.New("no value field set. This is a bug in the OpenTelemetry Transformation Language")
 	}
 	return p.evaluateMathExpression(val.MathExpression)
 }

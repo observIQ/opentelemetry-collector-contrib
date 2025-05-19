@@ -5,12 +5,12 @@ package attraction
 
 import (
 	"context"
-	"crypto/sha1" // #nosec
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"regexp"
 	"testing"
 
@@ -77,7 +77,7 @@ func TestAttributes_InsertValue(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -86,7 +86,6 @@ func TestAttributes_InsertValue(t *testing.T) {
 }
 
 func TestAttributes_InsertFromAttribute(t *testing.T) {
-
 	testCases := []testCase{
 		// Ensure no attribute is inserted because because attributes do not exist.
 		{
@@ -135,7 +134,7 @@ func TestAttributes_InsertFromAttribute(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -144,7 +143,6 @@ func TestAttributes_InsertFromAttribute(t *testing.T) {
 }
 
 func TestAttributes_UpdateValue(t *testing.T) {
-
 	testCases := []testCase{
 		// Ensure no changes to the span as there is no attributes map.
 		{
@@ -181,7 +179,7 @@ func TestAttributes_UpdateValue(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -190,7 +188,6 @@ func TestAttributes_UpdateValue(t *testing.T) {
 }
 
 func TestAttributes_UpdateFromAttribute(t *testing.T) {
-
 	testCases := []testCase{
 		// Ensure no changes to the span as there is no attributes map.
 		{
@@ -239,7 +236,7 @@ func TestAttributes_UpdateFromAttribute(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -289,7 +286,7 @@ func TestAttributes_UpsertValue(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -403,13 +400,12 @@ func TestAttributes_Extract(t *testing.T) {
 
 	cfg := &Settings{
 		Actions: []ActionKeyValue{
-
 			{Key: "user_key", RegexPattern: "^\\/api\\/v1\\/document\\/(?P<new_user_key>.*)\\/update\\/(?P<version>.*)$", Action: EXTRACT},
 		},
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -418,7 +414,6 @@ func TestAttributes_Extract(t *testing.T) {
 }
 
 func TestAttributes_UpsertFromAttribute(t *testing.T) {
-
 	testCases := []testCase{
 		// Ensure `new_user_key` is not set for spans with no attributes.
 		{
@@ -472,7 +467,7 @@ func TestAttributes_UpsertFromAttribute(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -533,7 +528,7 @@ func TestAttributes_Delete(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -579,7 +574,7 @@ func TestAttributes_Delete_Regexp(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -684,7 +679,7 @@ func TestAttributes_HashValue(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -712,7 +707,7 @@ func TestAttributes_FromAttributeNoChange(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	runIndividualTestCase(t, tc, ap)
@@ -793,7 +788,7 @@ func TestAttributes_Ordering(t *testing.T) {
 	}
 
 	ap, err := NewAttrProc(cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, ap)
 
 	for _, tt := range testCases {
@@ -857,7 +852,8 @@ func TestInvalidConfig(t *testing.T) {
 			},
 			errorString: "error creating AttrProc due to missing required field \"pattern\" for action \"extract\" at the 0-th action",
 		},
-		{name: "set value for extract",
+		{
+			name: "set value for extract",
 			actionLists: []ActionKeyValue{
 				{Key: "Key", RegexPattern: "(?P<operation_website>.*?)$", Value: "value", Action: EXTRACT},
 			},
@@ -897,7 +893,7 @@ func TestInvalidConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ap, err := NewAttrProc(&Settings{Actions: tc.actionLists})
 			assert.Nil(t, ap)
-			assert.EqualValues(t, errors.New(tc.errorString), err)
+			assert.Equal(t, errors.New(tc.errorString), err)
 		})
 	}
 }
@@ -919,31 +915,17 @@ func TestValidConfiguration(t *testing.T) {
 	compiledRegex := regexp.MustCompile(`^\/api\/v1\/document\/(?P<documentId>.*)\/update$`)
 	assert.Equal(t, []attributeAction{
 		{Key: "one", Action: DELETE},
-		{Key: "two", Action: INSERT,
+		{
+			Key: "two", Action: INSERT,
 			AttributeValue: &av,
 		},
 		{Key: "three", FromAttribute: "two", Action: UPDATE},
 		{Key: "five", FromAttribute: "two", Action: UPSERT},
 		{Key: "two", Regex: compiledRegex, AttrNames: []string{"", "documentId"}, Action: EXTRACT},
 	}, ap.actions)
-
 }
 
 func hash(b []byte) string {
-	if enableSha256Gate.IsEnabled() {
-		return sha2Hash(b)
-	}
-	return sha1Hash(b)
-}
-
-func sha1Hash(b []byte) string {
-	// #nosec
-	h := sha1.New()
-	h.Write(b)
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-func sha2Hash(b []byte) string {
 	h := sha256.New()
 	h.Write(b)
 	return fmt.Sprintf("%x", h.Sum(nil))
@@ -964,7 +946,6 @@ func (a mockInfoAuth) GetAttributeNames() []string {
 }
 
 func TestFromContext(t *testing.T) {
-
 	mdCtx := client.NewContext(context.TODO(), client.Info{
 		Metadata: client.NewMetadata(map[string][]string{
 			"source_single_val":   {"single_val"},
@@ -972,6 +953,9 @@ func TestFromContext(t *testing.T) {
 		}),
 		Auth: mockInfoAuth{
 			"source_auth_val": "auth_val",
+		},
+		Addr: &net.IPAddr{
+			IP: net.IPv4(192, 168, 1, 1),
 		},
 	})
 
@@ -1023,6 +1007,12 @@ func TestFromContext(t *testing.T) {
 			expectedAttributes: map[string]any{},
 			action:             &ActionKeyValue{Key: "dest", FromContext: "auth.unknown_val", Action: INSERT},
 		},
+		{
+			name:               "with_address",
+			ctx:                mdCtx,
+			expectedAttributes: map[string]any{"dest": "192.168.1.1"},
+			action:             &ActionKeyValue{Key: "dest", FromContext: "client.address", Action: INSERT},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1030,7 +1020,7 @@ func TestFromContext(t *testing.T) {
 			ap, err := NewAttrProc(&Settings{
 				Actions: []ActionKeyValue{*tc.action},
 			})
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.NotNil(t, ap)
 			attrMap := pcommon.NewMap()
 			ap.Process(tc.ctx, nil, attrMap)

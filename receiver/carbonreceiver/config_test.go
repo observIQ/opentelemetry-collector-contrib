@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/carbonreceiver/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/carbonreceiver/protocol"
@@ -35,9 +36,9 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "receiver_settings"),
 			expected: &Config{
-				NetAddr: confignet.NetAddr{
+				AddrConfig: confignet.AddrConfig{
 					Endpoint:  "localhost:8080",
-					Transport: "udp",
+					Transport: confignet.TransportTypeUDP,
 				},
 				TCPIdleTimeout: 5 * time.Second,
 				Parser: &protocol.Config{
@@ -49,9 +50,9 @@ func TestLoadConfig(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "regex"),
 			expected: &Config{
-				NetAddr: confignet.NetAddr{
+				AddrConfig: confignet.AddrConfig{
 					Endpoint:  "localhost:2003",
-					Transport: "tcp",
+					Transport: confignet.TransportTypeTCP,
 				},
 				TCPIdleTimeout: 30 * time.Second,
 				Parser: &protocol.Config{
@@ -66,6 +67,12 @@ func TestLoadConfig(t *testing.T) {
 									"key":     "value",
 								},
 								MetricType: "cumulative",
+							},
+							{
+								Regexp: `(optional_prefix\.)?(?P<key_just>test)\.(?P<key_match>.*)`,
+							},
+							{
+								Regexp: `(experiment(?P<key_experiment>[0-9]+)\.)?(?P<key_just>test)\.(?P<key_match>.*)`,
 							},
 							{
 								Regexp: `(?P<key_just>test)\.(?P<key_match>.*)`,
@@ -85,10 +92,25 @@ func TestLoadConfig(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
+}
+
+func TestConfigValidate(t *testing.T) {
+	cfg := &Config{
+		AddrConfig: confignet.AddrConfig{
+			Endpoint:  "localhost:2003",
+			Transport: confignet.TransportTypeTCP,
+		},
+		TCPIdleTimeout: -1 * time.Second,
+		Parser: &protocol.Config{
+			Type:   "plaintext",
+			Config: &protocol.PlaintextConfig{},
+		},
+	}
+	assert.Error(t, cfg.Validate())
 }

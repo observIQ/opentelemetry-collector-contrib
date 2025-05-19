@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component/componenttest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/entry"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
@@ -34,7 +35,8 @@ func newTestFileOperator(t *testing.T, cfgMod func(*Config)) (*Input, chan *entr
 	if cfgMod != nil {
 		cfgMod(cfg)
 	}
-	op, err := cfg.Build(testutil.Logger(t))
+	set := componenttest.NewNopTelemetrySettings()
+	op, err := cfg.Build(set)
 	require.NoError(t, err)
 
 	err = op.SetOutputs([]operator.Operator{fakeOutput})
@@ -43,20 +45,20 @@ func newTestFileOperator(t *testing.T, cfgMod func(*Config)) (*Input, chan *entr
 	return op.(*Input), fakeOutput.Received, tempDir
 }
 
-func openTemp(t testing.TB, tempDir string) *os.File {
-	return openTempWithPattern(t, tempDir, "")
+func openTemp(tb testing.TB, tempDir string) *os.File {
+	return openTempWithPattern(tb, tempDir, "")
 }
 
-func openTempWithPattern(t testing.TB, tempDir, pattern string) *os.File {
+func openTempWithPattern(tb testing.TB, tempDir, pattern string) *os.File {
 	file, err := os.CreateTemp(tempDir, pattern)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = file.Close() })
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = file.Close() })
 	return file
 }
 
-func writeString(t testing.TB, file *os.File, s string) {
+func writeString(tb testing.TB, file *os.File, s string) {
 	_, err := file.WriteString(s)
-	require.NoError(t, err)
+	require.NoError(tb, err)
 }
 
 func waitForOne(t *testing.T, c chan *entry.Entry) *entry.Entry {
@@ -83,7 +85,7 @@ func waitForByteMessage(t *testing.T, c chan *entry.Entry, expected []byte) {
 	case e := <-c:
 		require.Equal(t, expected, e.Body.([]byte))
 	case <-time.After(3 * time.Second):
-		require.FailNow(t, "Timed out waiting for message", expected)
+		require.FailNow(t, "Timed out waiting for message", "%+v", expected)
 	}
 }
 

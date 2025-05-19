@@ -14,16 +14,16 @@ import (
 	"time"
 
 	dtypes "github.com/docker/docker/api/types"
-	devents "github.com/docker/docker/api/types/events"
+	ctypes "github.com/docker/docker/api/types/container"
+	etypes "github.com/docker/docker/api/types/events"
 	dfilters "github.com/docker/docker/api/types/filters"
 	docker "github.com/docker/docker/client"
 	"go.uber.org/zap"
 )
 
-const (
-	minimalRequiredDockerAPIVersion = 1.22
-	userAgent                       = "OpenTelemetry-Collector Docker Stats Receiver/v0.0.1"
-)
+const userAgent = "OpenTelemetry-Collector Docker Stats Receiver/v0.0.1"
+
+var minimumRequiredDockerAPIVersion = MustNewAPIVersion("1.22")
 
 // Container is client.ContainerInspect() response container
 // stats and translated environment string map for potential labels.
@@ -35,7 +35,7 @@ type Container struct {
 // Client provides the core metric gathering functionality from the Docker Daemon.
 // It retrieves container information in two forms to produce metric data: dtypes.ContainerJSON
 // from client.ContainerInspect() for container information (id, name, hostname, labels, and env)
-// and dtypes.StatsJSON from client.ContainerStats() for metric values.
+// and ctypes.StatsResponse from client.ContainerStats() for metric values.
 type Client struct {
 	client               *docker.Client
 	config               *Config
@@ -46,10 +46,17 @@ type Client struct {
 }
 
 func NewDockerClient(config *Config, logger *zap.Logger, opts ...docker.Opt) (*Client, error) {
+	version := minimumRequiredDockerAPIVersion
+	if config.DockerAPIVersion != "" {
+		var err error
+		if version, err = NewAPIVersion(config.DockerAPIVersion); err != nil {
+			return nil, err
+		}
+	}
 	client, err := docker.NewClientWithOpts(
 		append([]docker.Opt{
 			docker.WithHost(config.Endpoint),
-			docker.WithVersion(fmt.Sprintf("v%v", config.DockerAPIVersion)),
+			docker.WithVersion(version),
 			docker.WithHTTPHeaders(map[string]string{"User-Agent": userAgent}),
 		}, opts...)...,
 	)
@@ -92,7 +99,7 @@ func (dc *Client) LoadContainerList(ctx context.Context) error {
 	// Build initial container maps before starting loop
 	filters := dfilters.NewArgs()
 	filters.Add("status", "running")
-	options := dtypes.ContainerListOptions{
+	options := ctypes.ListOptions{
 		Filters: filters,
 	}
 
@@ -106,7 +113,7 @@ func (dc *Client) LoadContainerList(ctx context.Context) error {
 	wg := sync.WaitGroup{}
 	for _, c := range containerList {
 		wg.Add(1)
-		go func(container dtypes.Container) {
+		go func(container ctypes.Summary) {
 			if !dc.shouldBeExcluded(container.Image) {
 				dc.InspectAndPersistContainer(ctx, container.ID)
 			} else {
@@ -128,7 +135,7 @@ func (dc *Client) LoadContainerList(ctx context.Context) error {
 func (dc *Client) FetchContainerStatsAsJSON(
 	ctx context.Context,
 	container Container,
-) (*dtypes.StatsJSON, error) {
+) (*ctypes.StatsResponse, error) {
 	containerStats, err := dc.FetchContainerStats(ctx, container)
 	if err != nil {
 		return nil, err
@@ -147,7 +154,7 @@ func (dc *Client) FetchContainerStatsAsJSON(
 func (dc *Client) FetchContainerStats(
 	ctx context.Context,
 	container Container,
-) (dtypes.ContainerStats, error) {
+) (ctypes.StatsResponseReader, error) {
 	dc.logger.Debug("Fetching container stats.", zap.String("id", container.ID))
 	statsCtx, cancel := context.WithTimeout(ctx, dc.config.Timeout)
 	containerStats, err := dc.client.ContainerStats(statsCtx, container.ID, false)
@@ -172,10 +179,10 @@ func (dc *Client) FetchContainerStats(
 }
 
 func (dc *Client) toStatsJSON(
-	containerStats dtypes.ContainerStats,
+	containerStats ctypes.StatsResponseReader,
 	container *Container,
-) (*dtypes.StatsJSON, error) {
-	var statsJSON dtypes.StatsJSON
+) (*ctypes.StatsResponse, error) {
+	var statsJSON ctypes.StatsResponse
 	err := json.NewDecoder(containerStats.Body).Decode(&statsJSON)
 	containerStats.Body.Close()
 	if err != nil {
@@ -197,7 +204,7 @@ func (dc *Client) toStatsJSON(
 // Events exposes the underlying Docker clients Events channel.
 // Caller should close the events channel by canceling the context.
 // If an error occurs, processing stops and caller must reinvoke this method.
-func (dc *Client) Events(ctx context.Context, options dtypes.EventsOptions) (<-chan devents.Message, <-chan error) {
+func (dc *Client) Events(ctx context.Context, options etypes.ListOptions) (<-chan etypes.Message, <-chan error) {
 	return dc.client.Events(ctx, options)
 }
 
@@ -217,7 +224,7 @@ func (dc *Client) ContainerEventLoop(ctx context.Context) {
 
 EVENT_LOOP:
 	for {
-		options := dtypes.EventsOptions{
+		options := etypes.ListOptions{
 			Filters: filters,
 			Since:   lastTime.Format(time.RFC3339Nano),
 		}
@@ -230,16 +237,16 @@ EVENT_LOOP:
 			case event := <-eventCh:
 				switch event.Action {
 				case "destroy":
-					dc.logger.Debug("Docker container was destroyed:", zap.String("id", event.ID))
-					dc.RemoveContainer(event.ID)
+					dc.logger.Debug("Docker container was destroyed:", zap.String("id", event.Actor.ID))
+					dc.RemoveContainer(event.Actor.ID)
 				default:
 					dc.logger.Debug(
 						"Docker container update:",
-						zap.String("id", event.ID),
-						zap.String("action", event.Action),
+						zap.String("id", event.Actor.ID),
+						zap.Any("action", event.Action),
 					)
 
-					dc.InspectAndPersistContainer(ctx, event.ID)
+					dc.InspectAndPersistContainer(ctx, event.Actor.ID)
 				}
 
 				if event.TimeNano > lastTime.UnixNano() {
@@ -269,7 +276,7 @@ EVENT_LOOP:
 // InspectAndPersistContainer queries inspect api and returns *ContainerJSON and true when container should be queried for stats,
 // nil and false otherwise. Persists the container in the cache if container is
 // running and not excluded.
-func (dc *Client) InspectAndPersistContainer(ctx context.Context, cid string) (*dtypes.ContainerJSON, bool) {
+func (dc *Client) InspectAndPersistContainer(ctx context.Context, cid string) (*ctypes.InspectResponse, bool) {
 	if container, ok := dc.inspectedContainerIsOfInterest(ctx, cid); ok {
 		dc.persistContainer(container)
 		return container, ok
@@ -279,7 +286,7 @@ func (dc *Client) InspectAndPersistContainer(ctx context.Context, cid string) (*
 
 // Queries inspect api and returns *ContainerJSON and true when container should be queried for stats,
 // nil and false otherwise.
-func (dc *Client) inspectedContainerIsOfInterest(ctx context.Context, cid string) (*dtypes.ContainerJSON, bool) {
+func (dc *Client) inspectedContainerIsOfInterest(ctx context.Context, cid string) (*ctypes.InspectResponse, bool) {
 	inspectCtx, cancel := context.WithTimeout(ctx, dc.config.Timeout)
 	container, err := dc.client.ContainerInspect(inspectCtx, cid)
 	defer cancel()
@@ -295,7 +302,7 @@ func (dc *Client) inspectedContainerIsOfInterest(ctx context.Context, cid string
 	return nil, false
 }
 
-func (dc *Client) persistContainer(containerJSON *dtypes.ContainerJSON) {
+func (dc *Client) persistContainer(containerJSON *ctypes.InspectResponse) {
 	if containerJSON == nil {
 		return
 	}

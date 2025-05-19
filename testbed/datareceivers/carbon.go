@@ -37,9 +37,9 @@ func (cr *CarbonDataReceiver) Start(_ consumer.Traces, mc consumer.Metrics, _ co
 	cfg := factory.CreateDefaultConfig().(*carbonreceiver.Config)
 	cfg.Endpoint = fmt.Sprintf("127.0.0.1:%d", cr.Port)
 
-	set := receivertest.NewNopCreateSettings()
+	set := receivertest.NewNopSettings(factory.Type())
 	var err error
-	cr.receiver, err = factory.CreateMetricsReceiver(context.Background(), set, cfg, mc)
+	cr.receiver, err = factory.CreateMetrics(context.Background(), set, cfg, mc)
 	if err != nil {
 		return err
 	}
@@ -57,6 +57,8 @@ func (cr *CarbonDataReceiver) GenConfigYAMLStr() string {
 	// Note that this generates an exporter config for agent.
 	return fmt.Sprintf(`
   carbon:
+    sending_queue:
+      enabled: false
     endpoint: "127.0.0.1:%d"`, cr.Port)
 }
 

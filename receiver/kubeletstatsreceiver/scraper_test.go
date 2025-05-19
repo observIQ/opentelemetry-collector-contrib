@@ -7,18 +7,23 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strings"
+	"path/filepath"
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest/pmetrictest"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver/internal/kubelet"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kubeletstatsreceiver/internal/metadata"
 )
@@ -50,17 +55,225 @@ func TestScraper(t *testing.T) {
 	options := &scraperOptions{
 		metricGroupsToCollect: allMetricGroups,
 	}
-	r, err := newKubletScraper(
+	r, err := newKubeletScraper(
 		&fakeRestClient{},
-		receivertest.NewNopCreateSettings(),
+		receivertest.NewNopSettings(metadata.Type),
 		options,
 		metadata.DefaultMetricsBuilderConfig(),
+		"worker-42",
 	)
 	require.NoError(t, err)
 
-	md, err := r.Scrape(context.Background())
+	md, err := r.ScrapeMetrics(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, dataLen, md.DataPointCount())
+	expectedFile := filepath.Join("testdata", "scraper", "test_scraper_expected.yaml")
+
+	// Uncomment to regenerate '*_expected.yaml' files
+	// golden.WriteMetrics(t, expectedFile, md)
+
+	expectedMetrics, err := golden.ReadMetrics(expectedFile)
+	require.NoError(t, err)
+	require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, md,
+		pmetrictest.IgnoreStartTimestamp(),
+		pmetrictest.IgnoreResourceMetricsOrder(),
+		pmetrictest.IgnoreMetricDataPointsOrder(),
+		pmetrictest.IgnoreTimestamp(),
+		pmetrictest.IgnoreMetricsOrder()))
+}
+
+func TestScraperWithInterfacesMetrics(t *testing.T) {
+	options := &scraperOptions{
+		metricGroupsToCollect: allMetricGroups,
+		allNetworkInterfaces: map[kubelet.MetricGroup]bool{
+			kubelet.NodeMetricGroup: true,
+			kubelet.PodMetricGroup:  true,
+		},
+	}
+	r, err := newKubeletScraper(
+		&fakeRestClient{},
+		receivertest.NewNopSettings(metadata.Type),
+		options,
+		metadata.DefaultMetricsBuilderConfig(),
+		"worker-42",
+	)
+	require.NoError(t, err)
+
+	md, err := r.ScrapeMetrics(context.Background())
+	require.NoError(t, err)
+
+	require.Equal(t, dataLen+numPods*4+numNodes*4, md.DataPointCount())
+	expectedFile := filepath.Join("testdata", "scraper", "test_scraper_with_interfaces_metrics.yaml")
+
+	// Uncomment to regenerate '*_expected.yaml' files
+	// golden.WriteMetrics(t, expectedFile, md)
+
+	expectedMetrics, err := golden.ReadMetrics(expectedFile)
+	require.NoError(t, err)
+	require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, md,
+		pmetrictest.IgnoreStartTimestamp(),
+		pmetrictest.IgnoreResourceMetricsOrder(),
+		pmetrictest.IgnoreMetricDataPointsOrder(),
+		pmetrictest.IgnoreTimestamp(),
+		pmetrictest.IgnoreMetricsOrder()))
+}
+
+func TestScraperWithCPUNodeUtilization(t *testing.T) {
+	watcherStarted := make(chan struct{})
+	// Create the fake client.
+	client := fake.NewSimpleClientset()
+	// A catch-all watch reactor that allows us to inject the watcherStarted channel.
+	client.PrependWatchReactor("*", func(action clienttesting.Action) (handled bool, ret watch.Interface, err error) {
+		gvr := action.GetResource()
+		ns := action.GetNamespace()
+		watch, err := client.Tracker().Watch(gvr, ns)
+		if err != nil {
+			return false, nil, err
+		}
+		close(watcherStarted)
+		return true, watch, nil
+	})
+
+	options := &scraperOptions{
+		metricGroupsToCollect: map[kubelet.MetricGroup]bool{
+			kubelet.ContainerMetricGroup: true,
+			kubelet.PodMetricGroup:       true,
+		},
+		k8sAPIClient: client,
+	}
+	r, err := newKubeletScraper(
+		&fakeRestClient{},
+		receivertest.NewNopSettings(metadata.Type),
+		options,
+		metadata.MetricsBuilderConfig{
+			Metrics: metadata.MetricsConfig{
+				K8sContainerCPUNodeUtilization: metadata.MetricConfig{
+					Enabled: true,
+				},
+				K8sPodCPUNodeUtilization: metadata.MetricConfig{
+					Enabled: true,
+				},
+			},
+			ResourceAttributes: metadata.DefaultResourceAttributesConfig(),
+		},
+		"worker-42",
+	)
+	require.NoError(t, err)
+
+	err = r.Start(context.Background(), nil)
+	require.NoError(t, err)
+
+	// we wait until the watcher starts
+	<-watcherStarted
+	// Inject an event node into the fake client.
+	node := getNodeWithCPUCapacity("worker-42", 8)
+	_, err = client.CoreV1().Nodes().Create(context.TODO(), node, metav1.CreateOptions{})
+	if err != nil {
+		require.NoError(t, err)
+	}
+
+	var md pmetric.Metrics
+	require.Eventually(t, func() bool {
+		md, err = r.ScrapeMetrics(context.Background())
+		require.NoError(t, err)
+		return numContainers+numPods == md.DataPointCount()
+	}, 10*time.Second, 100*time.Millisecond,
+		"metrics not collected")
+
+	expectedFile := filepath.Join("testdata", "scraper", "test_scraper_cpu_util_nodelimit_expected.yaml")
+
+	// Uncomment to regenerate '*_expected.yaml' files
+	// golden.WriteMetrics(t, expectedFile, md)
+
+	expectedMetrics, err := golden.ReadMetrics(expectedFile)
+	require.NoError(t, err)
+	require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, md,
+		pmetrictest.IgnoreStartTimestamp(),
+		pmetrictest.IgnoreResourceMetricsOrder(),
+		pmetrictest.IgnoreMetricDataPointsOrder(),
+		pmetrictest.IgnoreTimestamp(),
+		pmetrictest.IgnoreMetricsOrder()))
+
+	err = r.Shutdown(context.Background())
+	require.NoError(t, err)
+}
+
+func TestScraperWithMemoryNodeUtilization(t *testing.T) {
+	watcherStarted := make(chan struct{})
+	// Create the fake client.
+	client := fake.NewSimpleClientset()
+	// A catch-all watch reactor that allows us to inject the watcherStarted channel.
+	client.PrependWatchReactor("*", func(action clienttesting.Action) (handled bool, ret watch.Interface, err error) {
+		gvr := action.GetResource()
+		ns := action.GetNamespace()
+		watch, err := client.Tracker().Watch(gvr, ns)
+		if err != nil {
+			return false, nil, err
+		}
+		close(watcherStarted)
+		return true, watch, nil
+	})
+
+	options := &scraperOptions{
+		metricGroupsToCollect: map[kubelet.MetricGroup]bool{
+			kubelet.ContainerMetricGroup: true,
+			kubelet.PodMetricGroup:       true,
+		},
+		k8sAPIClient: client,
+	}
+	r, err := newKubeletScraper(
+		&fakeRestClient{},
+		receivertest.NewNopSettings(metadata.Type),
+		options,
+		metadata.MetricsBuilderConfig{
+			Metrics: metadata.MetricsConfig{
+				K8sContainerMemoryNodeUtilization: metadata.MetricConfig{
+					Enabled: true,
+				}, K8sPodMemoryNodeUtilization: metadata.MetricConfig{
+					Enabled: true,
+				},
+			},
+			ResourceAttributes: metadata.DefaultResourceAttributesConfig(),
+		},
+		"worker-42",
+	)
+	require.NoError(t, err)
+
+	err = r.Start(context.Background(), nil)
+	require.NoError(t, err)
+
+	// we wait until the watcher starts
+	<-watcherStarted
+	// Inject an event node into the fake client.
+	node := getNodeWithMemoryCapacity("worker-42", "32564740Ki")
+	_, err = client.CoreV1().Nodes().Create(context.TODO(), node, metav1.CreateOptions{})
+	if err != nil {
+		require.NoError(t, err)
+	}
+
+	var md pmetric.Metrics
+	require.Eventually(t, func() bool {
+		md, err = r.ScrapeMetrics(context.Background())
+		require.NoError(t, err)
+		return numContainers+numPods == md.DataPointCount()
+	}, 10*time.Second, 100*time.Millisecond,
+		"metrics not collected")
+	expectedFile := filepath.Join("testdata", "scraper", "test_scraper_memory_util_nodelimit_expected.yaml")
+
+	// Uncomment to regenerate '*_expected.yaml' files
+	// golden.WriteMetrics(t, expectedFile, md)
+
+	expectedMetrics, err := golden.ReadMetrics(expectedFile)
+	require.NoError(t, err)
+	require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, md,
+		pmetrictest.IgnoreStartTimestamp(),
+		pmetrictest.IgnoreResourceMetricsOrder(),
+		pmetrictest.IgnoreMetricDataPointsOrder(),
+		pmetrictest.IgnoreTimestamp(),
+		pmetrictest.IgnoreMetricsOrder()))
+
+	err = r.Shutdown(context.Background())
+	require.NoError(t, err)
 }
 
 func TestScraperWithMetadata(t *testing.T) {
@@ -73,7 +286,7 @@ func TestScraperWithMetadata(t *testing.T) {
 		requiredLabel  string
 	}{
 		{
-			name:           "Container Metadata",
+			name:           "Container_Metadata",
 			metadataLabels: []kubelet.MetadataLabel{kubelet.MetadataLabelContainerID},
 			metricGroups: map[kubelet.MetricGroup]bool{
 				kubelet.ContainerMetricGroup: true,
@@ -83,7 +296,7 @@ func TestScraperWithMetadata(t *testing.T) {
 			requiredLabel: "container.id",
 		},
 		{
-			name:           "Volume Metadata",
+			name:           "Volume_Metadata",
 			metadataLabels: []kubelet.MetadataLabel{kubelet.MetadataLabelVolumeType},
 			metricGroups: map[kubelet.MetricGroup]bool{
 				kubelet.VolumeMetricGroup: true,
@@ -100,33 +313,32 @@ func TestScraperWithMetadata(t *testing.T) {
 				extraMetadataLabels:   tt.metadataLabels,
 				metricGroupsToCollect: tt.metricGroups,
 			}
-			r, err := newKubletScraper(
+			r, err := newKubeletScraper(
 				&fakeRestClient{},
-				receivertest.NewNopCreateSettings(),
+				receivertest.NewNopSettings(metadata.Type),
 				options,
 				metadata.DefaultMetricsBuilderConfig(),
+				"worker-42",
 			)
 			require.NoError(t, err)
 
-			md, err := r.Scrape(context.Background())
+			md, err := r.ScrapeMetrics(context.Background())
 			require.NoError(t, err)
-			require.Equal(t, tt.dataLen, md.DataPointCount())
 
-			for i := 0; i < md.ResourceMetrics().Len(); i++ {
-				rm := md.ResourceMetrics().At(i)
-				for j := 0; j < rm.ScopeMetrics().Len(); j++ {
-					ilm := rm.ScopeMetrics().At(j)
-					require.Equal(t, "otelcol/kubeletstatsreceiver", ilm.Scope().Name())
-					for k := 0; k < ilm.Metrics().Len(); k++ {
-						m := ilm.Metrics().At(k)
-						if strings.HasPrefix(m.Name(), tt.metricPrefix) {
-							_, ok := rm.Resource().Attributes().Get(tt.requiredLabel)
-							require.True(t, ok)
-							continue
-						}
-					}
-				}
-			}
+			filename := "test_scraper_with_metadata_" + tt.name + "_expected.yaml"
+			expectedFile := filepath.Join("testdata", "scraper", filename)
+
+			// Uncomment to regenerate '*_expected.yaml' files
+			// golden.WriteMetrics(t, expectedFile, md)
+
+			expectedMetrics, err := golden.ReadMetrics(expectedFile)
+			require.NoError(t, err)
+			require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, md,
+				pmetrictest.IgnoreStartTimestamp(),
+				pmetrictest.IgnoreResourceMetricsOrder(),
+				pmetrictest.IgnoreMetricDataPointsOrder(),
+				pmetrictest.IgnoreTimestamp(),
+				pmetrictest.IgnoreMetricsOrder()))
 		})
 	}
 }
@@ -293,54 +505,30 @@ func TestScraperWithPercentMetrics(t *testing.T) {
 		},
 		ResourceAttributes: metadata.DefaultResourceAttributesConfig(),
 	}
-	r, err := newKubletScraper(
+	r, err := newKubeletScraper(
 		&fakeRestClient{},
-		receivertest.NewNopCreateSettings(),
+		receivertest.NewNopSettings(metadata.Type),
 		options,
 		metricsConfig,
+		"worker-42",
 	)
 	require.NoError(t, err)
 
-	md, err := r.Scrape(context.Background())
+	md, err := r.ScrapeMetrics(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, 8, md.DataPointCount())
 
-	currentMetric := md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0)
-	assert.Equal(t, "k8s.pod.cpu_limit_utilization", currentMetric.Name())
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() <= 1)
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() >= 0)
+	expectedFile := filepath.Join("testdata", "scraper", "test_scraper_with_percent_expected.yaml")
 
-	currentMetric = md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(1)
-	assert.Equal(t, "k8s.pod.cpu_request_utilization", currentMetric.Name())
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() > 1)
+	// Uncomment to regenerate '*_expected.yaml' files
+	// golden.WriteMetrics(t, expectedFile, md)
 
-	currentMetric = md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(2)
-	assert.Equal(t, "k8s.pod.memory_limit_utilization", currentMetric.Name())
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() <= 1)
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() >= 0)
-
-	currentMetric = md.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(3)
-	assert.Equal(t, "k8s.pod.memory_request_utilization", currentMetric.Name())
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() > 1)
-
-	currentMetric = md.ResourceMetrics().At(1).ScopeMetrics().At(0).Metrics().At(0)
-	assert.Equal(t, "k8s.container.cpu_limit_utilization", currentMetric.Name())
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() <= 1)
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() >= 0)
-
-	currentMetric = md.ResourceMetrics().At(1).ScopeMetrics().At(0).Metrics().At(1)
-	assert.Equal(t, "k8s.container.cpu_request_utilization", currentMetric.Name())
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() > 1)
-
-	currentMetric = md.ResourceMetrics().At(1).ScopeMetrics().At(0).Metrics().At(2)
-	assert.Equal(t, "k8s.container.memory_limit_utilization", currentMetric.Name())
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() <= 1)
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() >= 0)
-
-	currentMetric = md.ResourceMetrics().At(1).ScopeMetrics().At(0).Metrics().At(3)
-	assert.Equal(t, "k8s.container.memory_request_utilization", currentMetric.Name())
-	assert.True(t, currentMetric.Gauge().DataPoints().At(0).DoubleValue() > 1)
-
+	expectedMetrics, err := golden.ReadMetrics(expectedFile)
+	require.NoError(t, err)
+	require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, md,
+		pmetrictest.IgnoreStartTimestamp(),
+		pmetrictest.IgnoreMetricDataPointsOrder(),
+		pmetrictest.IgnoreTimestamp(),
+		pmetrictest.IgnoreMetricsOrder()))
 }
 
 func TestScraperWithMetricGroups(t *testing.T) {
@@ -350,40 +538,40 @@ func TestScraperWithMetricGroups(t *testing.T) {
 		dataLen      int
 	}{
 		{
-			name:         "all groups",
+			name:         "all_groups",
 			metricGroups: allMetricGroups,
 			dataLen:      dataLen,
 		},
 		{
-			name: "only container group",
+			name: "only_container_group",
 			metricGroups: map[kubelet.MetricGroup]bool{
 				kubelet.ContainerMetricGroup: true,
 			},
 			dataLen: numContainers * containerMetrics,
 		},
 		{
-			name: "only pod group",
+			name: "only_pod_group",
 			metricGroups: map[kubelet.MetricGroup]bool{
 				kubelet.PodMetricGroup: true,
 			},
 			dataLen: numPods * podMetrics,
 		},
 		{
-			name: "only node group",
+			name: "only_node_group",
 			metricGroups: map[kubelet.MetricGroup]bool{
 				kubelet.NodeMetricGroup: true,
 			},
 			dataLen: numNodes * nodeMetrics,
 		},
 		{
-			name: "only volume group",
+			name: "only_volume_group",
 			metricGroups: map[kubelet.MetricGroup]bool{
 				kubelet.VolumeMetricGroup: true,
 			},
 			dataLen: numVolumes * volumeMetrics,
 		},
 		{
-			name: "pod and node groups",
+			name: "pod_and_node_groups",
 			metricGroups: map[kubelet.MetricGroup]bool{
 				kubelet.PodMetricGroup:  true,
 				kubelet.NodeMetricGroup: true,
@@ -393,20 +581,35 @@ func TestScraperWithMetricGroups(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			r, err := newKubletScraper(
+			r, err := newKubeletScraper(
 				&fakeRestClient{},
-				receivertest.NewNopCreateSettings(),
+				receivertest.NewNopSettings(metadata.Type),
 				&scraperOptions{
 					extraMetadataLabels:   []kubelet.MetadataLabel{kubelet.MetadataLabelContainerID},
 					metricGroupsToCollect: test.metricGroups,
 				},
 				metadata.DefaultMetricsBuilderConfig(),
+				"worker-42",
 			)
 			require.NoError(t, err)
 
-			md, err := r.Scrape(context.Background())
+			md, err := r.ScrapeMetrics(context.Background())
 			require.NoError(t, err)
-			require.Equal(t, test.dataLen, md.DataPointCount())
+
+			filename := "test_scraper_with_metric_groups_" + test.name + "_expected.yaml"
+			expectedFile := filepath.Join("testdata", "scraper", filename)
+
+			// Uncomment to regenerate '*_expected.yaml' files
+			// golden.WriteMetrics(t, expectedFile, md)
+
+			expectedMetrics, err := golden.ReadMetrics(expectedFile)
+			require.NoError(t, err)
+			require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, md,
+				pmetrictest.IgnoreStartTimestamp(),
+				pmetrictest.IgnoreResourceMetricsOrder(),
+				pmetrictest.IgnoreMetricDataPointsOrder(),
+				pmetrictest.IgnoreTimestamp(),
+				pmetrictest.IgnoreMetricsOrder()))
 		})
 	}
 }
@@ -460,7 +663,7 @@ func TestScraperWithPVCDetailedLabels(t *testing.T) {
 			dataLen: numVolumes,
 		},
 		{
-			name:         "pvc doesn't exist",
+			name:         "nonexistent_pvc",
 			k8sAPIClient: fake.NewSimpleClientset(),
 			dataLen:      numVolumes - 3,
 			volumeClaimsToMiss: map[string]bool{
@@ -471,7 +674,7 @@ func TestScraperWithPVCDetailedLabels(t *testing.T) {
 			numLogs: 3,
 		},
 		{
-			name:         "empty volume name in pvc",
+			name:         "empty_volume_name_in_pvc",
 			k8sAPIClient: fake.NewSimpleClientset(getMockedObjectsWithEmptyVolumeName()...),
 			expectedVolumes: map[string]expectedVolume{
 				"volume_claim_1": {
@@ -502,7 +705,7 @@ func TestScraperWithPVCDetailedLabels(t *testing.T) {
 			numLogs: 1,
 		},
 		{
-			name:         "non existent volume in pvc",
+			name:         "non_existent_volume_in_pvc",
 			k8sAPIClient: fake.NewSimpleClientset(getMockedObjectsWithNonExistentVolumeName()...),
 			expectedVolumes: map[string]expectedVolume{
 				"volume_claim_1": {
@@ -533,16 +736,16 @@ func TestScraperWithPVCDetailedLabels(t *testing.T) {
 			numLogs: 1,
 		},
 		{
-			name:    "don't collect detailed labels",
+			name:    "do_not_collect_detailed_labels",
 			dataLen: numVolumes,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			r, err := newKubletScraper(
+			r, err := newKubeletScraper(
 				&fakeRestClient{},
-				receivertest.NewNopCreateSettings(),
+				receivertest.NewNopSettings(metadata.Type),
 				&scraperOptions{
 					extraMetadataLabels: []kubelet.MetadataLabel{kubelet.MetadataLabelVolumeType},
 					metricGroupsToCollect: map[kubelet.MetricGroup]bool{
@@ -551,57 +754,29 @@ func TestScraperWithPVCDetailedLabels(t *testing.T) {
 					k8sAPIClient: test.k8sAPIClient,
 				},
 				metadata.DefaultMetricsBuilderConfig(),
+				"worker-42",
 			)
 			require.NoError(t, err)
 
-			md, err := r.Scrape(context.Background())
+			md, err := r.ScrapeMetrics(context.Background())
 			require.NoError(t, err)
-			require.Equal(t, test.dataLen*volumeMetrics, md.DataPointCount())
 
-			// If Kubernetes API is set, assert additional labels as well.
-			if test.k8sAPIClient != nil && len(test.expectedVolumes) > 0 {
-				rms := md.ResourceMetrics()
-				for i := 0; i < rms.Len(); i++ {
-					resource := rms.At(i).Resource()
-					claimName, ok := resource.Attributes().Get("k8s.persistentvolumeclaim.name")
-					// claimName will be non empty only when PVCs are used, all test cases
-					// in this method are interested only in such cases.
-					if !ok {
-						continue
-					}
+			filename := "test_scraper_with_pvc_labels_" + test.name + "_expected.yaml"
+			expectedFile := filepath.Join("testdata", "scraper", filename)
 
-					ev := test.expectedVolumes[claimName.Str()]
-					requireExpectedVolume(t, ev, resource)
+			// Uncomment to regenerate '*_expected.yaml' files
+			// golden.WriteMetrics(t, expectedFile, md)
 
-					// Assert metrics from certain volume claims expected to be missed
-					// are not collected.
-					if test.volumeClaimsToMiss != nil {
-						for c := range test.volumeClaimsToMiss {
-							val, ok := resource.Attributes().Get("k8s.persistentvolumeclaim.name")
-							require.True(t, !ok || val.Str() != c)
-						}
-					}
-				}
-			}
+			expectedMetrics, err := golden.ReadMetrics(expectedFile)
+			require.NoError(t, err)
+			require.NoError(t, pmetrictest.CompareMetrics(expectedMetrics, md,
+				pmetrictest.IgnoreStartTimestamp(),
+				pmetrictest.IgnoreResourceMetricsOrder(),
+				pmetrictest.IgnoreMetricDataPointsOrder(),
+				pmetrictest.IgnoreTimestamp(),
+				pmetrictest.IgnoreMetricsOrder()))
 		})
 	}
-}
-
-func requireExpectedVolume(t *testing.T, ev expectedVolume, resource pcommon.Resource) {
-	require.NotNil(t, ev)
-
-	requireAttribute(t, resource.Attributes(), "k8s.volume.name", ev.name)
-	requireAttribute(t, resource.Attributes(), "k8s.volume.type", ev.typ)
-	for k, v := range ev.labels {
-		requireAttribute(t, resource.Attributes(), k, v)
-	}
-}
-
-func requireAttribute(t *testing.T, attr pcommon.Map, key string, value string) {
-	val, ok := attr.Get(key)
-	require.True(t, ok)
-	require.Equal(t, value, val.Str())
-
 }
 
 func TestClientErrors(t *testing.T) {
@@ -650,13 +825,13 @@ func TestClientErrors(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			core, observedLogs := observer.New(zap.ErrorLevel)
 			logger := zap.New(core)
-			settings := receivertest.NewNopCreateSettings()
+			settings := receivertest.NewNopSettings(metadata.Type)
 			settings.Logger = logger
 			options := &scraperOptions{
 				extraMetadataLabels:   test.extraMetadataLabels,
 				metricGroupsToCollect: test.metricGroupsToCollect,
 			}
-			r, err := newKubletScraper(
+			r, err := newKubeletScraper(
 				&fakeRestClient{
 					statsSummaryFail: test.statsSummaryFail,
 					podsFail:         test.podsFail,
@@ -664,10 +839,11 @@ func TestClientErrors(t *testing.T) {
 				settings,
 				options,
 				metadata.DefaultMetricsBuilderConfig(),
+				"",
 			)
 			require.NoError(t, err)
 
-			_, err = r.Scrape(context.Background())
+			_, err = r.ScrapeMetrics(context.Background())
 			if test.numLogs == 0 {
 				require.NoError(t, err)
 			} else {

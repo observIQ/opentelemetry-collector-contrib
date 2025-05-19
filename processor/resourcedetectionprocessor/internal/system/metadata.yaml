@@ -19,6 +19,10 @@ resource_attributes:
     description: The os.type
     type: string
     enabled: true
+  os.version:
+    description: The os.version
+    type: string
+    enabled: false
   host.arch:
     description: The host.arch
     type: string
@@ -49,7 +53,7 @@ resource_attributes:
     enabled: false
   host.cpu.stepping:
     description: The host.cpu.stepping
-    type: int
+    type: string
     enabled: false
   host.cpu.cache.l2.size:
     description: The host.cpu.cache.l2.size

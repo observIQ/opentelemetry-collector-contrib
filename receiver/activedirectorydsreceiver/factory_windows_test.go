@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //go:build windows
-// +build windows
 
 package activedirectorydsreceiver
 
@@ -13,13 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/activedirectorydsreceiver/internal/metadata"
 )
 
-func TestCreateMetricsReceiver(t *testing.T) {
+func TestCreateMetrics(t *testing.T) {
 	t.Run("Nil config gives error", func(t *testing.T) {
 		recv, err := createMetricsReceiver(
 			context.Background(),
-			receivertest.NewNopCreateSettings(),
+			receivertest.NewNopSettings(metadata.Type),
 			nil,
 			&consumertest.MetricsSink{},
 		)
@@ -32,7 +33,7 @@ func TestCreateMetricsReceiver(t *testing.T) {
 	t.Run("Metrics receiver is created with default config", func(t *testing.T) {
 		recv, err := createMetricsReceiver(
 			context.Background(),
-			receivertest.NewNopCreateSettings(),
+			receivertest.NewNopSettings(metadata.Type),
 			createDefaultConfig(),
 			&consumertest.MetricsSink{},
 		)

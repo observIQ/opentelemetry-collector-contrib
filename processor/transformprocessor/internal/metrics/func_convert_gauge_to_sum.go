@@ -5,6 +5,7 @@ package metrics // import "github.com/open-telemetry/opentelemetry-collector-con
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.opentelemetry.io/collector/pdata/pmetric"
@@ -26,7 +27,7 @@ func createConvertGaugeToSumFunction(_ ottl.FunctionContext, oArgs ottl.Argument
 	args, ok := oArgs.(*convertGaugeToSumArguments)
 
 	if !ok {
-		return nil, fmt.Errorf("ConvertGaugeToSumFactory args must be of type *ConvertGaugeToSumArguments")
+		return nil, errors.New("ConvertGaugeToSumFactory args must be of type *ConvertGaugeToSumArguments")
 	}
 
 	return convertGaugeToSum(args.StringAggTemp, args.Monotonic)
@@ -54,8 +55,8 @@ func convertGaugeToSum(stringAggTemp string, monotonic bool) (ottl.ExprFunc[ottl
 		metric.SetEmptySum().SetAggregationTemporality(aggTemp)
 		metric.Sum().SetIsMonotonic(monotonic)
 
-		// Setting the data type removed all the data points, so we must copy them back to the metric.
-		dps.CopyTo(metric.Sum().DataPoints())
+		// Setting the data type removed all the data points, so we must move them back to the metric.
+		dps.MoveAndAppendTo(metric.Sum().DataPoints())
 
 		return nil, nil
 	}, nil

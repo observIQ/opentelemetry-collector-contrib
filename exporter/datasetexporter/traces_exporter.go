@@ -19,20 +19,20 @@ import (
 
 const ServiceNameKey = "service.name"
 
-func createTracesExporter(ctx context.Context, set exporter.CreateSettings, config component.Config) (exporter.Traces, error) {
+func createTracesExporter(ctx context.Context, set exporter.Settings, config component.Config) (exporter.Traces, error) {
 	cfg := castConfig(config)
 	e, err := newDatasetExporter("traces", cfg, set)
 	if err != nil {
 		return nil, fmt.Errorf("cannot get DataSetExporter: %w", err)
 	}
 
-	return exporterhelper.NewTracesExporter(
+	return exporterhelper.NewTraces(
 		ctx,
 		set,
 		config,
 		e.consumeTraces,
 		exporterhelper.WithQueue(cfg.QueueSettings),
-		exporterhelper.WithRetry(cfg.RetrySettings),
+		exporterhelper.WithRetry(cfg.BackOffConfig),
 		exporterhelper.WithTimeout(cfg.TimeoutSettings),
 		exporterhelper.WithShutdown(e.shutdown),
 	)
@@ -53,7 +53,7 @@ func buildEventFromSpan(
 	}
 
 	attrs["sca:schema"] = "tracing"
-	attrs["sca:schemVer"] = 1
+	attrs["sca:schemaVer"] = 1
 	attrs["sca:type"] = "span"
 
 	attrs["name"] = span.Name()
@@ -88,8 +88,10 @@ func buildEventFromSpan(
 	}
 }
 
-const resourceName = "resource_name"
-const resourceType = "resource_type"
+const (
+	resourceName = "resource_name"
+	resourceType = "resource_type"
+)
 
 type ResourceType string
 
@@ -134,7 +136,7 @@ type spanBundle struct {
 }
 
 func buildEventsFromTraces(ld ptrace.Traces, serverHost string, settings TracesSettings) []*add_events.EventBundle {
-	var spans = make([]spanBundle, 0)
+	spans := make([]spanBundle, 0)
 
 	// convert spans into events
 	resourceSpans := ld.ResourceSpans()

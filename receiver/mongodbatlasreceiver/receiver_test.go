@@ -12,20 +12,26 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mongodbatlasreceiver/internal/metadata"
 )
 
 func TestDefaultConfig(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
-	require.Equal(t, cfg.(*Config).ScraperControllerSettings.CollectionInterval, 3*time.Minute)
-	recv, err := createMetricsReceiver(context.Background(), receivertest.NewNopCreateSettings(), cfg, consumertest.NewNop())
+	require.Equal(t, 3*time.Minute, cfg.(*Config).CollectionInterval)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	recv, err := createMetricsReceiver(ctx, receivertest.NewNopSettings(metadata.Type), cfg, consumertest.NewNop())
 	require.NoError(t, err)
 	require.NotNil(t, recv, "receiver creation failed")
 
-	err = recv.Start(context.Background(), componenttest.NewNopHost())
+	err = recv.Start(ctx, componenttest.NewNopHost())
 	require.NoError(t, err)
 
-	err = recv.Shutdown(context.Background())
+	err = recv.Shutdown(ctx)
 	require.NoError(t, err)
 }
 

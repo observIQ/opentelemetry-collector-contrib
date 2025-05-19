@@ -19,22 +19,18 @@ type logExporter struct {
 	Index        string
 	bulkAction   string
 	model        mappingModel
-	httpSettings confighttp.HTTPClientSettings
+	httpSettings confighttp.ClientConfig
 	telemetry    component.TelemetrySettings
 }
 
-func newLogExporter(cfg *Config, set exporter.CreateSettings) (*logExporter, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
-
+func newLogExporter(cfg *Config, set exporter.Settings) *logExporter {
 	model := &encodeModel{
 		dedup:             cfg.Dedup,
 		dedot:             cfg.Dedot,
-		sso:               cfg.MappingsSettings.Mode == MappingSS4O.String(),
-		flattenAttributes: cfg.MappingsSettings.Mode == MappingFlattenAttributes.String(),
-		timestampField:    cfg.MappingsSettings.TimestampField,
-		unixTime:          cfg.MappingsSettings.UnixTimestamp,
+		sso:               cfg.Mode == MappingSS4O.String(),
+		flattenAttributes: cfg.Mode == MappingFlattenAttributes.String(),
+		timestampField:    cfg.TimestampField,
+		unixTime:          cfg.UnixTimestamp,
 		dataset:           cfg.Dataset,
 		namespace:         cfg.Namespace,
 	}
@@ -43,13 +39,13 @@ func newLogExporter(cfg *Config, set exporter.CreateSettings) (*logExporter, err
 		telemetry:    set.TelemetrySettings,
 		Index:        getIndexName(cfg.Dataset, cfg.Namespace, cfg.LogsIndex),
 		bulkAction:   cfg.BulkAction,
-		httpSettings: cfg.HTTPClientSettings,
+		httpSettings: cfg.ClientConfig,
 		model:        model,
-	}, nil
+	}
 }
 
-func (l *logExporter) Start(_ context.Context, host component.Host) error {
-	httpClient, err := l.httpSettings.ToClient(host, l.telemetry)
+func (l *logExporter) Start(ctx context.Context, host component.Host) error {
+	httpClient, err := l.httpSettings.ToClient(ctx, host, l.telemetry)
 	if err != nil {
 		return err
 	}

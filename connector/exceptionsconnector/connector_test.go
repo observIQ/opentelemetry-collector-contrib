@@ -8,7 +8,7 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/ptrace"
-	conventions "go.opentelemetry.io/collector/semconv/v1.6.1"
+	conventions "go.opentelemetry.io/otel/semconv/v1.27.0"
 )
 
 const (
@@ -32,6 +32,7 @@ type serviceSpans struct {
 }
 
 type span struct {
+	name       string
 	kind       ptrace.SpanKind
 	statusCode ptrace.StatusCode
 }
@@ -49,10 +50,12 @@ func buildSampleTrace() ptrace.Traces {
 			serviceName: "service-a",
 			spans: []span{
 				{
+					name:       "svc-a-ep1",
 					kind:       ptrace.SpanKindServer,
 					statusCode: ptrace.StatusCodeError,
 				},
 				{
+					name:       "svc-a-ep2",
 					kind:       ptrace.SpanKindClient,
 					statusCode: ptrace.StatusCodeError,
 				},
@@ -63,6 +66,7 @@ func buildSampleTrace() ptrace.Traces {
 			serviceName: "service-b",
 			spans: []span{
 				{
+					name:       "svc-b-ep1",
 					kind:       ptrace.SpanKindServer,
 					statusCode: ptrace.StatusCodeError,
 				},
@@ -74,7 +78,7 @@ func buildSampleTrace() ptrace.Traces {
 
 func initServiceSpans(serviceSpans serviceSpans, spans ptrace.ResourceSpans) {
 	if serviceSpans.serviceName != "" {
-		spans.Resource().Attributes().PutStr(conventions.AttributeServiceName, serviceSpans.serviceName)
+		spans.Resource().Attributes().PutStr(string(conventions.ServiceNameKey), serviceSpans.serviceName)
 	}
 
 	ils := spans.ScopeSpans().AppendEmpty()
@@ -85,6 +89,7 @@ func initServiceSpans(serviceSpans serviceSpans, spans ptrace.ResourceSpans) {
 
 func initSpan(span span, s ptrace.Span) {
 	s.SetKind(span.kind)
+	s.SetName(span.name)
 	s.Status().SetCode(span.statusCode)
 	now := time.Now()
 	s.SetStartTimestamp(pcommon.NewTimestampFromTime(now))

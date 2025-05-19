@@ -13,19 +13,18 @@ import (
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	common "skywalking.apache.org/repo/goapi/collect/common/v3"
 	agent "skywalking.apache.org/repo/goapi/collect/language/agent/v3"
-	agentV3 "skywalking.apache.org/repo/goapi/collect/language/agent/v3"
 )
 
 func TestSetInternalSpanStatus(t *testing.T) {
 	tests := []struct {
 		name   string
-		swSpan *agentV3.SpanObject
+		swSpan *agent.SpanObject
 		dest   ptrace.Status
 		code   ptrace.StatusCode
 	}{
 		{
 			name: "StatusCodeError",
-			swSpan: &agentV3.SpanObject{
+			swSpan: &agent.SpanObject{
 				IsError: true,
 			},
 			dest: generateTracesOneEmptyResourceSpans().Status(),
@@ -33,7 +32,7 @@ func TestSetInternalSpanStatus(t *testing.T) {
 		},
 		{
 			name: "StatusCodeOk",
-			swSpan: &agentV3.SpanObject{
+			swSpan: &agent.SpanObject{
 				IsError: false,
 			},
 			dest: generateTracesOneEmptyResourceSpans().Status(),
@@ -52,7 +51,7 @@ func TestSetInternalSpanStatus(t *testing.T) {
 func TestSwKvPairsToInternalAttributes(t *testing.T) {
 	tests := []struct {
 		name   string
-		swSpan *agentV3.SegmentObject
+		swSpan *agent.SegmentObject
 		dest   ptrace.Span
 	}{
 		{
@@ -69,7 +68,7 @@ func TestSwKvPairsToInternalAttributes(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			swKvPairsToInternalAttributes(test.swSpan.GetSpans()[0].Tags, test.dest.Attributes())
-			assert.Equal(t, test.dest.Attributes().Len(), len(test.swSpan.GetSpans()[0].Tags))
+			assert.Len(t, test.swSpan.GetSpans()[0].Tags, test.dest.Attributes().Len())
 			for _, tag := range test.swSpan.GetSpans()[0].Tags {
 				value, _ := test.dest.Attributes().Get(tag.Key)
 				assert.Equal(t, tag.Value, value.AsString())
@@ -81,7 +80,7 @@ func TestSwKvPairsToInternalAttributes(t *testing.T) {
 func TestSwProtoToTraces(t *testing.T) {
 	tests := []struct {
 		name   string
-		swSpan *agentV3.SegmentObject
+		swSpan *agent.SegmentObject
 		dest   ptrace.Traces
 		code   ptrace.StatusCode
 	}{
@@ -102,7 +101,7 @@ func TestSwProtoToTraces(t *testing.T) {
 func TestSwReferencesToSpanLinks(t *testing.T) {
 	tests := []struct {
 		name   string
-		swSpan *agentV3.SegmentObject
+		swSpan *agent.SegmentObject
 		dest   ptrace.Span
 	}{
 		{
@@ -128,7 +127,7 @@ func TestSwReferencesToSpanLinks(t *testing.T) {
 func TestSwLogsToSpanEvents(t *testing.T) {
 	tests := []struct {
 		name   string
-		swSpan *agentV3.SegmentObject
+		swSpan *agent.SegmentObject
 		dest   ptrace.Span
 	}{
 		{
@@ -216,9 +215,9 @@ func Test_stringToTraceID_Unique(t *testing.T) {
 	}
 
 	var results [2][16]byte
-	for i := 0; i < 2; i++ {
+	for i := 0; i < len(tests); i++ {
 		tt := tests[i]
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			got := swTraceIDToTraceID(tt.segmentObject.traceID)
 			results[i] = got
 		})
@@ -292,7 +291,7 @@ func Test_segmentIdToSpanId_Unique(t *testing.T) {
 	var results [2][8]byte
 	for i := 0; i < 2; i++ {
 		tt := tests[i]
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			got := segmentIDToSpanID(tt.args.segmentID, tt.args.spanID)
 			results[i] = got
 		})
@@ -303,7 +302,7 @@ func Test_segmentIdToSpanId_Unique(t *testing.T) {
 
 func Test_swSpanToSpan_ParentSpanId(t *testing.T) {
 	type args struct {
-		span *agentV3.SpanObject
+		span *agent.SpanObject
 	}
 	tests := []struct {
 		name string
@@ -312,17 +311,18 @@ func Test_swSpanToSpan_ParentSpanId(t *testing.T) {
 	}{
 		{
 			name: "mock-sw-span-with-parent-segment",
-			args: args{span: &agentV3.SpanObject{
+			args: args{span: &agent.SpanObject{
 				ParentSpanId: -1,
-				Refs: []*agentV3.SegmentReference{{
+				Refs: []*agent.SegmentReference{{
 					ParentTraceSegmentId: "4f2f27748b8e44ecaf18fe0347194e86.33.16560607369950066",
 					ParentSpanId:         123,
-				}}}},
+				}},
+			}},
 			want: [8]byte{233, 196, 85, 168, 37, 66, 48, 106},
 		},
 		{
 			name: "mock-sw-span-without-parent-segment",
-			args: args{span: &agentV3.SpanObject{Refs: []*agentV3.SegmentReference{{
+			args: args{span: &agent.SpanObject{Refs: []*agent.SegmentReference{{
 				ParentSpanId: -1,
 			}}}},
 		},

@@ -6,6 +6,7 @@ package ottl // import "github.com/open-telemetry/opentelemetry-collector-contri
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/alecthomas/participle/v2/lexer"
 )
@@ -19,17 +20,17 @@ type parsedStatement struct {
 }
 
 func (p *parsedStatement) checkForCustomError() error {
+	validator := &grammarCustomErrorsVisitor{}
 	if p.Converter != nil {
-		return fmt.Errorf("editor names must start with a lowercase letter but got '%v'", p.Converter.Function)
+		validator.add(fmt.Errorf("editor names must start with a lowercase letter but got '%v'", p.Converter.Function))
 	}
-	err := p.Editor.checkForCustomError()
-	if err != nil {
-		return err
-	}
+
+	p.Editor.accept(validator)
 	if p.WhereClause != nil {
-		return p.WhereClause.checkForCustomError()
+		p.WhereClause.accept(validator)
 	}
-	return nil
+
+	return validator.join()
 }
 
 type constExpr struct {
@@ -47,14 +48,16 @@ type booleanValue struct {
 	SubExpr    *booleanExpression `parser:"| '(' @@ ')' )"`
 }
 
-func (b *booleanValue) checkForCustomError() error {
+func (b *booleanValue) accept(v grammarVisitor) {
 	if b.Comparison != nil {
-		return b.Comparison.checkForCustomError()
+		b.Comparison.accept(v)
+	}
+	if b.ConstExpr != nil && b.ConstExpr.Converter != nil {
+		b.ConstExpr.Converter.accept(v)
 	}
 	if b.SubExpr != nil {
-		return b.SubExpr.checkForCustomError()
+		b.SubExpr.accept(v)
 	}
-	return nil
 }
 
 // opAndBooleanValue represents the right side of an AND boolean expression.
@@ -63,8 +66,10 @@ type opAndBooleanValue struct {
 	Value    *booleanValue `parser:"@@"`
 }
 
-func (b *opAndBooleanValue) checkForCustomError() error {
-	return b.Value.checkForCustomError()
+func (b *opAndBooleanValue) accept(v grammarVisitor) {
+	if b.Value != nil {
+		b.Value.accept(v)
+	}
 }
 
 // term represents an arbitrary number of boolean values joined by AND.
@@ -73,18 +78,15 @@ type term struct {
 	Right []*opAndBooleanValue `parser:"@@*"`
 }
 
-func (b *term) checkForCustomError() error {
-	err := b.Left.checkForCustomError()
-	if err != nil {
-		return err
+func (b *term) accept(v grammarVisitor) {
+	if b.Left != nil {
+		b.Left.accept(v)
 	}
 	for _, r := range b.Right {
-		err = r.checkForCustomError()
-		if err != nil {
-			return err
+		if r != nil {
+			r.accept(v)
 		}
 	}
-	return nil
 }
 
 // opOrTerm represents the right side of an OR boolean expression.
@@ -93,8 +95,10 @@ type opOrTerm struct {
 	Term     *term  `parser:"@@"`
 }
 
-func (b *opOrTerm) checkForCustomError() error {
-	return b.Term.checkForCustomError()
+func (b *opOrTerm) accept(v grammarVisitor) {
+	if b.Term != nil {
+		b.Term.accept(v)
+	}
 }
 
 // booleanExpression represents a true/false decision expressed
@@ -105,17 +109,20 @@ type booleanExpression struct {
 }
 
 func (b *booleanExpression) checkForCustomError() error {
-	err := b.Left.checkForCustomError()
-	if err != nil {
-		return err
+	validator := &grammarCustomErrorsVisitor{}
+	b.accept(validator)
+	return validator.join()
+}
+
+func (b *booleanExpression) accept(v grammarVisitor) {
+	if b.Left != nil {
+		b.Left.accept(v)
 	}
 	for _, r := range b.Right {
-		err = r.checkForCustomError()
-		if err != nil {
-			return err
+		if r != nil {
+			r.accept(v)
 		}
 	}
-	return nil
 }
 
 // compareOp is the type of a comparison operator.
@@ -123,22 +130,22 @@ type compareOp int
 
 // These are the allowed values of a compareOp
 const (
-	EQ compareOp = iota
-	NE
-	LT
-	LTE
-	GTE
-	GT
+	eq compareOp = iota
+	ne
+	lt
+	lte
+	gte
+	gt
 )
 
 // a fast way to get from a string to a compareOp
 var compareOpTable = map[string]compareOp{
-	"==": EQ,
-	"!=": NE,
-	"<":  LT,
-	"<=": LTE,
-	">":  GT,
-	">=": GTE,
+	"==": eq,
+	"!=": ne,
+	"<":  lt,
+	"<=": lte,
+	">":  gt,
+	">=": gte,
 }
 
 // Capture is how the parser converts an operator string to a compareOp.
@@ -154,18 +161,18 @@ func (c *compareOp) Capture(values []string) error {
 // String() for compareOp gives us more legible test results and error messages.
 func (c *compareOp) String() string {
 	switch *c {
-	case EQ:
-		return "EQ"
-	case NE:
-		return "NE"
-	case LT:
-		return "LT"
-	case LTE:
-		return "LTE"
-	case GTE:
-		return "GTE"
-	case GT:
-		return "GT"
+	case eq:
+		return "eq"
+	case ne:
+		return "ne"
+	case lt:
+		return "lt"
+	case lte:
+		return "lte"
+	case gte:
+		return "gte"
+	case gt:
+		return "gt"
 	default:
 		return "UNKNOWN OP!"
 	}
@@ -178,13 +185,9 @@ type comparison struct {
 	Right value     `parser:"@@"`
 }
 
-func (c *comparison) checkForCustomError() error {
-	err := c.Left.checkForCustomError()
-	if err != nil {
-		return err
-	}
-	err = c.Right.checkForCustomError()
-	return err
+func (c *comparison) accept(v grammarVisitor) {
+	c.Left.accept(v)
+	c.Right.accept(v)
 }
 
 // editor represents the function call of a statement.
@@ -192,38 +195,40 @@ type editor struct {
 	Function  string     `parser:"@(Lowercase(Uppercase | Lowercase)*)"`
 	Arguments []argument `parser:"'(' ( @@ ( ',' @@ )* )? ')'"`
 	// If keys are matched return an error
-	Keys []Key `parser:"( @@ )*"`
+	Keys []key `parser:"( @@ )*"`
 }
 
-func (i *editor) checkForCustomError() error {
-	var err error
-
+func (i *editor) accept(v grammarVisitor) {
+	v.visitEditor(i)
 	for _, arg := range i.Arguments {
-		err = arg.checkForCustomError()
-		if err != nil {
-			return err
-		}
+		arg.accept(v)
 	}
-	if i.Keys != nil {
-		return fmt.Errorf("only paths and converters may be indexed, not editors, but got %v %v", i.Function, i.Keys)
-	}
-	return nil
 }
 
 // converter represents a converter function call.
 type converter struct {
 	Function  string     `parser:"@(Uppercase(Uppercase | Lowercase)*)"`
 	Arguments []argument `parser:"'(' ( @@ ( ',' @@ )* )? ')'"`
-	Keys      []Key      `parser:"( @@ )*"`
+	Keys      []key      `parser:"( @@ )*"`
+}
+
+func (c *converter) accept(v grammarVisitor) {
+	v.visitConverter(c)
+	if c.Arguments != nil {
+		for _, a := range c.Arguments {
+			a.accept(v)
+		}
+	}
 }
 
 type argument struct {
-	Name  string `parser:"(@(Lowercase(Uppercase | Lowercase)*) Equal)?"`
-	Value value  `parser:"@@"`
+	Name         string  `parser:"(@(Lowercase(Uppercase | Lowercase)*) Equal)?"`
+	Value        value   `parser:"( @@"`
+	FunctionName *string `parser:"| @(Uppercase(Uppercase | Lowercase)*) )"`
 }
 
-func (a *argument) checkForCustomError() error {
-	return a.Value.checkForCustomError()
+func (a *argument) accept(v grammarVisitor) {
+	a.Value.accept(v)
 }
 
 // value represents a part of a parsed statement which is resolved to a value of some sort. This can be a telemetry path
@@ -235,39 +240,96 @@ type value struct {
 	Bytes          *byteSlice       `parser:"| @Bytes"`
 	String         *string          `parser:"| @String"`
 	Bool           *boolean         `parser:"| @Boolean"`
-	Enum           *EnumSymbol      `parser:"| @Uppercase (?! Lowercase)"`
-	FunctionName   *string          `parser:"| @(Uppercase(Uppercase | Lowercase)*)"`
+	Enum           *enumSymbol      `parser:"| @Uppercase (?! Lowercase)"`
+	Map            *mapValue        `parser:"| @@"`
 	List           *list            `parser:"| @@)"`
 }
 
 func (v *value) checkForCustomError() error {
+	validator := &grammarCustomErrorsVisitor{}
+	v.accept(validator)
+	return validator.join()
+}
+
+func (v *value) accept(vis grammarVisitor) {
+	vis.visitValue(v)
 	if v.Literal != nil {
-		return v.Literal.checkForCustomError()
+		v.Literal.accept(vis)
 	}
 	if v.MathExpression != nil {
-		return v.MathExpression.checkForCustomError()
+		v.MathExpression.accept(vis)
 	}
-	return nil
+	if v.Map != nil {
+		v.Map.accept(vis)
+	}
+	if v.List != nil {
+		for _, i := range v.List.Values {
+			i.accept(vis)
+		}
+	}
 }
 
-// Path represents a telemetry path mathExpression.
-type Path struct {
-	Fields []Field `parser:"@@ ( '.' @@ )*"`
+// path represents a telemetry path mathExpression.
+type path struct {
+	Pos     lexer.Position
+	Context string  `parser:"(@Lowercase '.')?"`
+	Fields  []field `parser:"@@ ( '.' @@ )*"`
 }
 
-// Field is an item within a Path.
-type Field struct {
+func (p *path) accept(v grammarVisitor) {
+	v.visitPath(p)
+	for _, field := range p.Fields {
+		field.accept(v)
+	}
+}
+
+// field is an item within a path.
+type field struct {
 	Name string `parser:"@Lowercase"`
-	Keys []Key  `parser:"( @@ )*"`
+	Keys []key  `parser:"( @@ )*"`
 }
 
-type Key struct {
-	String *string `parser:"'[' (@String "`
-	Int    *int64  `parser:"| @Int) ']'"`
+func (f *field) accept(v grammarVisitor) {
+	for _, key := range f.Keys {
+		key.accept(v)
+	}
+}
+
+type key struct {
+	String         *string          `parser:"'[' (@String "`
+	Int            *int64           `parser:"| @Int"`
+	MathExpression *mathExpression  `parser:"| @@"`
+	Expression     *mathExprLiteral `parser:"| @@ ) ']'"`
+}
+
+func (k *key) accept(v grammarVisitor) {
+	if k.MathExpression != nil {
+		k.MathExpression.accept(v)
+	}
+	if k.Expression != nil {
+		k.Expression.accept(v)
+	}
 }
 
 type list struct {
 	Values []value `parser:"'[' (@@)* (',' @@)* ']'"`
+}
+
+type mapValue struct {
+	Values []mapItem `parser:"'{' (@@ ','?)* '}'"`
+}
+
+func (m *mapValue) accept(v grammarVisitor) {
+	for _, i := range m.Values {
+		if i.Value != nil {
+			i.Value.accept(v)
+		}
+	}
+}
+
+type mapItem struct {
+	Key   *string `parser:"@String ':'"`
+	Value *value  `parser:"@@"`
 }
 
 // byteSlice type for capturing byte slices
@@ -305,14 +367,20 @@ type mathExprLiteral struct {
 	Converter *converter `parser:"| @@"`
 	Float     *float64   `parser:"| @Float"`
 	Int       *int64     `parser:"| @Int"`
-	Path      *Path      `parser:"| @@ )"`
+	Path      *path      `parser:"| @@ )"`
 }
 
-func (m *mathExprLiteral) checkForCustomError() error {
-	if m.Editor != nil {
-		return fmt.Errorf("converter names must start with an uppercase letter but got '%v'", m.Editor.Function)
+func (m *mathExprLiteral) accept(v grammarVisitor) {
+	v.visitMathExprLiteral(m)
+	if m.Path != nil {
+		m.Path.accept(v)
 	}
-	return nil
+	if m.Editor != nil {
+		m.Editor.accept(v)
+	}
+	if m.Converter != nil {
+		m.Converter.accept(v)
+	}
 }
 
 type mathValue struct {
@@ -320,11 +388,13 @@ type mathValue struct {
 	SubExpression *mathExpression  `parser:"| '(' @@ ')' )"`
 }
 
-func (m *mathValue) checkForCustomError() error {
+func (m *mathValue) accept(v grammarVisitor) {
 	if m.Literal != nil {
-		return m.Literal.checkForCustomError()
+		m.Literal.accept(v)
 	}
-	return m.SubExpression.checkForCustomError()
+	if m.SubExpression != nil {
+		m.SubExpression.accept(v)
+	}
 }
 
 type opMultDivValue struct {
@@ -332,8 +402,10 @@ type opMultDivValue struct {
 	Value    *mathValue `parser:"@@"`
 }
 
-func (m *opMultDivValue) checkForCustomError() error {
-	return m.Value.checkForCustomError()
+func (m *opMultDivValue) accept(v grammarVisitor) {
+	if m.Value != nil {
+		m.Value.accept(v)
+	}
 }
 
 type addSubTerm struct {
@@ -341,18 +413,15 @@ type addSubTerm struct {
 	Right []*opMultDivValue `parser:"@@*"`
 }
 
-func (m *addSubTerm) checkForCustomError() error {
-	err := m.Left.checkForCustomError()
-	if err != nil {
-		return err
+func (m *addSubTerm) accept(v grammarVisitor) {
+	if m.Left != nil {
+		m.Left.accept(v)
 	}
 	for _, r := range m.Right {
-		err = r.checkForCustomError()
-		if err != nil {
-			return err
+		if r != nil {
+			r.accept(v)
 		}
 	}
-	return nil
 }
 
 type opAddSubTerm struct {
@@ -360,8 +429,10 @@ type opAddSubTerm struct {
 	Term     *addSubTerm `parser:"@@"`
 }
 
-func (m *opAddSubTerm) checkForCustomError() error {
-	return m.Term.checkForCustomError()
+func (r *opAddSubTerm) accept(v grammarVisitor) {
+	if r.Term != nil {
+		r.Term.accept(v)
+	}
 }
 
 type mathExpression struct {
@@ -369,34 +440,33 @@ type mathExpression struct {
 	Right []*opAddSubTerm `parser:"@@*"`
 }
 
-func (m *mathExpression) checkForCustomError() error {
-	err := m.Left.checkForCustomError()
-	if err != nil {
-		return err
+func (m *mathExpression) accept(v grammarVisitor) {
+	if m.Left != nil {
+		m.Left.accept(v)
 	}
-	for _, r := range m.Right {
-		err = r.checkForCustomError()
-		if err != nil {
-			return err
+	if m.Right != nil {
+		for _, r := range m.Right {
+			if r != nil {
+				r.accept(v)
+			}
 		}
 	}
-	return nil
 }
 
 type mathOp int
 
 const (
-	ADD mathOp = iota
-	SUB
-	MULT
-	DIV
+	add mathOp = iota
+	sub
+	mult
+	div
 )
 
 var mathOpTable = map[string]mathOp{
-	"+": ADD,
-	"-": SUB,
-	"*": MULT,
-	"/": DIV,
+	"+": add,
+	"-": sub,
+	"*": mult,
+	"/": div,
 }
 
 func (m *mathOp) Capture(values []string) error {
@@ -410,20 +480,20 @@ func (m *mathOp) Capture(values []string) error {
 
 func (m *mathOp) String() string {
 	switch *m {
-	case ADD:
+	case add:
 		return "+"
-	case SUB:
+	case sub:
 		return "-"
-	case MULT:
+	case mult:
 		return "*"
-	case DIV:
+	case div:
 		return "/"
 	default:
 		return "UNKNOWN OP!"
 	}
 }
 
-type EnumSymbol string
+type enumSymbol string
 
 // buildLexer constructs a SimpleLexer definition.
 // Note that the ordering of these rules matters.
@@ -433,7 +503,7 @@ func buildLexer() *lexer.StatefulDefinition {
 		{Name: `Bytes`, Pattern: `0x[a-fA-F0-9]+`},
 		{Name: `Float`, Pattern: `[-+]?\d*\.\d+([eE][-+]?\d+)?`},
 		{Name: `Int`, Pattern: `[-+]?\d+`},
-		{Name: `String`, Pattern: `"(\\"|[^"])*"`},
+		{Name: `String`, Pattern: `"(\\.|[^\\"])*"`},
 		{Name: `OpNot`, Pattern: `\b(not)\b`},
 		{Name: `OpOr`, Pattern: `\b(or)\b`},
 		{Name: `OpAnd`, Pattern: `\b(and)\b`},
@@ -444,9 +514,83 @@ func buildLexer() *lexer.StatefulDefinition {
 		{Name: `Equal`, Pattern: `=`},
 		{Name: `LParen`, Pattern: `\(`},
 		{Name: `RParen`, Pattern: `\)`},
+		{Name: `LBrace`, Pattern: `\{`},
+		{Name: `RBrace`, Pattern: `\}`},
+		{Name: `Colon`, Pattern: `\:`},
 		{Name: `Punct`, Pattern: `[,.\[\]]`},
 		{Name: `Uppercase`, Pattern: `[A-Z][A-Z0-9_]*`},
 		{Name: `Lowercase`, Pattern: `[a-z][a-z0-9_]*`},
 		{Name: "whitespace", Pattern: `\s+`},
 	})
+}
+
+// grammarCustomError represents a grammar error in which the statement has a valid syntax
+// according to the grammar's definition, but is still logically invalid.
+type grammarCustomError struct {
+	errs []error
+}
+
+// Error returns all errors messages separate by semicolons.
+func (e *grammarCustomError) Error() string {
+	switch len(e.errs) {
+	case 0:
+		return ""
+	case 1:
+		return e.errs[0].Error()
+	default:
+		var b strings.Builder
+		b.WriteString(e.errs[0].Error())
+		for _, err := range e.errs[1:] {
+			b.WriteString("; ")
+			b.WriteString(err.Error())
+		}
+		return b.String()
+	}
+}
+
+func (e *grammarCustomError) Unwrap() []error {
+	return e.errs
+}
+
+// grammarVisitor allows accessing the grammar AST nodes using the visitor pattern.
+type grammarVisitor interface {
+	visitPath(v *path)
+	visitEditor(v *editor)
+	visitConverter(v *converter)
+	visitValue(v *value)
+	visitMathExprLiteral(v *mathExprLiteral)
+}
+
+// grammarCustomErrorsVisitor is used to execute custom validations on the grammar AST.
+type grammarCustomErrorsVisitor struct {
+	errs []error
+}
+
+func (g *grammarCustomErrorsVisitor) add(err error) {
+	g.errs = append(g.errs, err)
+}
+
+func (g *grammarCustomErrorsVisitor) join() error {
+	if len(g.errs) == 0 {
+		return nil
+	}
+	return &grammarCustomError{errs: g.errs}
+}
+
+func (g *grammarCustomErrorsVisitor) visitPath(_ *path) {}
+
+func (g *grammarCustomErrorsVisitor) visitValue(_ *value) {}
+
+func (g *grammarCustomErrorsVisitor) visitConverter(_ *converter) {}
+
+func (g *grammarCustomErrorsVisitor) visitEditor(v *editor) {
+	if v.Keys != nil {
+		g.add(fmt.Errorf("only paths and converters may be indexed, not editors, but got %s%s", v.Function, buildOriginalKeysText(v.Keys)))
+	}
+}
+
+func (g *grammarCustomErrorsVisitor) visitMathExprLiteral(v *mathExprLiteral) {
+	if v.Editor != nil {
+		g.add(fmt.Errorf("converter names must start with an uppercase letter but got '%v'", v.Editor.Function))
+	}
 }

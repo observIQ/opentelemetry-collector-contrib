@@ -26,11 +26,10 @@ func NewFloat64DeltaCalculator() MetricCalculator {
 
 func calculateDelta(prev *MetricValue, val any, _ time.Time) (any, bool) {
 	var deltaValue float64
-	if prev != nil {
-		deltaValue = val.(float64) - prev.RawValue.(float64)
-	} else {
+	if prev == nil {
 		return deltaValue, false
 	}
+	deltaValue = val.(float64) - prev.RawValue.(float64)
 	return deltaValue, true
 }
 
@@ -93,11 +92,10 @@ type Key struct {
 
 func NewKey(metricMetadata any, labels map[string]string) Key {
 	kvs := make([]attribute.KeyValue, 0, len(labels))
-	var sortable attribute.Sortable
 	for k, v := range labels {
 		kvs = append(kvs, attribute.String(k, v))
 	}
-	set := attribute.NewSetWithSortable(kvs, &sortable)
+	set := attribute.NewSet(kvs...)
 
 	dedupSortedLabels := set.Equivalent()
 	return Key{
@@ -123,7 +121,7 @@ type MapWithExpiry struct {
 // NewMapWithExpiry automatically starts a sweeper to enforce the maps TTL. ShutDown() must be called to ensure that these
 // go routines are properly cleaned up ShutDown() must be called.
 func NewMapWithExpiry(ttl time.Duration) *MapWithExpiry {
-	m := &MapWithExpiry{lock: &sync.Mutex{}, ttl: ttl, entries: make(map[any]*MetricValue), doneChan: make(chan struct{})}
+	m := &MapWithExpiry{lock: &sync.Mutex{}, ttl: ttl, entries: make(map[any]*MetricValue), doneChan: make(chan struct{}, 1000)}
 	go m.sweep(m.CleanUp)
 	return m
 }
@@ -158,7 +156,6 @@ func (m *MapWithExpiry) Shutdown() error {
 		return errors.New("shutdown called on an already closed channel")
 	default:
 		close(m.doneChan)
-
 	}
 	return nil
 }

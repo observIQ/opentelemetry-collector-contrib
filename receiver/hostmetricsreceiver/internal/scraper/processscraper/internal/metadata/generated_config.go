@@ -2,7 +2,10 @@
 
 package metadata
 
-import "go.opentelemetry.io/collector/confmap"
+import (
+	"go.opentelemetry.io/collector/confmap"
+	"go.opentelemetry.io/collector/filter"
+)
 
 // MetricConfig provides common config for a particular metric.
 type MetricConfig struct {
@@ -15,7 +18,7 @@ func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
-	err := parser.Unmarshal(ms, confmap.WithErrorUnused())
+	err := parser.Unmarshal(ms)
 	if err != nil {
 		return err
 	}
@@ -23,7 +26,7 @@ func (ms *MetricConfig) Unmarshal(parser *confmap.Conf) error {
 	return nil
 }
 
-// MetricsConfig provides config for hostmetricsreceiver/process metrics.
+// MetricsConfig provides config for process metrics.
 type MetricsConfig struct {
 	ProcessContextSwitches     MetricConfig `mapstructure:"process.context_switches"`
 	ProcessCPUTime             MetricConfig `mapstructure:"process.cpu.time"`
@@ -38,6 +41,7 @@ type MetricsConfig struct {
 	ProcessPagingFaults        MetricConfig `mapstructure:"process.paging.faults"`
 	ProcessSignalsPending      MetricConfig `mapstructure:"process.signals_pending"`
 	ProcessThreads             MetricConfig `mapstructure:"process.threads"`
+	ProcessUptime              MetricConfig `mapstructure:"process.uptime"`
 }
 
 func DefaultMetricsConfig() MetricsConfig {
@@ -81,12 +85,22 @@ func DefaultMetricsConfig() MetricsConfig {
 		ProcessThreads: MetricConfig{
 			Enabled: false,
 		},
+		ProcessUptime: MetricConfig{
+			Enabled: false,
+		},
 	}
 }
 
 // ResourceAttributeConfig provides common config for a particular resource attribute.
 type ResourceAttributeConfig struct {
 	Enabled bool `mapstructure:"enabled"`
+	// Experimental: MetricsInclude defines a list of filters for attribute values.
+	// If the list is not empty, only metrics with matching resource attribute values will be emitted.
+	MetricsInclude []filter.Config `mapstructure:"metrics_include"`
+	// Experimental: MetricsExclude defines a list of filters for attribute values.
+	// If the list is not empty, metrics with matching resource attribute values will not be emitted.
+	// MetricsInclude has higher priority than MetricsExclude.
+	MetricsExclude []filter.Config `mapstructure:"metrics_exclude"`
 
 	enabledSetByUser bool
 }
@@ -95,7 +109,7 @@ func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
-	err := parser.Unmarshal(rac, confmap.WithErrorUnused())
+	err := parser.Unmarshal(rac)
 	if err != nil {
 		return err
 	}
@@ -103,8 +117,9 @@ func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
 	return nil
 }
 
-// ResourceAttributesConfig provides config for hostmetricsreceiver/process resource attributes.
+// ResourceAttributesConfig provides config for process resource attributes.
 type ResourceAttributesConfig struct {
+	ProcessCgroup         ResourceAttributeConfig `mapstructure:"process.cgroup"`
 	ProcessCommand        ResourceAttributeConfig `mapstructure:"process.command"`
 	ProcessCommandLine    ResourceAttributeConfig `mapstructure:"process.command_line"`
 	ProcessExecutableName ResourceAttributeConfig `mapstructure:"process.executable.name"`
@@ -116,6 +131,9 @@ type ResourceAttributesConfig struct {
 
 func DefaultResourceAttributesConfig() ResourceAttributesConfig {
 	return ResourceAttributesConfig{
+		ProcessCgroup: ResourceAttributeConfig{
+			Enabled: false,
+		},
 		ProcessCommand: ResourceAttributeConfig{
 			Enabled: true,
 		},
@@ -140,7 +158,7 @@ func DefaultResourceAttributesConfig() ResourceAttributesConfig {
 	}
 }
 
-// MetricsBuilderConfig is a configuration for hostmetricsreceiver/process metrics builder.
+// MetricsBuilderConfig is a configuration for process metrics builder.
 type MetricsBuilderConfig struct {
 	Metrics            MetricsConfig            `mapstructure:"metrics"`
 	ResourceAttributes ResourceAttributesConfig `mapstructure:"resource_attributes"`

@@ -4,10 +4,12 @@
 package coralogixexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/coralogixexporter"
 
 import (
+	"errors"
 	"fmt"
 
 	"go.opentelemetry.io/collector/config/configgrpc"
 	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
@@ -19,28 +21,31 @@ const (
 
 // Config defines by Coralogix.
 type Config struct {
-	exporterhelper.QueueSettings   `mapstructure:"sending_queue"`
-	exporterhelper.RetrySettings   `mapstructure:"retry_on_failure"`
-	exporterhelper.TimeoutSettings `mapstructure:",squash"`
+	QueueSettings             exporterhelper.QueueBatchConfig `mapstructure:"sending_queue"`
+	configretry.BackOffConfig `mapstructure:"retry_on_failure"`
+	TimeoutSettings           exporterhelper.TimeoutConfig `mapstructure:",squash"`
 
 	// Coralogix domain
 	Domain string `mapstructure:"domain"`
 	// GRPC Settings used with Domain
-	DomainSettings configgrpc.GRPCClientSettings `mapstructure:"domain_settings"`
+	DomainSettings configgrpc.ClientConfig `mapstructure:"domain_settings"`
 
 	// Deprecated: [v0.60.0] Coralogix jaeger based trace endpoint
 	// will be removed in the next version
 	// Please use OTLP endpoint using traces.endpoint
-	configgrpc.GRPCClientSettings `mapstructure:",squash"`
+	configgrpc.ClientConfig `mapstructure:",squash"`
 
 	// Coralogix traces ingress endpoint
-	Traces configgrpc.GRPCClientSettings `mapstructure:"traces"`
+	Traces configgrpc.ClientConfig `mapstructure:"traces"`
 
 	// The Coralogix metrics ingress endpoint
-	Metrics configgrpc.GRPCClientSettings `mapstructure:"metrics"`
+	Metrics configgrpc.ClientConfig `mapstructure:"metrics"`
 
 	// The Coralogix logs ingress endpoint
-	Logs configgrpc.GRPCClientSettings `mapstructure:"logs"`
+	Logs configgrpc.ClientConfig `mapstructure:"logs"`
+
+	// The Coralogix profiles ingress endpoint
+	Profiles configgrpc.ClientConfig `mapstructure:"profiles"`
 
 	// Your Coralogix private key (sensitive) for authentication
 	PrivateKey configopaque.String `mapstructure:"private_key"`
@@ -62,27 +67,28 @@ func isEmpty(endpoint string) bool {
 	}
 	return false
 }
+
 func (c *Config) Validate() error {
 	// validate that at least one endpoint is set up correctly
 	if isEmpty(c.Domain) &&
 		isEmpty(c.Traces.Endpoint) &&
 		isEmpty(c.Metrics.Endpoint) &&
-		isEmpty(c.Logs.Endpoint) {
-		return fmt.Errorf("`domain` or `traces.endpoint` or `metrics.endpoint` or `logs.endpoint` not specified, please fix the configuration")
+		isEmpty(c.Logs.Endpoint) &&
+		isEmpty(c.Profiles.Endpoint) {
+		return errors.New("`domain` or `traces.endpoint` or `metrics.endpoint` or `logs.endpoint` or `profiles.endpoint` not specified, please fix the configuration")
 	}
 	if c.PrivateKey == "" {
-		return fmt.Errorf("`privateKey` not specified, please fix the configuration")
+		return errors.New("`private_key` not specified, please fix the configuration")
 	}
 	if c.AppName == "" {
-		return fmt.Errorf("`appName` not specified, please fix the configuration")
+		return errors.New("`application_name` not specified, please fix the configuration")
 	}
 
-	// check if headers exists
-	if len(c.GRPCClientSettings.Headers) == 0 {
-		c.GRPCClientSettings.Headers = make(map[string]configopaque.String)
+	if len(c.Headers) == 0 {
+		c.Headers = make(map[string]configopaque.String)
 	}
-	c.GRPCClientSettings.Headers["ACCESS_TOKEN"] = c.PrivateKey
-	c.GRPCClientSettings.Headers["appName"] = configopaque.String(c.AppName)
+	c.Headers["ACCESS_TOKEN"] = c.PrivateKey
+	c.Headers["appName"] = configopaque.String(c.AppName)
 	return nil
 }
 
@@ -112,10 +118,22 @@ func (c *Config) getMetadataFromResource(res pcommon.Resource) (appName, subsyst
 		subsystem = c.SubSystem
 	}
 
+	if appName == "" {
+		attr, ok := res.Attributes().Get(cxAppNameAttrName)
+		if ok && attr.AsString() != "" {
+			appName = attr.AsString()
+		}
+	}
+	if subsystem == "" {
+		attr, ok := res.Attributes().Get(cxSubsystemNameAttrName)
+		if ok && attr.AsString() != "" {
+			subsystem = attr.AsString()
+		}
+	}
 	return appName, subsystem
 }
 
-func (c *Config) getDomainGrpcSettings() *configgrpc.GRPCClientSettings {
+func (c *Config) getDomainGrpcSettings() *configgrpc.ClientConfig {
 	settings := c.DomainSettings
 	settings.Endpoint = fmt.Sprintf("ingress.%s:443", c.Domain)
 	return &settings

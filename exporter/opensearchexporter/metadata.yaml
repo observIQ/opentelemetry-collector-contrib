@@ -3,7 +3,15 @@ type: opensearch
 status:
   class: exporter
   stability:
-    alpha: [traces]
-    development: [logs]
+    unmaintained: [traces, logs]
+  distributions: [contrib]
   codeowners:
-    active: [Aneurysm9, MitchellGale, MaxKsyunz, YANG-DB]
+    active: []
+    emeritus: [Aneurysm9, MitchellGale, MaxKsyunz, YANG-DB]
+    seeking_new: true
+
+tests:
+  expect_consumer_error: true
+  config:
+    http:
+      endpoint: https://opensearch.example.com:9200

@@ -4,6 +4,7 @@
 package datasetexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datasetexporter"
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,12 +14,15 @@ import (
 	datasetConfig "github.com/scalyr/dataset-go/pkg/config"
 	"github.com/scalyr/dataset-go/pkg/server_host_config"
 	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 )
 
-const exportSeparatorDefault = "."
-const exportDistinguishingSuffix = "_"
+const (
+	exportSeparatorDefault     = "."
+	exportDistinguishingSuffix = "_"
+)
 
 // exportSettings configures separator and distinguishing suffixes for all exported fields
 type exportSettings struct {
@@ -51,12 +55,14 @@ func newDefaultTracesSettings() TracesSettings {
 	}
 }
 
-const logsExportResourceInfoDefault = false
-const logsExportResourcePrefixDefault = "resource.attributes."
-const logsExportScopeInfoDefault = true
-const logsExportScopePrefixDefault = "scope.attributes."
-const logsDecomposeComplexMessageFieldDefault = false
-const logsDecomposedComplexMessageFieldPrefixDefault = "body.map."
+const (
+	logsExportResourceInfoDefault                  = false
+	logsExportResourcePrefixDefault                = "resource.attributes."
+	logsExportScopeInfoDefault                     = true
+	logsExportScopePrefixDefault                   = "scope.attributes."
+	logsDecomposeComplexMessageFieldDefault        = false
+	logsDecomposedComplexMessageFieldPrefixDefault = "body.map."
+)
 
 type LogsSettings struct {
 	// ExportResourceInfo is optional flag to signal that the resource info is being exported to DataSet while exporting Logs.
@@ -104,30 +110,38 @@ func newDefaultLogsSettings() LogsSettings {
 	}
 }
 
-const bufferMaxLifetime = 5 * time.Second
-const bufferRetryInitialInterval = 5 * time.Second
-const bufferRetryMaxInterval = 30 * time.Second
-const bufferRetryMaxElapsedTime = 300 * time.Second
-const bufferRetryShutdownTimeout = 30 * time.Second
+const (
+	bufferMaxLifetime          = 5 * time.Second
+	bufferPurgeOlderThan       = 30 * time.Second
+	bufferRetryInitialInterval = 5 * time.Second
+	bufferRetryMaxInterval     = 30 * time.Second
+	bufferRetryMaxElapsedTime  = 300 * time.Second
+	bufferRetryShutdownTimeout = 30 * time.Second
+	bufferMaxParallelOutgoing  = 100
+)
 
 type BufferSettings struct {
 	MaxLifetime          time.Duration `mapstructure:"max_lifetime"`
+	PurgeOlderThan       time.Duration `mapstructure:"purge_older_than"`
 	GroupBy              []string      `mapstructure:"group_by"`
 	RetryInitialInterval time.Duration `mapstructure:"retry_initial_interval"`
 	RetryMaxInterval     time.Duration `mapstructure:"retry_max_interval"`
 	RetryMaxElapsedTime  time.Duration `mapstructure:"retry_max_elapsed_time"`
 	RetryShutdownTimeout time.Duration `mapstructure:"retry_shutdown_timeout"`
+	MaxParallelOutgoing  int           `mapstructure:"max_parallel_outgoing"`
 }
 
 // newDefaultBufferSettings returns the default settings for BufferSettings.
 func newDefaultBufferSettings() BufferSettings {
 	return BufferSettings{
 		MaxLifetime:          bufferMaxLifetime,
+		PurgeOlderThan:       bufferPurgeOlderThan,
 		GroupBy:              []string{},
 		RetryInitialInterval: bufferRetryInitialInterval,
 		RetryMaxInterval:     bufferRetryMaxInterval,
 		RetryMaxElapsedTime:  bufferRetryMaxElapsedTime,
 		RetryShutdownTimeout: bufferRetryShutdownTimeout,
+		MaxParallelOutgoing:  bufferMaxParallelOutgoing,
 	}
 }
 
@@ -147,20 +161,20 @@ func newDefaultServerHostSettings() ServerHostSettings {
 const debugDefault = false
 
 type Config struct {
-	DatasetURL                     string              `mapstructure:"dataset_url"`
-	APIKey                         configopaque.String `mapstructure:"api_key"`
-	Debug                          bool                `mapstructure:"debug"`
-	BufferSettings                 `mapstructure:"buffer"`
-	TracesSettings                 `mapstructure:"traces"`
-	LogsSettings                   `mapstructure:"logs"`
-	ServerHostSettings             `mapstructure:"server_host"`
-	exporterhelper.RetrySettings   `mapstructure:"retry_on_failure"`
-	exporterhelper.QueueSettings   `mapstructure:"sending_queue"`
-	exporterhelper.TimeoutSettings `mapstructure:"timeout"`
+	DatasetURL                string              `mapstructure:"dataset_url"`
+	APIKey                    configopaque.String `mapstructure:"api_key"`
+	Debug                     bool                `mapstructure:"debug"`
+	BufferSettings            `mapstructure:"buffer"`
+	TracesSettings            `mapstructure:"traces"`
+	LogsSettings              `mapstructure:"logs"`
+	ServerHostSettings        `mapstructure:"server_host"`
+	configretry.BackOffConfig `mapstructure:"retry_on_failure"`
+	QueueSettings             exporterhelper.QueueBatchConfig `mapstructure:"sending_queue"`
+	TimeoutSettings           exporterhelper.TimeoutConfig    `mapstructure:"timeout"`
 }
 
 func (c *Config) Unmarshal(conf *confmap.Conf) error {
-	if err := conf.Unmarshal(c, confmap.WithErrorUnused()); err != nil {
+	if err := conf.Unmarshal(c); err != nil {
 		return fmt.Errorf("cannot unmarshal config: %w", err)
 	}
 
@@ -171,10 +185,10 @@ func (c *Config) Unmarshal(conf *confmap.Conf) error {
 // If any of the required fields are missing or have invalid values, it returns an error.
 func (c *Config) Validate() error {
 	if c.APIKey == "" {
-		return fmt.Errorf("api_key is required")
+		return errors.New("api_key is required")
 	}
 	if c.DatasetURL == "" {
-		return fmt.Errorf("dataset_url is required")
+		return errors.New("dataset_url is required")
 	}
 
 	return nil
@@ -192,44 +206,40 @@ func (c *Config) String() string {
 	s += fmt.Sprintf("%s: %+v; ", "LogsSettings", c.LogsSettings)
 	s += fmt.Sprintf("%s: %+v; ", "TracesSettings", c.TracesSettings)
 	s += fmt.Sprintf("%s: %+v; ", "ServerHostSettings", c.ServerHostSettings)
-	s += fmt.Sprintf("%s: %+v; ", "RetrySettings", c.RetrySettings)
+	s += fmt.Sprintf("%s: %+v; ", "BackOffConfig", c.BackOffConfig)
 	s += fmt.Sprintf("%s: %+v; ", "QueueSettings", c.QueueSettings)
 	s += fmt.Sprintf("%s: %+v", "TimeoutSettings", c.TimeoutSettings)
 	return s
 }
 
-func (c *Config) convert() (*ExporterConfig, error) {
-	err := c.Validate()
-	if err != nil {
-		return nil, fmt.Errorf("config is not valid: %w", err)
-	}
-
+func (c *Config) convert() *ExporterConfig {
 	return &ExporterConfig{
-			datasetConfig: &datasetConfig.DataSetConfig{
-				Endpoint: c.DatasetURL,
-				Tokens:   datasetConfig.DataSetTokens{WriteLog: string(c.APIKey)},
-				BufferSettings: buffer_config.DataSetBufferSettings{
-					MaxLifetime:              c.BufferSettings.MaxLifetime,
-					MaxSize:                  buffer.LimitBufferSize,
-					GroupBy:                  c.BufferSettings.GroupBy,
-					RetryInitialInterval:     c.BufferSettings.RetryInitialInterval,
-					RetryMaxInterval:         c.BufferSettings.RetryMaxInterval,
-					RetryMaxElapsedTime:      c.BufferSettings.RetryMaxElapsedTime,
-					RetryMultiplier:          backoff.DefaultMultiplier,
-					RetryRandomizationFactor: backoff.DefaultRandomizationFactor,
-					RetryShutdownTimeout:     c.BufferSettings.RetryShutdownTimeout,
-				},
-				ServerHostSettings: server_host_config.DataSetServerHostSettings{
-					UseHostName: c.ServerHostSettings.UseHostName,
-					ServerHost:  c.ServerHostSettings.ServerHost,
-				},
-				Debug: c.Debug,
+		datasetConfig: &datasetConfig.DataSetConfig{
+			Endpoint: c.DatasetURL,
+			Tokens:   datasetConfig.DataSetTokens{WriteLog: string(c.APIKey)},
+			BufferSettings: buffer_config.DataSetBufferSettings{
+				MaxLifetime:              c.MaxLifetime,
+				PurgeOlderThan:           c.PurgeOlderThan,
+				MaxSize:                  buffer.LimitBufferSize,
+				GroupBy:                  c.GroupBy,
+				RetryInitialInterval:     c.RetryInitialInterval,
+				RetryMaxInterval:         c.RetryMaxInterval,
+				RetryMaxElapsedTime:      c.RetryMaxElapsedTime,
+				RetryMultiplier:          backoff.DefaultMultiplier,
+				RetryRandomizationFactor: backoff.DefaultRandomizationFactor,
+				RetryShutdownTimeout:     c.RetryShutdownTimeout,
+				MaxParallelOutgoing:      c.MaxParallelOutgoing,
 			},
-			tracesSettings:     c.TracesSettings,
-			logsSettings:       c.LogsSettings,
-			serverHostSettings: c.ServerHostSettings,
+			ServerHostSettings: server_host_config.DataSetServerHostSettings{
+				UseHostName: c.UseHostName,
+				ServerHost:  c.ServerHost,
+			},
+			Debug: c.Debug,
 		},
-		nil
+		tracesSettings:     c.TracesSettings,
+		logsSettings:       c.LogsSettings,
+		serverHostSettings: c.ServerHostSettings,
+	}
 }
 
 type ExporterConfig struct {

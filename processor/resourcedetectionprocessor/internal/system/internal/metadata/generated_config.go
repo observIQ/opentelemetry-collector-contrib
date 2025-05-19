@@ -2,7 +2,9 @@
 
 package metadata
 
-import "go.opentelemetry.io/collector/confmap"
+import (
+	"go.opentelemetry.io/collector/confmap"
+)
 
 // ResourceAttributeConfig provides common config for a particular resource attribute.
 type ResourceAttributeConfig struct {
@@ -15,7 +17,7 @@ func (rac *ResourceAttributeConfig) Unmarshal(parser *confmap.Conf) error {
 	if parser == nil {
 		return nil
 	}
-	err := parser.Unmarshal(rac, confmap.WithErrorUnused())
+	err := parser.Unmarshal(rac)
 	if err != nil {
 		return err
 	}
@@ -38,6 +40,7 @@ type ResourceAttributesConfig struct {
 	HostName           ResourceAttributeConfig `mapstructure:"host.name"`
 	OsDescription      ResourceAttributeConfig `mapstructure:"os.description"`
 	OsType             ResourceAttributeConfig `mapstructure:"os.type"`
+	OsVersion          ResourceAttributeConfig `mapstructure:"os.version"`
 }
 
 func DefaultResourceAttributesConfig() ResourceAttributesConfig {
@@ -80,6 +83,9 @@ func DefaultResourceAttributesConfig() ResourceAttributesConfig {
 		},
 		OsType: ResourceAttributeConfig{
 			Enabled: true,
+		},
+		OsVersion: ResourceAttributeConfig{
+			Enabled: false,
 		},
 	}
 }

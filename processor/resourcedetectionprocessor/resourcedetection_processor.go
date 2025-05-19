@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourcedetectionprocessor/internal"
@@ -21,13 +22,13 @@ type resourceDetectionProcessor struct {
 	resource           pcommon.Resource
 	schemaURL          string
 	override           bool
-	httpClientSettings confighttp.HTTPClientSettings
+	httpClientSettings confighttp.ClientConfig
 	telemetrySettings  component.TelemetrySettings
 }
 
 // Start is invoked during service startup.
 func (rdp *resourceDetectionProcessor) Start(ctx context.Context, host component.Host) error {
-	client, _ := rdp.httpClientSettings.ToClient(host, rdp.telemetrySettings)
+	client, _ := rdp.httpClientSettings.ToClient(ctx, host, rdp.telemetrySettings)
 	ctx = internal.ContextWithClient(ctx, client)
 	var err error
 	rdp.resource, rdp.schemaURL, err = rdp.provider.Get(ctx, client)
@@ -61,6 +62,18 @@ func (rdp *resourceDetectionProcessor) processMetrics(_ context.Context, md pmet
 // processLogs implements the ProcessLogsFunc type.
 func (rdp *resourceDetectionProcessor) processLogs(_ context.Context, ld plog.Logs) (plog.Logs, error) {
 	rl := ld.ResourceLogs()
+	for i := 0; i < rl.Len(); i++ {
+		rss := rl.At(i)
+		rss.SetSchemaUrl(internal.MergeSchemaURL(rss.SchemaUrl(), rdp.schemaURL))
+		res := rss.Resource()
+		internal.MergeResource(res, rdp.resource, rdp.override)
+	}
+	return ld, nil
+}
+
+// processProfiles implements the ProcessProfilesFunc type.
+func (rdp *resourceDetectionProcessor) processProfiles(_ context.Context, ld pprofile.Profiles) (pprofile.Profiles, error) {
+	rl := ld.ResourceProfiles()
 	for i := 0; i < rl.Len(); i++ {
 		rss := rl.At(i)
 		rss.SetSchemaUrl(internal.MergeSchemaURL(rss.SchemaUrl(), rdp.schemaURL))

@@ -5,12 +5,12 @@ package alertmanagerexporter // import "github.com/open-telemetry/opentelemetry-
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
-	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
@@ -26,26 +26,28 @@ func NewFactory() exporter.Factory {
 }
 
 func createDefaultConfig() component.Config {
+	clientConfig := confighttp.NewDefaultClientConfig()
+	clientConfig.Endpoint = "http://localhost:9093"
+	clientConfig.Timeout = 30 * time.Second
+	clientConfig.WriteBufferSize = 512 * 1024
+
 	return &Config{
 		GeneratorURL:    "opentelemetry-collector",
 		DefaultSeverity: "info",
-		TimeoutSettings: exporterhelper.NewDefaultTimeoutSettings(),
-		RetrySettings:   exporterhelper.NewDefaultRetrySettings(),
-		QueueSettings:   exporterhelper.NewDefaultQueueSettings(),
-		HTTPClientSettings: confighttp.HTTPClientSettings{
-			Endpoint:        "http://localhost:9093",
-			Timeout:         30 * time.Second,
-			Headers:         map[string]configopaque.String{},
-			WriteBufferSize: 512 * 1024,
-		},
+		APIVersion:      "v2",
+		EventLabels:     []string{"attr1", "attr2"},
+		TimeoutSettings: exporterhelper.NewDefaultTimeoutConfig(),
+		BackoffConfig:   configretry.NewDefaultBackOffConfig(),
+		QueueSettings:   exporterhelper.NewDefaultQueueConfig(),
+		ClientConfig:    clientConfig,
 	}
 }
 
-func createTracesExporter(ctx context.Context, set exporter.CreateSettings, config component.Config) (exporter.Traces, error) {
+func createTracesExporter(ctx context.Context, set exporter.Settings, config component.Config) (exporter.Traces, error) {
 	cfg := config.(*Config)
 
 	if cfg.Endpoint == "" {
-		return nil, fmt.Errorf(
+		return nil, errors.New(
 			"exporter config requires a non-empty \"endpoint\"")
 	}
 	return newTracesExporter(ctx, cfg, set)

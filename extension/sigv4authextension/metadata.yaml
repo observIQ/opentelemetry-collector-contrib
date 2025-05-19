@@ -6,9 +6,13 @@ status:
     beta: [extension]
   distributions:
   - contrib
-  - aws
-  - grafana
-  - sumo
-  - liatrio
   codeowners:
     active: [Aneurysm9, erichsueh3]
+
+tests:
+  goleak:
+    ignore:
+      top:
+        - "net/http.(*persistConn).writeLoop"
+        - "internal/poll.runtime_pollWait"
+  config:

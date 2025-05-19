@@ -4,7 +4,6 @@
 package lokiexporter
 
 import (
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -15,14 +14,32 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/confighttp"
 	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
+	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/lokiexporter/internal/metadata"
 )
 
 func TestLoadConfigNewExporter(t *testing.T) {
+	clientConfig := confighttp.NewDefaultClientConfig()
+	clientConfig.Headers = map[string]configopaque.String{
+		"X-Custom-Header": "loki_rocks",
+	}
+	clientConfig.Endpoint = "https://loki:3100/loki/api/v1/push"
+	clientConfig.TLSSetting = configtls.ClientConfig{
+		Config: configtls.Config{
+			CAFile:   "/var/lib/mycert.pem",
+			CertFile: "certfile",
+			KeyFile:  "keyfile",
+		},
+		Insecure: true,
+	}
+	clientConfig.ReadBufferSize = 123
+	clientConfig.WriteBufferSize = 345
+	clientConfig.Timeout = time.Second * 10
 	t.Parallel()
 
 	cm, err := confmaptest.LoadConf(filepath.Join("testdata", "config.yaml"))
@@ -35,24 +52,8 @@ func TestLoadConfigNewExporter(t *testing.T) {
 		{
 			id: component.NewIDWithName(metadata.Type, "allsettings"),
 			expected: &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Headers: map[string]configopaque.String{
-						"X-Custom-Header": "loki_rocks",
-					},
-					Endpoint: "https://loki:3100/loki/api/v1/push",
-					TLSSetting: configtls.TLSClientSetting{
-						TLSSetting: configtls.TLSSetting{
-							CAFile:   "/var/lib/mycert.pem",
-							CertFile: "certfile",
-							KeyFile:  "keyfile",
-						},
-						Insecure: true,
-					},
-					ReadBufferSize:  123,
-					WriteBufferSize: 345,
-					Timeout:         time.Second * 10,
-				},
-				RetrySettings: exporterhelper.RetrySettings{
+				ClientConfig: clientConfig,
+				BackOffConfig: configretry.BackOffConfig{
 					Enabled:             true,
 					InitialInterval:     10 * time.Second,
 					MaxInterval:         1 * time.Minute,
@@ -60,10 +61,11 @@ func TestLoadConfigNewExporter(t *testing.T) {
 					RandomizationFactor: backoff.DefaultRandomizationFactor,
 					Multiplier:          backoff.DefaultMultiplier,
 				},
-				QueueSettings: exporterhelper.QueueSettings{
+				QueueSettings: exporterhelper.QueueBatchConfig{
 					Enabled:      true,
 					NumConsumers: 2,
 					QueueSize:    10,
+					Sizer:        exporterhelper.RequestSizerTypeRequests,
 				},
 				DefaultLabelsEnabled: map[string]bool{
 					"exporter": false,
@@ -82,47 +84,46 @@ func TestLoadConfigNewExporter(t *testing.T) {
 
 			sub, err := cm.Sub(tt.id.String())
 			require.NoError(t, err)
-			require.NoError(t, component.UnmarshalConfig(sub, cfg))
+			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, component.ValidateConfig(cfg))
+			assert.NoError(t, xconfmap.Validate(cfg))
 			assert.Equal(t, tt.expected, cfg)
 		})
 	}
 }
 
 func TestConfigValidate(t *testing.T) {
+	clientConfig := confighttp.NewDefaultClientConfig()
+	clientConfig.Endpoint = "https://loki.example.com"
 	testCases := []struct {
 		desc string
 		cfg  *Config
-		err  error
+		err  string
 	}{
 		{
 			desc: "QueueSettings are invalid",
-			cfg:  &Config{QueueSettings: exporterhelper.QueueSettings{QueueSize: -1, Enabled: true}},
-			err:  fmt.Errorf("queue settings has invalid configuration"),
+			cfg:  &Config{QueueSettings: exporterhelper.QueueBatchConfig{QueueSize: -1, Enabled: true}},
+			err:  "queue settings has invalid configuration",
 		},
 		{
 			desc: "Endpoint is invalid",
 			cfg:  &Config{},
-			err:  fmt.Errorf("\"endpoint\" must be a valid URL"),
+			err:  "\"endpoint\" must be a valid URL",
 		},
 		{
 			desc: "Config is valid",
 			cfg: &Config{
-				HTTPClientSettings: confighttp.HTTPClientSettings{
-					Endpoint: "https://loki.example.com",
-				},
+				ClientConfig: clientConfig,
 			},
-			err: nil,
+			err: "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			err := tc.cfg.Validate()
-			if tc.err != nil {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.err.Error())
+			if tc.err != "" {
+				assert.ErrorContains(t, err, tc.err)
 			} else {
 				require.NoError(t, err)
 			}
