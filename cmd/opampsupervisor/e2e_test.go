@@ -403,6 +403,7 @@ func TestSupervisorStartsCollectorWithRemoteConfigAndExecParams(t *testing.T) {
 
 	// create server
 	var agentConfig atomic.Value
+	var remoteConfigStatus atomic.Value
 	server := newOpAMPServer(
 		t,
 		defaultConnectingHandler,
@@ -414,7 +415,9 @@ func TestSupervisorStartsCollectorWithRemoteConfigAndExecParams(t *testing.T) {
 						agentConfig.Store(string(config.Body))
 					}
 				}
-
+				if message.RemoteConfigStatus != nil {
+					remoteConfigStatus.Store(message.RemoteConfigStatus)
+				}
 				return &protobufs.ServerToAgent{}
 			},
 		})
@@ -472,6 +475,12 @@ func TestSupervisorStartsCollectorWithRemoteConfigAndExecParams(t *testing.T) {
 
 		return n != 0
 	}, 20*time.Second, 500*time.Millisecond, "Log never appeared in output")
+
+	// verify that the supervisor reports the remote config as applied and the correct hash
+	require.Eventually(t, func() bool {
+		status := remoteConfigStatus.Load().(*protobufs.RemoteConfigStatus)
+		return status != nil && status.Status == protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLIED && bytes.Equal(status.LastRemoteConfigHash, hash)
+	}, 20*time.Second, 500*time.Millisecond, "Remote config status never became applied")
 }
 
 func TestSupervisorStartsWithNoOpAMPServer(t *testing.T) {
