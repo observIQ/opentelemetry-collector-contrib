@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/open-telemetry/opamp-go/protobufs"
@@ -19,10 +20,12 @@ type persistentState struct {
 	// InstanceID must be a valid UUID string. If it is not, a new UUIDv7 will be generated automatically.
 	InstanceID             uuid.UUID           `yaml:"instance_id"`
 	LastRemoteConfigStatus *RemoteConfigStatus `yaml:"last_remote_config_status"`
+	AllPackagesHash        hexEncodedBytes     `yaml:"all_packages_hash"`
 
 	// Path to the config file that the state should be saved to.
 	// This is not marshaled.
 	configPath string      `yaml:"-"`
+	mux        sync.Mutex  `yaml:"-"`
 	logger     *zap.Logger `yaml:"-"`
 }
 
@@ -65,6 +68,11 @@ func (p *persistentState) GetLastRemoteConfigStatus() *protobufs.RemoteConfigSta
 		LastRemoteConfigHash: lastRemoteConfigHash,
 		ErrorMessage:         p.LastRemoteConfigStatus.ErrorMessage,
 	}
+}
+
+func (p *persistentState) SetAllPackagesHash(hash []byte) error {
+	p.AllPackagesHash = hexEncodedBytes(hash)
+	return p.writeState()
 }
 
 func (p *persistentState) writeState() error {
@@ -129,4 +137,24 @@ func createNewPersistentState(file, instanceID string, logger *zap.Logger) (*per
 
 	err = p.writeState()
 	return p, err
+}
+
+// hexEncodedBytes is a rebranded byte slice
+// that supports marhalling/unmarshalling as YAML
+// to/from a hex string.
+type hexEncodedBytes []byte
+
+var (
+	_ yaml.Marshaler   = (*hexEncodedBytes)(nil)
+	_ yaml.Unmarshaler = (*hexEncodedBytes)(nil)
+)
+
+func (h hexEncodedBytes) MarshalYAML() (any, error) {
+	return hex.EncodeToString(h), nil
+}
+
+func (h *hexEncodedBytes) UnmarshalYAML(value *yaml.Node) error {
+	var err error
+	*h, err = hex.DecodeString(value.Value)
+	return err
 }

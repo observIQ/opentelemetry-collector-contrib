@@ -705,6 +705,7 @@ agent:
 						ConfigApplyTimeout:      DefaultSupervisor().Agent.ConfigApplyTimeout,
 						BootstrapTimeout:        DefaultSupervisor().Agent.BootstrapTimeout,
 						ValidateConfig:          DefaultSupervisor().Agent.ValidateConfig,
+						Package:                 DefaultSupervisor().Agent.Package,
 					},
 					Telemetry:   DefaultSupervisor().Telemetry,
 					HealthCheck: DefaultSupervisor().HealthCheck,
@@ -795,6 +796,7 @@ telemetry:
 						OpAMPServerPort:         8090,
 						PassthroughLogs:         true,
 						ValidateConfig:          DefaultSupervisor().Agent.ValidateConfig,
+						Package:                 DefaultSupervisor().Agent.Package,
 					},
 					Telemetry: Telemetry{
 						Logs: Logs{
@@ -832,6 +834,7 @@ agent:
 						ConfigApplyTimeout:      DefaultSupervisor().Agent.ConfigApplyTimeout,
 						BootstrapTimeout:        DefaultSupervisor().Agent.BootstrapTimeout,
 						ValidateConfig:          DefaultSupervisor().Agent.ValidateConfig,
+						Package:                 DefaultSupervisor().Agent.Package,
 					},
 					Telemetry:   DefaultSupervisor().Telemetry,
 					HealthCheck: DefaultSupervisor().HealthCheck,
