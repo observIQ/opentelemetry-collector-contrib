@@ -207,7 +207,22 @@ func (c *franzConsumer) consumeLoop(ctx context.Context) {
 // consume consumes a batch of messages from the Kafka topic. This is meant to
 // be called in a loop until consume returns false.
 func (c *franzConsumer) consume(ctx context.Context, size int) bool {
+	consumeStart := time.Now()
+
+	pollDuration := time.Duration(0)
+	commitRecordsDuration := time.Duration(0)
+	handleMessageDuration := time.Duration(0)
+
+	pollStart := time.Now()
 	fetch := c.client.PollRecords(ctx, size)
+	pollDuration = time.Since(pollStart)
+
+	defer func() {
+		consumeDuration := time.Since(consumeStart)
+		otherDuration := consumeDuration - pollDuration - commitRecordsDuration - handleMessageDuration
+		c.settings.Logger.Info("consume duration", zap.Duration("duration", consumeDuration))
+		c.settings.Logger.Info("other duration", zap.Duration("duration", otherDuration))
+	}()
 
 	if err := fetch.Err0(); fetch.IsClientClosed() {
 		c.settings.Logger.Info("consumer stopped", zap.Error(err))
@@ -277,10 +292,17 @@ func (c *franzConsumer) consume(ctx context.Context, size int) bool {
 			var lastProcessed *kgo.Record
 			for _, msg := range msgs {
 				if !c.config.MessageMarking.After {
+					start := time.Now()
 					c.client.MarkCommitRecords(msg)
+					commitRecordsDuration += time.Since(start)
 				}
 				c.telemetryBuilder.KafkaReceiverCurrentOffset.Record(ctx, msg.Offset, metric.WithAttributeSet(pc.attrs))
-				if err := c.handleMessage(pc, wrapFranzMsg(msg)); err != nil {
+
+				start := time.Now()
+				err := c.handleMessage(pc, wrapFranzMsg(msg))
+				handleMessageDuration += time.Since(start)
+
+				if err != nil {
 					pc.logger.Error("unable to process message",
 						zap.Error(err),
 						zap.Int64("offset", msg.Offset),
@@ -338,6 +360,11 @@ func (c *franzConsumer) consume(ctx context.Context, size int) bool {
 			c.settings.Logger.Error("failed to commit offsets", zap.Error(err))
 		}
 	}
+
+	c.settings.Logger.Info("poll duration", zap.Duration("duration", pollDuration))
+	c.settings.Logger.Info("commit records duration", zap.Duration("duration", commitRecordsDuration))
+	c.settings.Logger.Info("handle message duration", zap.Duration("duration", handleMessageDuration))
+
 	return true
 }
 
