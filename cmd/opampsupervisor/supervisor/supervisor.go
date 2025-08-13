@@ -52,6 +52,7 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/cmd/opampsupervisor/supervisor/commander"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/cmd/opampsupervisor/supervisor/config"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/cmd/opampsupervisor/supervisor/verify"
 )
 
 var (
@@ -124,6 +125,8 @@ type Supervisor struct {
 	// Supervisor's package manager
 	packageManager *packageManager
 
+	sigVerifier verify.SignatureVerifier
+
 	noopPipelineTemplate         *template.Template
 	opampextensionTemplate       *template.Template
 	extraTelemetryConfigTemplate *template.Template
@@ -185,7 +188,14 @@ type Supervisor struct {
 	featureGates map[string]struct{}
 }
 
-func NewSupervisor(logger *zap.Logger, cfg config.Supervisor) (*Supervisor, error) {
+type Option func(*Supervisor)
+
+// WithSignatureVerifier sets a custom SignatureVerifier for verifying package signatures.
+func WithSignatureVerifier(v verify.SignatureVerifier) Option {
+	return func(s *Supervisor) { s.sigVerifier = v }
+}
+
+func NewSupervisor(logger *zap.Logger, cfg config.Supervisor, opts ...Option) (*Supervisor, error) {
 	s := &Supervisor{
 		pidProvider:                    defaultPIDProvider{},
 		hasNewConfig:                   make(chan struct{}, 1),
@@ -202,6 +212,9 @@ func NewSupervisor(logger *zap.Logger, cfg config.Supervisor) (*Supervisor, erro
 		agentReady:                     atomic.Bool{},
 		agentReadyChan:                 make(chan struct{}, 1),
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
 	if err := s.createTemplates(); err != nil {
 		return nil, err
 	}
@@ -216,6 +229,14 @@ func NewSupervisor(logger *zap.Logger, cfg config.Supervisor) (*Supervisor, erro
 		return nil, fmt.Errorf("error validating config: %w", err)
 	}
 	s.config = cfg
+
+	if s.sigVerifier == nil {
+		v, err := verify.NewDefaultVerifier(verify.Config{Signature: cfg.Agent.Signature})
+		if err != nil {
+			return nil, fmt.Errorf("create signature verifier: %w", err)
+		}
+		s.sigVerifier = v
+	}
 
 	if err := os.MkdirAll(s.config.Storage.Directory, 0o700); err != nil {
 		return nil, fmt.Errorf("error creating storage dir: %w", err)
@@ -337,8 +358,8 @@ func (s *Supervisor) Start() error {
 			s.config.Storage.Directory,
 			agentVersion,
 			s.persistentState,
-			s.config.Agent.Signature,
 			s,
+			s.sigVerifier,
 		)
 		if err != nil {
 			return fmt.Errorf("error creating package state manager: %w", err)
