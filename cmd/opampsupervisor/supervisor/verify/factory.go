@@ -1,3 +1,6 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package verify
 
 import (
@@ -7,25 +10,35 @@ import (
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/fulcio"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	"github.com/sigstore/rekor/pkg/client"
-
-	"github.com/open-telemetry/opentelemetry-collector-contrib/cmd/opampsupervisor/supervisor/config"
+	"go.opentelemetry.io/collector/component"
 )
 
-// Config holds settings for building a signature verifier.
-type Config struct {
-	Signature config.AgentSignature
-}
+// SigstoreVerifierBuilder builds Sigstore-based verifiers.
+type SigstoreVerifierBuilder struct{}
 
-// NewDefaultVerifier returns the default Sigstore-based verifier.
-func NewDefaultVerifier(cfg Config) (SignatureVerifier, error) {
-	checkOpts, err := createCosignCheckOpts(cfg.Signature)
+// NewDefaultBuilder returns the default Sigstore-based builder.
+func NewDefaultBuilder() SignatureVerifierBuilder { return SigstoreVerifierBuilder{} }
+
+// Config returns the Sigstore verifier config struct.
+func (SigstoreVerifierBuilder) Config() component.Config { return defaultSigstoreConfig() }
+
+// NewVerifier builds a Sigstore verifier using the provided config.
+func (SigstoreVerifierBuilder) NewVerifier(cfg component.Config) (SignatureVerifier, error) {
+	opts, err := createCosignCheckOpts(cfg.(*SigstoreConfig))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create check opts: %w", err)
 	}
-	return &SigstoreVerifier{checkOpts: checkOpts}, nil
+
+	return &SigstoreVerifier{checkOpts: opts}, nil
 }
 
-func createCosignCheckOpts(signatureOpts config.AgentSignature) (*cosign.CheckOpts, error) {
+// createCosignCheckOpts creates a cosign.CheckOpts from the signature options.
+// These options provide information needed to verify the signature of the package.
+// The options consist of public Fulcio certificates to verify the identity of the signature,
+// a Rekor client to verify the integrity of the signature against a transparency log,
+// and a set of identities that the signature must match. More information about the
+// cosign.CheckOpts can be found in the specification (../specification/README.md#collector-executable-updates-flow).
+func createCosignCheckOpts(signatureOpts *SigstoreConfig) (*cosign.CheckOpts, error) {
 	rootCerts, err := fulcio.GetRoots()
 	if err != nil {
 		return nil, fmt.Errorf("fetch root certs: %w", err)

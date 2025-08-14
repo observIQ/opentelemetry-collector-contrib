@@ -125,7 +125,8 @@ type Supervisor struct {
 	// Supervisor's package manager
 	packageManager *packageManager
 
-	sigVerifier verify.SignatureVerifier
+	sigVerifier        verify.SignatureVerifier
+	sigVerifierBuilder verify.SignatureVerifierBuilder
 
 	noopPipelineTemplate         *template.Template
 	opampextensionTemplate       *template.Template
@@ -190,9 +191,8 @@ type Supervisor struct {
 
 type Option func(*Supervisor)
 
-// WithSignatureVerifier sets a custom SignatureVerifier for verifying package signatures.
-func WithSignatureVerifier(v verify.SignatureVerifier) Option {
-	return func(s *Supervisor) { s.sigVerifier = v }
+func WithSignatureVerifierBuilder(b verify.SignatureVerifierBuilder) Option {
+	return func(s *Supervisor) { s.sigVerifierBuilder = b }
 }
 
 func NewSupervisor(logger *zap.Logger, cfg config.Supervisor, opts ...Option) (*Supervisor, error) {
@@ -225,17 +225,24 @@ func NewSupervisor(logger *zap.Logger, cfg config.Supervisor, opts ...Option) (*
 	}
 	s.telemetrySettings = telSettings
 
+	if s.sigVerifierBuilder == nil {
+		s.sigVerifierBuilder = verify.NewDefaultBuilder()
+	}
+	sigConf := s.sigVerifierBuilder.Config()
+	if sigConf != nil && cfg.Agent.SignatureConf != nil {
+		if err := cfg.Agent.SignatureConf.Unmarshal(sigConf); err != nil {
+			return nil, fmt.Errorf("unmarshal signature config: %w", err)
+		}
+	}
+	cfg.Agent.Signature = sigConf
+
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("error validating config: %w", err)
 	}
 	s.config = cfg
 
-	if s.sigVerifier == nil {
-		v, err := verify.NewDefaultVerifier(verify.Config{Signature: cfg.Agent.Signature})
-		if err != nil {
-			return nil, fmt.Errorf("create signature verifier: %w", err)
-		}
-		s.sigVerifier = v
+	if s.sigVerifier, err = s.sigVerifierBuilder.NewVerifier(sigConf); err != nil {
+		return nil, fmt.Errorf("error create new verifier: %w", err)
 	}
 
 	if err := os.MkdirAll(s.config.Storage.Directory, 0o700); err != nil {

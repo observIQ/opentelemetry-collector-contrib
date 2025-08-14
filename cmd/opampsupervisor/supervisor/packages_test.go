@@ -7,11 +7,9 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/open-telemetry/opamp-go/client/types"
@@ -20,6 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/cmd/opampsupervisor/supervisor/verify"
 )
 
 const testAgentFileContents = "agent file"
@@ -31,22 +31,12 @@ var testAgentFileHash = []byte{
 	0x73, 0x7c, 0x75, 0x1d, 0xec, 0x56, 0xfc, 0xd7,
 }
 
-type fakeVerifier struct{}
-
-func (f *fakeVerifier) Verify(_ context.Context, _ string, sig string) error {
-	parts := strings.SplitN(sig, " ", 2)
-	if len(parts) != 2 {
-		return errors.New("signature must be formatted as a space separated cert and signature")
-	}
-	if _, err := base64.StdEncoding.DecodeString(parts[0]); err != nil {
-		return fmt.Errorf("b64 decode cert: %w", err)
-	}
-	return errors.New("verify blob: invalid signature")
-}
-
-func (f *fakeVerifier) Name() string { return "fake" }
-
 func TestNewPackageManager(t *testing.T) {
+	sigVerifierBuilder := verify.NewDefaultBuilder()
+	sigVerifier, err := sigVerifierBuilder.NewVerifier(sigVerifierBuilder.Config())
+
+	require.NoError(t, err)
+
 	t.Run("Creates new package manager", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		agentFile := filepath.Join(tmpDir, "agent")
@@ -55,7 +45,7 @@ func TestNewPackageManager(t *testing.T) {
 		require.NoError(t, os.MkdirAll(storageDir, 0o700))
 		require.NoError(t, os.WriteFile(agentFile, []byte(testAgentFileContents), 0o600))
 
-		pm, err := newPackageManager(agentFile, storageDir, "v0.110.0", &persistentState{}, nil, &fakeVerifier{})
+		pm, err := newPackageManager(agentFile, storageDir, "v0.110.0", &persistentState{}, nil, sigVerifier)
 		require.NoError(t, err)
 
 		assert.Equal(t, "v0.110.0", pm.topLevelVersion)
@@ -69,7 +59,7 @@ func TestNewPackageManager(t *testing.T) {
 
 		require.NoError(t, os.MkdirAll(storageDir, 0o700))
 
-		_, err := newPackageManager(agentFile, storageDir, "v0.110.0", &persistentState{}, nil, &fakeVerifier{})
+		_, err := newPackageManager(agentFile, storageDir, "v0.110.0", &persistentState{}, nil, sigVerifier)
 		require.ErrorContains(t, err, "open agent:")
 	})
 }
@@ -291,13 +281,16 @@ func TestPackageManager_UpdateContent(t *testing.T) {
 func initPackageManager(t *testing.T, tmpDir string) *packageManager {
 	agentFile := filepath.Join(tmpDir, "agent")
 	storageDir := filepath.Join(tmpDir, "storage")
+	sigVerifierBuilder := verify.NewDefaultBuilder()
+	sigVerifier, err := sigVerifierBuilder.NewVerifier(sigVerifierBuilder.Config())
+	require.NoError(t, err)
 
 	require.NoError(t, os.MkdirAll(storageDir, 0o700))
 	require.NoError(t, os.WriteFile(agentFile, []byte(testAgentFileContents), 0o600))
 	ps, err := loadOrCreatePersistentState(filepath.Join(tmpDir, "persistent_state.yaml"), zap.NewNop())
 	require.NoError(t, err)
 
-	pm, err := newPackageManager(agentFile, storageDir, "v0.110.0", ps, nil, &fakeVerifier{})
+	pm, err := newPackageManager(agentFile, storageDir, "v0.110.0", ps, nil, sigVerifier)
 	require.NoError(t, err)
 
 	return pm

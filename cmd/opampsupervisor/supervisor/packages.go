@@ -182,15 +182,9 @@ func (p *packageManager) UpdateContent(ctx context.Context, packageName string, 
 	if err = verifyPackageHash(by, contentHash); err != nil {
 		return fmt.Errorf("could not verify package integrity: %w", err)
 	}
-	pkgFilePath := filepath.Join(p.storageDir, "collector.tgz")
-	if err = os.WriteFile(pkgFilePath, by, 0o600); err != nil {
-		return fmt.Errorf("write package file: %w", err)
-	}
-	defer os.Remove(pkgFilePath)
-	if err = p.sigVerifier.Verify(ctx, pkgFilePath, string(signature)); err != nil {
+	if err = p.sigVerifier.Verify(ctx, by, signature); err != nil {
 		return fmt.Errorf("could not verify package signature: %w", err)
 	}
-
 	// 3. Create reader for new agent & verify the tarball contains the otelcol-contrib binary.
 	gzipReader, err := gzip.NewReader(bytes.NewBuffer(by))
 	if err != nil {
