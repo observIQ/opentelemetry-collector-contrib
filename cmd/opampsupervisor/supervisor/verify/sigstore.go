@@ -28,7 +28,7 @@ func (v *SigstoreVerifier) Verify(ctx context.Context, packageBytes, signature [
 	return verifyPackageSignature(ctx, v.checkOpts, packageBytes, b64Cert, b64Sig)
 }
 
-func (v *SigstoreVerifier) Name() string { return "sigstore" }
+func (*SigstoreVerifier) Name() string { return "sigstore" }
 
 func parsePackageSignature(signature []byte) (b64Cert, b64Signature []byte, err error) {
 	splitSignature := bytes.SplitN(signature, []byte(" "), 2)

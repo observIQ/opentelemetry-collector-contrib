@@ -5,11 +5,13 @@ package verify
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 
 	"github.com/sigstore/cosign/v2/cmd/cosign/cli/fulcio"
 	"github.com/sigstore/cosign/v2/pkg/cosign"
 	"github.com/sigstore/rekor/pkg/client"
+	gclient "github.com/sigstore/rekor/pkg/generated/client"
 	"go.opentelemetry.io/collector/component"
 )
 
@@ -24,21 +26,25 @@ func (SigstoreVerifierBuilder) Config() component.Config { return defaultSigstor
 
 // NewVerifier builds a Sigstore verifier using the provided config.
 func (SigstoreVerifierBuilder) NewVerifier(cfg component.Config) (SignatureVerifier, error) {
-	opts, err := createCosignCheckOpts(cfg.(*SigstoreConfig))
+	deps, err := initCosignDeps()
 	if err != nil {
-		return nil, fmt.Errorf("create check opts: %w", err)
+		return nil, fmt.Errorf("init cosign deps: %w", err)
 	}
 
+	opts := createCosignCheckOpts(deps, cfg.(*SigstoreConfig))
 	return &SigstoreVerifier{checkOpts: opts}, nil
 }
 
-// createCosignCheckOpts creates a cosign.CheckOpts from the signature options.
-// These options provide information needed to verify the signature of the package.
-// The options consist of public Fulcio certificates to verify the identity of the signature,
-// a Rekor client to verify the integrity of the signature against a transparency log,
-// and a set of identities that the signature must match. More information about the
-// cosign.CheckOpts can be found in the specification (../specification/README.md#collector-executable-updates-flow).
-func createCosignCheckOpts(signatureOpts *SigstoreConfig) (*cosign.CheckOpts, error) {
+type CosignDeps struct {
+	RootCerts         *x509.CertPool
+	IntermediateCerts *x509.CertPool
+	RekorClient       *gclient.Rekor
+
+	RekorPubKeys *cosign.TrustedTransparencyLogPubKeys
+	CTLogPubKeys *cosign.TrustedTransparencyLogPubKeys
+}
+
+func initCosignDeps() (*CosignDeps, error) {
 	rootCerts, err := fulcio.GetRoots()
 	if err != nil {
 		return nil, fmt.Errorf("fetch root certs: %w", err)
@@ -64,6 +70,22 @@ func createCosignCheckOpts(signatureOpts *SigstoreConfig) (*cosign.CheckOpts, er
 		return nil, fmt.Errorf("get CT log public keys: %w", err)
 	}
 
+	return &CosignDeps{
+		RootCerts:         rootCerts,
+		IntermediateCerts: intermediateCerts,
+		RekorClient:       rekorClient,
+		RekorPubKeys:      rekorKeys,
+		CTLogPubKeys:      ctLogPubKeys,
+	}, nil
+}
+
+// createCosignCheckOpts creates a cosign.CheckOpts from the signature options.
+// These options provide information needed to verify the signature of the package.
+// The options consist of public Fulcio certificates to verify the identity of the signature,
+// a Rekor client to verify the integrity of the signature against a transparency log,
+// and a set of identities that the signature must match. More information about the
+// cosign.CheckOpts can be found in the specification (../specification/README.md#collector-executable-updates-flow).
+func createCosignCheckOpts(deps *CosignDeps, signatureOpts *SigstoreConfig) *cosign.CheckOpts {
 	identities := make([]cosign.Identity, 0, len(signatureOpts.Identities))
 	for _, ident := range signatureOpts.Identities {
 		identities = append(identities, cosign.Identity{
@@ -75,12 +97,12 @@ func createCosignCheckOpts(signatureOpts *SigstoreConfig) (*cosign.CheckOpts, er
 	}
 
 	return &cosign.CheckOpts{
-		RootCerts:                    rootCerts,
-		IntermediateCerts:            intermediateCerts,
+		RootCerts:                    deps.RootCerts,
+		IntermediateCerts:            deps.IntermediateCerts,
 		CertGithubWorkflowRepository: signatureOpts.CertGithubWorkflowRepository,
 		Identities:                   identities,
-		RekorClient:                  rekorClient,
-		RekorPubKeys:                 rekorKeys,
-		CTLogPubKeys:                 ctLogPubKeys,
-	}, nil
+		RekorClient:                  deps.RekorClient,
+		RekorPubKeys:                 deps.RekorPubKeys,
+		CTLogPubKeys:                 deps.CTLogPubKeys,
+	}
 }

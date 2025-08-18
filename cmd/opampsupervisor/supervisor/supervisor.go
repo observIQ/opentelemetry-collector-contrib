@@ -241,10 +241,6 @@ func NewSupervisor(logger *zap.Logger, cfg config.Supervisor, opts ...Option) (*
 	}
 	s.config = cfg
 
-	if s.sigVerifier, err = s.sigVerifierBuilder.NewVerifier(sigConf); err != nil {
-		return nil, fmt.Errorf("error create new verifier: %w", err)
-	}
-
 	if err := os.MkdirAll(s.config.Storage.Directory, 0o700); err != nil {
 		return nil, fmt.Errorf("error creating storage dir: %w", err)
 	}
@@ -360,6 +356,10 @@ func (s *Supervisor) Start() error {
 	}
 
 	if s.config.Capabilities.AcceptsPackages || s.config.Capabilities.ReportsPackageStatuses {
+		if s.sigVerifier, err = s.sigVerifierBuilder.NewVerifier(s.config.Agent.Signature); err != nil {
+			return fmt.Errorf("error create new verifier: %w", err)
+		}
+
 		s.packageManager, err = newPackageManager(
 			s.config.Agent.Executable,
 			s.config.Storage.Directory,
