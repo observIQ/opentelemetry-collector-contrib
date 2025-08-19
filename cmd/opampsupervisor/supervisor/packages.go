@@ -29,6 +29,8 @@ var (
 	agentPackageKey = ""
 
 	lastPackageStatusFileName = "last-reported-package-statuses.binpb"
+
+	defaultAgentExePathInArchieve = "otelcol-contrib"
 )
 
 // maxAgentBytes is the max size of an agent package that will be accepted.
@@ -47,10 +49,11 @@ type packageManager struct {
 	// topLevelVersion is the collector package version from the Version object in the PackageAvailable OpAmp message handled by the OpAmp.Client
 	topLevelVersion string
 
-	storageDir   string
-	agentExePath string
-	sigVerifier  verify.SignatureVerifier
-	am           agentManager
+	storageDir             string
+	agentExePath           string
+	agentExePathInArchieve string
+	sigVerifier            verify.SignatureVerifier
+	am                     agentManager
 }
 
 type agentManager interface {
@@ -60,15 +63,16 @@ type agentManager interface {
 }
 
 func newPackageManager(
-	agentPath,
+	agentExePath,
 	storageDir,
-	agentVersion string,
+	agentVersion,
+	agentExePathInArchieve string,
 	persistentState *persistentState,
 	am agentManager,
 	sigVerifier verify.SignatureVerifier,
 ) (*packageManager, error) {
 	// Read actual hash of the on-disk agent
-	f, err := os.Open(agentPath)
+	f, err := os.Open(agentExePath)
 	if err != nil {
 		return nil, fmt.Errorf("open agent: %w", err)
 	}
@@ -80,13 +84,14 @@ func newPackageManager(
 	agentHash := h.Sum(nil)
 
 	return &packageManager{
-		persistentState: persistentState,
-		topLevelHash:    agentHash,
-		topLevelVersion: agentVersion,
-		storageDir:      storageDir,
-		agentExePath:    agentPath,
-		sigVerifier:     sigVerifier,
-		am:              am,
+		persistentState:        persistentState,
+		topLevelHash:           agentHash,
+		topLevelVersion:        agentVersion,
+		storageDir:             storageDir,
+		agentExePath:           agentExePath,
+		agentExePathInArchieve: agentExePathInArchieve,
+		sigVerifier:            sigVerifier,
+		am:                     am,
 	}, nil
 }
 
@@ -198,7 +203,7 @@ func (p *packageManager) UpdateContent(ctx context.Context, packageName string, 
 		return fmt.Errorf("first tarball read for collector: %w", err)
 	}
 
-	for h.Name != "otelcol-contrib" {
+	for h.Name != p.agentExePathInArchieve {
 		h, err = tar.Next()
 		if err != nil {
 			return fmt.Errorf("read tarball for collector: %w", err)

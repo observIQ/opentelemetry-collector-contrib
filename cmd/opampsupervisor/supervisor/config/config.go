@@ -212,8 +212,7 @@ type Agent struct {
 	ConfigFiles             []string          `mapstructure:"config_files"`
 	Arguments               []string          `mapstructure:"args"`
 	Env                     map[string]string `mapstructure:"env"`
-	Signature               component.Config  `mapstructure:"-"`
-	SignatureConf           *confmap.Conf     `mapstructure:"signature"`
+	Upgrade                 AgentUpgrade      `mapstructure:"upgrade"`
 }
 
 func (a Agent) Validate() error {
@@ -259,6 +258,20 @@ func (a Agent) Validate() error {
 		return errors.New("agent::config_apply_timeout must be valid duration")
 	}
 
+	if err = a.Upgrade.Validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type AgentUpgrade struct {
+	ExePathInArchieve string           `mapstructure:"exe_path_in_archieve"`
+	Signature         component.Config `mapstructure:"-"`
+	SignatureConf     *confmap.Conf    `mapstructure:"signature"`
+}
+
+func (a AgentUpgrade) Validate() error {
 	if a.Signature != nil {
 		if validator, ok := a.Signature.(interface{ Validate() error }); ok {
 			if err := validator.Validate(); err != nil {
@@ -375,6 +388,9 @@ func DefaultSupervisor() Supervisor {
 			ConfigApplyTimeout:      5 * time.Second,
 			BootstrapTimeout:        3 * time.Second,
 			PassthroughLogs:         false,
+			Upgrade: AgentUpgrade{
+				ExePathInArchieve: "otelcol-contrib",
+			},
 		},
 		Telemetry: Telemetry{
 			Logs: Logs{

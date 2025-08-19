@@ -229,12 +229,12 @@ func NewSupervisor(logger *zap.Logger, cfg config.Supervisor, opts ...Option) (*
 		s.sigVerifierBuilder = verify.NewDefaultBuilder()
 	}
 	sigConf := s.sigVerifierBuilder.Config()
-	if sigConf != nil && cfg.Agent.SignatureConf != nil {
-		if err := cfg.Agent.SignatureConf.Unmarshal(sigConf); err != nil {
+	if sigConf != nil && cfg.Agent.Upgrade.SignatureConf != nil {
+		if err := cfg.Agent.Upgrade.SignatureConf.Unmarshal(sigConf); err != nil {
 			return nil, fmt.Errorf("unmarshal signature config: %w", err)
 		}
 	}
-	cfg.Agent.Signature = sigConf
+	cfg.Agent.Upgrade.Signature = sigConf
 
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("error validating config: %w", err)
@@ -356,7 +356,7 @@ func (s *Supervisor) Start() error {
 	}
 
 	if s.config.Capabilities.AcceptsPackages || s.config.Capabilities.ReportsPackageStatuses {
-		if s.sigVerifier, err = s.sigVerifierBuilder.NewVerifier(s.config.Agent.Signature); err != nil {
+		if s.sigVerifier, err = s.sigVerifierBuilder.NewVerifier(s.config.Agent.Upgrade.Signature); err != nil {
 			return fmt.Errorf("error create new verifier: %w", err)
 		}
 
@@ -364,6 +364,7 @@ func (s *Supervisor) Start() error {
 			s.config.Agent.Executable,
 			s.config.Storage.Directory,
 			agentVersion,
+			s.config.Agent.Upgrade.ExePathInArchieve,
 			s.persistentState,
 			s,
 			s.sigVerifier,
