@@ -5,6 +5,7 @@ package supervisor
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net"
@@ -776,11 +777,20 @@ service:
 		assert.Nil(t, s.cfgState.Load())
 		assert.True(t, remoteConfigStatusUpdated)
 	})
-	t.Run("RemoteConfig - Don't report status if config is not changed", func(t *testing.T) {
-		const testConfigMessage = `receivers:
-  debug:`
-
-		const expectedMergedConfig = `extensions:
+	t.Run("RemoteConfig - Report applied status if config is not changed", func(t *testing.T) {
+		const initialConfigMessage = `receivers:
+  debug:
+  exporters:
+    nop:`
+		const remoteConfigMessage = `exporters:
+  nop:
+receivers:
+  debug:
+`
+		// mergedConfig should be the result of creating the config for both the initial and remote config messages
+		const mergedConfig = `exporters:
+    nop: null
+extensions:
     opamp:
         capabilities:
             reports_available_components: false
@@ -807,45 +817,66 @@ service:
         resource: null
 `
 
+		// store the initial remote config message so the supervisor is initialized with it
+		configStorageDir := t.TempDir()
+		err := os.WriteFile(filepath.Join(configStorageDir, lastRecvRemoteConfigFile), []byte(initialConfigMessage), 0o600)
+		require.NoError(t, err)
+
 		// the remote config message we will send that will get merged and compared with the initial config
+		remoteConfigHash := sha256.Sum256([]byte(remoteConfigMessage))
 		remoteConfig := &protobufs.AgentRemoteConfig{
 			Config: &protobufs.AgentConfigMap{
 				ConfigMap: map[string]*protobufs.AgentConfigFile{
 					"": {
-						Body: []byte(testConfigMessage),
+						Body: []byte(remoteConfigMessage),
 					},
 				},
 			},
-			ConfigHash: []byte("hash"),
+			ConfigHash: remoteConfigHash[:],
 		}
 
 		remoteConfigStatusUpdated := false
 		mc := &mockOpAMPClient{
-			setRemoteConfigStatusFunc: func(_ *protobufs.RemoteConfigStatus) error {
+			setRemoteConfigStatusFunc: func(rcs *protobufs.RemoteConfigStatus) error {
 				remoteConfigStatusUpdated = true
+				// assert the Supervisor reports the new hash as applied
+				assert.Equal(t, remoteConfig.ConfigHash, rcs.LastRemoteConfigHash)
+				assert.Equal(t, protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLIED, rcs.Status)
+				assert.Empty(t, rcs.ErrorMessage)
+				return nil
+			},
+			updateEffectiveConfigFunc: func(context.Context) error {
 				return nil
 			},
 		}
 
+		// initial persistent state should be the result of the initial config message
 		testUUID := uuid.MustParse("018fee23-4a51-7303-a441-73faed7d9deb")
-		configStorageDir := t.TempDir()
+		initialRemoteConfigHash := sha256.Sum256([]byte(initialConfigMessage))
+		startingPersistentState := &persistentState{InstanceID: testUUID, LastRemoteConfigStatus: &RemoteConfigStatus{
+			LastRemoteConfigHash: string(initialRemoteConfigHash[:]),
+			Status:               protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLIED,
+			ErrorMessage:         "",
+		}}
+
 		s := Supervisor{
 			telemetrySettings: newNopTelemetrySettings(),
 			pidProvider:       staticPIDProvider(88888),
 			config: config.Supervisor{
+				Capabilities: config.Capabilities{AcceptsRemoteConfig: true},
 				Storage: config.Storage{
 					Directory: configStorageDir,
 				},
 			},
-			hasNewConfig:                 make(chan struct{}, 1),
-			persistentState:              &persistentState{InstanceID: testUUID},
-			agentConfigOwnMetricsSection: &atomic.Value{},
-			effectiveConfig:              &atomic.Value{},
-			opampClient:                  mc,
-			agentDescription:             &atomic.Value{},
-			cfgState:                     &atomic.Value{},
-			customMessageToServer:        make(chan *protobufs.CustomMessage, 10),
-			doneChan:                     make(chan struct{}),
+			hasNewConfig:                   make(chan struct{}, 1),
+			persistentState:                startingPersistentState,
+			agentConfigOwnTelemetrySection: &atomic.Value{},
+			effectiveConfig:                &atomic.Value{},
+			opampClient:                    mc,
+			agentDescription:               &atomic.Value{},
+			cfgState:                       &atomic.Value{},
+			customMessageToServer:          make(chan *protobufs.CustomMessage, 10),
+			doneChan:                       make(chan struct{}),
 		}
 
 		require.NoError(t, s.createTemplates())
@@ -856,12 +887,120 @@ service:
 			NonIdentifyingAttributes: []*protobufs.KeyValue{},
 		})
 
-		// initially write & store config so that we have the same config when we send the remote config message
-		err := os.WriteFile(filepath.Join(configStorageDir, lastRecvRemoteConfigFile), []byte(testConfigMessage), 0o600)
-		require.NoError(t, err)
-
+		// store the initial merged config
 		s.cfgState.Store(&configState{
-			mergedConfig:     expectedMergedConfig,
+			mergedConfig:     mergedConfig,
+			configMapIsEmpty: false,
+		})
+
+		s.onMessage(t.Context(), &types.MessageData{
+			RemoteConfig: remoteConfig,
+		})
+
+		// assert the remote config status callback was called
+		assert.True(t, remoteConfigStatusUpdated)
+
+		// assert the config file and stored data are updated
+		fileContent, err := os.ReadFile(filepath.Join(configStorageDir, lastRecvRemoteConfigFile))
+		require.NoError(t, err)
+		assert.Contains(t, string(fileContent), remoteConfigMessage)
+		assert.Equal(t, mergedConfig, s.cfgState.Load().(*configState).mergedConfig)
+	})
+
+	t.Run("RemoteConfig - do nothing if not capable of accepting remote config", func(t *testing.T) {
+		const testConfigMessage = `receivers:
+  debug:`
+
+		const expectedEffectiveConfig = `extensions:
+    opamp:
+        capabilities:
+            reports_available_components: false
+        instance_uid: 018fee23-4a51-7303-a441-73faed7d9deb
+        ppid: 88888
+        ppid_poll_interval: 5s
+        server:
+            ws:
+                endpoint: ws://127.0.0.1:0/v1/opamp
+                tls:
+                    insecure: true
+service:
+    extensions:
+        - opamp
+    telemetry:
+        logs:
+            encoding: json
+            error_output_paths:
+                - stderr
+            output_paths:
+                - stdout
+        resource: null
+`
+
+		remoteConfig := &protobufs.AgentRemoteConfig{
+			Config: &protobufs.AgentConfigMap{
+				ConfigMap: map[string]*protobufs.AgentConfigFile{
+					"": {
+						Body: []byte(remoteConfigMessage),
+					},
+				},
+			},
+			ConfigHash: remoteConfigHash[:],
+		}
+
+		remoteConfigStatusUpdated := false
+		mc := &mockOpAMPClient{
+			setRemoteConfigStatusFunc: func(*protobufs.RemoteConfigStatus) error {
+				remoteConfigStatusUpdated = true
+				// assert the Supervisor reports the new hash as applied
+				assert.Equal(t, remoteConfig.ConfigHash, rcs.LastRemoteConfigHash)
+				assert.Equal(t, protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLIED, rcs.Status)
+				assert.Empty(t, rcs.ErrorMessage)
+				return nil
+			},
+			updateEffectiveConfigFunc: func(context.Context) error {
+				return nil
+			},
+		}
+
+		// initial persistent state should be the result of the initial config message
+		testUUID := uuid.MustParse("018fee23-4a51-7303-a441-73faed7d9deb")
+		initialRemoteConfigHash := sha256.Sum256([]byte(initialConfigMessage))
+		startingPersistentState := &persistentState{InstanceID: testUUID, LastRemoteConfigStatus: &RemoteConfigStatus{
+			LastRemoteConfigHash: string(initialRemoteConfigHash[:]),
+			Status:               protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLIED,
+			ErrorMessage:         "",
+		}}
+
+		s := Supervisor{
+			telemetrySettings: newNopTelemetrySettings(),
+			pidProvider:       staticPIDProvider(88888),
+			config: config.Supervisor{
+				Storage: config.Storage{
+					Directory: configStorageDir,
+				},
+			},
+			hasNewConfig:                   make(chan struct{}, 1),
+			persistentState:                &persistentState{InstanceID: testUUID},
+			agentConfigOwnTelemetrySection: &atomic.Value{},
+			effectiveConfig:                &atomic.Value{},
+			opampClient:                    mc,
+			agentDescription:               &atomic.Value{},
+			cfgState:                       &atomic.Value{},
+			customMessageToServer:          make(chan *protobufs.CustomMessage, 10),
+			doneChan:                       make(chan struct{}),
+		}
+
+		require.NoError(t, s.createTemplates())
+
+		// need to set the agent description as part of initialization
+		s.agentDescription.Store(&protobufs.AgentDescription{
+			IdentifyingAttributes:    []*protobufs.KeyValue{},
+			NonIdentifyingAttributes: []*protobufs.KeyValue{},
+		})
+
+		// store the initial merged config
+		s.cfgState.Store(&configState{
+			mergedConfig:     mergedConfig,
 			configMapIsEmpty: false,
 		})
 
@@ -869,13 +1008,14 @@ service:
 			RemoteConfig: remoteConfig,
 		})
 
-		// assert the remote config status callback was not called
-		assert.False(t, remoteConfigStatusUpdated)
-		// assert the config file and stored data are still the same
+		// assert the remote config status callback was called
+		assert.True(t, remoteConfigStatusUpdated)
+
+		// assert the config file and stored data are updated
 		fileContent, err := os.ReadFile(filepath.Join(configStorageDir, lastRecvRemoteConfigFile))
 		require.NoError(t, err)
-		assert.Contains(t, string(fileContent), testConfigMessage)
-		assert.Equal(t, expectedMergedConfig, s.cfgState.Load().(*configState).mergedConfig)
+		assert.Contains(t, string(fileContent), remoteConfigMessage)
+		assert.Equal(t, mergedConfig, s.cfgState.Load().(*configState).mergedConfig)
 	})
 }
 
