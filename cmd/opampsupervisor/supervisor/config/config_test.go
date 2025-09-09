@@ -415,7 +415,8 @@ func TestCapabilities_SupportedCapabilities(t *testing.T) {
 			expectedAgentCapabilities: protobufs.AgentCapabilities_AgentCapabilities_ReportsStatus |
 				protobufs.AgentCapabilities_AgentCapabilities_ReportsOwnMetrics |
 				protobufs.AgentCapabilities_AgentCapabilities_ReportsEffectiveConfig |
-				protobufs.AgentCapabilities_AgentCapabilities_ReportsHealth,
+				protobufs.AgentCapabilities_AgentCapabilities_ReportsHealth |
+				protobufs.AgentCapabilities_AgentCapabilities_ReportsHeartbeat,
 		},
 		{
 			name:                      "Empty capabilities",
@@ -435,6 +436,7 @@ func TestCapabilities_SupportedCapabilities(t *testing.T) {
 				ReportsHealth:                  true,
 				ReportsRemoteConfig:            true,
 				ReportsAvailableComponents:     true,
+				ReportsHeartbeat:               true,
 			},
 			expectedAgentCapabilities: protobufs.AgentCapabilities_AgentCapabilities_ReportsStatus |
 				protobufs.AgentCapabilities_AgentCapabilities_ReportsEffectiveConfig |
@@ -446,7 +448,8 @@ func TestCapabilities_SupportedCapabilities(t *testing.T) {
 				protobufs.AgentCapabilities_AgentCapabilities_ReportsRemoteConfig |
 				protobufs.AgentCapabilities_AgentCapabilities_AcceptsRestartCommand |
 				protobufs.AgentCapabilities_AgentCapabilities_AcceptsOpAMPConnectionSettings |
-				protobufs.AgentCapabilities_AgentCapabilities_ReportsAvailableComponents,
+				protobufs.AgentCapabilities_AgentCapabilities_ReportsAvailableComponents |
+				protobufs.AgentCapabilities_AgentCapabilities_ReportsHeartbeat,
 		},
 	}
 
@@ -521,6 +524,7 @@ capabilities:
   reports_remote_config: true
   accepts_restart_command: true
   accepts_opamp_connection_settings: true
+  reports_heartbeat: true
 
 storage:
   directory: %s
@@ -563,6 +567,7 @@ telemetry:
 						ReportsRemoteConfig:            true,
 						AcceptsRestartCommand:          true,
 						AcceptsOpAMPConnectionSettings: true,
+						ReportsHeartbeat:               true,
 					},
 					Storage: Storage{
 						Directory: filepath.Join(tmpDir, "storage"),
