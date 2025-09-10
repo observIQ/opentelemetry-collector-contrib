@@ -1,0 +1,18 @@
+receivers:
+  syslog:
+    mode: parsed
+    tcp:
+      listen_address: "0.0.0.0:514"
+    protocol: rfc5424
+    location: "UTC"
+    add_attributes: true
+
+exporters:
+  logging:
+    loglevel: debug
+
+service:
+  pipelines:
+    logs:
+      receivers: [syslog]
+      exporters: [logging]

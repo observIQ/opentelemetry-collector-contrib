@@ -1,0 +1,16 @@
+receivers:
+  syslog:
+    mode: raw
+    udp:
+      listen_address: "0.0.0.0:514"
+    add_attributes: true
+
+exporters:
+  logging:
+    loglevel: debug
+
+service:
+  pipelines:
+    logs:
+      receivers: [syslog]
+      exporters: [logging]
