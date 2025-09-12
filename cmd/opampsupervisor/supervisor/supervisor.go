@@ -688,6 +688,7 @@ func (s *Supervisor) startOpAMPClient() error {
 	if s.config.Capabilities.ReportsHeartbeat {
 		d := time.Duration(s.heartbeatIntervalSeconds) * time.Second
 		settings.HeartbeatInterval = &d
+		s.telemetrySettings.Logger.Debug("Setting heartbeat interval", zap.Duration("interval", d), zap.String("instance_uid", s.persistentState.InstanceID.String()))
 	}
 
 	s.telemetrySettings.Logger.Debug("Starting OpAMP client...")
