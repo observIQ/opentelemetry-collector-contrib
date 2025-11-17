@@ -473,7 +473,18 @@ func (s *Supervisor) getBootstrapInfo() (agentVersion string, err error) {
 	_, span := s.getTracer().Start(s.runCtx, "GetBootstrapInfo")
 	defer span.End()
 
+	origPort := s.opampServerPort
+
 	s.opampServerPort, err = s.getSupervisorOpAMPServerPort()
+
+	if origPort == 0 {
+		origPort = s.opampServerPort
+	}
+
+	defer func() {
+		s.opampServerPort = origPort
+	}()
+
 	if err != nil {
 		span.SetStatus(codes.Error, fmt.Sprintf("Could not get supervisor opamp service port: %v", err))
 		return "", err
@@ -1713,6 +1724,25 @@ func (s *Supervisor) runAgentProcess() {
 				if err != nil {
 					s.telemetrySettings.Logger.Error("Could not get bootstrap info", zap.Error(err))
 				}
+
+				// update supervisor port to be the main supervisor port instead of temporary port
+				configBytes, err := os.ReadFile(s.agentConfigFilePath())
+				if err == nil {
+					k := koanf.New("::")
+					if err := k.Load(rawbytes.Provider(configBytes), yaml.Parser()); err == nil {
+						existingEndpoint := k.String("extensions::opamp::server::ws::endpoint")
+						if existingEndpoint != "" {
+							if parsedURL, err := url.Parse(existingEndpoint); err == nil {
+								parsedURL.Host = fmt.Sprintf("localhost:%d", s.opampServerPort)
+								k.Set("extensions::opamp::server::ws::endpoint", parsedURL.String())
+								if updatedConfig, err := k.Marshal(yaml.Parser()); err == nil {
+									os.WriteFile(s.agentConfigFilePath(), updatedConfig, 0o600)
+								}
+							}
+						}
+					}
+				}
+
 				// now restart the agent
 				_, err = s.startAgentCommand()
 				if err != nil {
