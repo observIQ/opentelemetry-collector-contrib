@@ -281,3 +281,6 @@ providers:
 # file before passing it to OCB, to ensure that local versions are used for all
 # Contrib modules.
 replaces:
+  - go.opentelemetry.io/collector/extension => github.com/observiq/opentelemetry-collector/extension v0.0.0-20251205200904-faaa63f9091c
+  - go.opentelemetry.io/collector/service => github.com/observiq/opentelemetry-collector/service v0.0.0-20251205200904-faaa63f9091c
+  - go.opentelemetry.io/collector/otelcol => github.com/observiq/opentelemetry-collector/otelcol v0.0.0-20251205200904-faaa63f9091c

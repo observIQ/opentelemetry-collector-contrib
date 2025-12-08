@@ -38,7 +38,7 @@ require (
 	github.com/google/go-tpm v0.9.7 // indirect
 	github.com/grafana/regexp v0.0.0-20240518133315-a468a5bfb3bc // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2 // indirect
-	github.com/hashicorp/go-version v1.7.0 // indirect
+	github.com/hashicorp/go-version v1.8.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/michel-laterman/proxy-connect-dialer-go v0.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -136,3 +136,7 @@ require (
 replace github.com/open-telemetry/opentelemetry-collector-contrib/extension/opampcustommessages => ../opampcustommessages
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/status => ../../pkg/status
+
+replace go.opentelemetry.io/collector/extension => github.com/observiq/opentelemetry-collector/extension v0.0.0-20251205200904-faaa63f9091c
+
+replace go.opentelemetry.io/collector/service => github.com/observiq/opentelemetry-collector/service v0.0.0-20251205200904-faaa63f9091c
