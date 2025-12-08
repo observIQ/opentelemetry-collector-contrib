@@ -4,8 +4,10 @@
 package opampextension // import "github.com/open-telemetry/opentelemetry-collector-contrib/extension/opampextension"
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -15,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/google/uuid"
 	"github.com/oklog/ulid/v2"
@@ -85,6 +88,8 @@ type opampAgent struct {
 	startTimeUnixNano    uint64
 	componentStatusCh    chan *eventSourcePair
 	readyCh              chan struct{}
+
+	lastRemoteConfigHash []byte
 }
 
 var (
@@ -133,6 +138,11 @@ func (o *opampAgent) Start(ctx context.Context, host component.Host) error {
 		TLSConfig:      tls,
 		OpAMPServerURL: o.cfg.Server.GetEndpoint(),
 		InstanceUid:    types.InstanceUid(o.instanceID),
+		RemoteConfigStatus: &protobufs.RemoteConfigStatus{
+			Status:               protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLIED,
+			LastRemoteConfigHash: o.lastRemoteConfigHash,
+			ErrorMessage:         "",
+		},
 		Callbacks: types.Callbacks{
 			OnConnect: func(_ context.Context) {
 				o.logger.Debug("Connected to the OpAMP server")
@@ -333,12 +343,20 @@ func newOpampAgent(cfg *Config, set extension.Settings) (*opampAgent, error) {
 		componentHealthWg:        &sync.WaitGroup{},
 		readyCh:                  make(chan struct{}),
 		customCapabilityRegistry: newCustomCapabilityRegistry(set.Logger, opampClient),
+		lastRemoteConfigHash:     []byte{},
 	}
 
 	agent.lifetimeCtx, agent.lifetimeCtxCancel = context.WithCancel(context.Background())
 
 	if agent.capabilities.ReportsHealth {
 		agent.initHealthReporting()
+	}
+
+	// Load the last remote config hash from file if configured
+	if cfg.RemoteConfigHashFile != "" {
+		if err := agent.loadRemoteConfigHash(); err != nil {
+			set.Logger.Warn("Failed to load remote config hash from file", zap.Error(err))
+		}
 	}
 
 	return agent, nil
@@ -463,6 +481,10 @@ func (o *opampAgent) onMessage(_ context.Context, msg *types.MessageData) {
 
 	if msg.CustomMessage != nil {
 		o.customCapabilityRegistry.ProcessMessage(msg.CustomMessage)
+	}
+
+	if msg.RemoteConfig != nil {
+		o.processRemoteConfigMessage(msg.RemoteConfig)
 	}
 }
 
@@ -689,4 +711,94 @@ func convertComponentHealth(statusUpdate *status.AggregateStatus) *protobufs.Com
 	}
 
 	return componentHealth
+}
+
+// Send remote config applied & sighup status
+func (o *opampAgent) processRemoteConfigMessage(msg *protobufs.AgentRemoteConfig) {
+	if bytes.Equal(o.lastRemoteConfigHash, msg.ConfigHash) {
+		o.logger.Info("Remote config is the same as the last remote config, skipping")
+		return
+	}
+	o.opampClient.SetRemoteConfigStatus(&protobufs.RemoteConfigStatus{
+		Status:               protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLYING,
+		LastRemoteConfigHash: msg.ConfigHash,
+		ErrorMessage:         "",
+	})
+	o.lastRemoteConfigHash = msg.ConfigHash
+	// Save the hash to file if configured
+	if o.cfg.RemoteConfigHashFile != "" {
+		if err := o.saveRemoteConfigHash(); err != nil {
+			o.logger.Error("Failed to save remote config hash to file", zap.Error(err))
+		}
+	}
+
+	//write config
+	rcfg := msg.GetConfig()
+	if err := os.WriteFile(o.cfg.CollectorConfigFile, rcfg.ConfigMap[""].Body, 0600); err != nil {
+		o.logger.Error("Failed to write remote config to file", zap.Error(err))
+		o.opampClient.SetRemoteConfigStatus(&protobufs.RemoteConfigStatus{
+			Status:               protobufs.RemoteConfigStatuses_RemoteConfigStatuses_FAILED,
+			LastRemoteConfigHash: msg.ConfigHash,
+			ErrorMessage:         err.Error(),
+		})
+		return
+	}
+
+	o.opampClient.SetRemoteConfigStatus(&protobufs.RemoteConfigStatus{
+		Status:               protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLIED,
+		LastRemoteConfigHash: msg.ConfigHash,
+		ErrorMessage:         "",
+	})
+
+	o.logger.Info("Remote config applied and SIGHUP sent")
+	go syscall.Kill(os.Getpid(), syscall.SIGHUP)
+}
+
+// saveRemoteConfigHash saves the last remote config hash to a file
+func (o *opampAgent) saveRemoteConfigHash() error {
+	if len(o.lastRemoteConfigHash) == 0 {
+		return nil
+	}
+
+	hashHex := hex.EncodeToString(o.lastRemoteConfigHash)
+	if err := os.WriteFile(o.cfg.RemoteConfigHashFile, []byte(hashHex), 0600); err != nil {
+		return fmt.Errorf("failed to write remote config hash to file: %w", err)
+	}
+
+	o.logger.Debug("Saved remote config hash to file",
+		zap.String("file", o.cfg.RemoteConfigHashFile),
+		zap.String("hash", hashHex))
+
+	return nil
+}
+
+// loadRemoteConfigHash loads the last remote config hash from a file
+func (o *opampAgent) loadRemoteConfigHash() error {
+	data, err := os.ReadFile(o.cfg.RemoteConfigHashFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			o.logger.Debug("Remote config hash file does not exist, starting fresh",
+				zap.String("file", o.cfg.RemoteConfigHashFile))
+			return nil
+		}
+		return fmt.Errorf("failed to read remote config hash from file: %w", err)
+	}
+
+	hashHex := strings.TrimSpace(string(data))
+	if hashHex == "" {
+		o.logger.Debug("Remote config hash file is empty")
+		return nil
+	}
+
+	hash, err := hex.DecodeString(hashHex)
+	if err != nil {
+		return fmt.Errorf("failed to decode remote config hash: %w", err)
+	}
+
+	o.lastRemoteConfigHash = hash
+	o.logger.Info("Loaded remote config hash from file",
+		zap.String("file", o.cfg.RemoteConfigHashFile),
+		zap.String("hash", hashHex))
+
+	return nil
 }

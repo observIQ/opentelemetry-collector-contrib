@@ -46,6 +46,14 @@ type Config struct {
 
 	// PPIDPollInterval is the time between polling for whether PPID is running.
 	PPIDPollInterval time.Duration `mapstructure:"ppid_poll_interval"`
+
+	// RemoteConfigHashFile is the path to a file where the last remote config hash will be persisted.
+	// This allows the agent to avoid reapplying the same configuration after a restart.
+	// If empty, the hash will not be persisted.
+	RemoteConfigHashFile string `mapstructure:"remote_config_hash_file"`
+
+	// CollectorConfigFile is the path to a file where the collector's config is.
+	CollectorConfigFile string `mapstructure:"collector_config_file"`
 }
 
 type AgentDescription struct {
@@ -80,6 +88,9 @@ func (caps Capabilities) toAgentCapabilities() protobufs.AgentCapabilities {
 	if caps.ReportsAvailableComponents {
 		agentCapabilities |= protobufs.AgentCapabilities_AgentCapabilities_ReportsAvailableComponents
 	}
+
+	agentCapabilities |= protobufs.AgentCapabilities_AgentCapabilities_AcceptsRemoteConfig
+	agentCapabilities |= protobufs.AgentCapabilities_AgentCapabilities_ReportsRemoteConfig
 
 	return agentCapabilities
 }
