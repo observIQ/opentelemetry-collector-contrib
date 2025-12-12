@@ -46,6 +46,23 @@ type Config struct {
 
 	// PPIDPollInterval is the time between polling for whether PPID is running.
 	PPIDPollInterval time.Duration `mapstructure:"ppid_poll_interval"`
+
+	// SupervisorLauncher contains configuration options for launching the supervisor
+	SupervisorLauncher SupervisorLauncher `mapstructure:"supervisor_launcher"`
+}
+
+// SupervisorLauncher holds configurable parameters for launching the supervisor
+type SupervisorLauncher struct {
+	// LaunchSupervisor determines whether the supervisor should be launched.
+	LaunchSupervisor bool `mapstructure:"launch_supervisor"`
+
+	// ExecutablePath is the path to the supervisor executable.
+	// If not specified, defaults to "$cwd/supervisor"
+	ExecutablePath string `mapstructure:"executable_path"`
+
+	// ConfigPath is the path to the supervisor config file.
+	// If not specified, defaults to "$cwd/supervisor.yaml"
+	ConfigPath string `mapstructure:"config_path"`
 }
 
 type AgentDescription struct {

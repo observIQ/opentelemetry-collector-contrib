@@ -11,10 +11,13 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/oklog/ulid/v2"
@@ -104,6 +107,13 @@ var (
 )
 
 func (o *opampAgent) Start(ctx context.Context, host component.Host) error {
+	// special case for launching the supervisor
+	if o.cfg.SupervisorLauncher.LaunchSupervisor {
+		if err := o.launchSupervisor(); err != nil {
+			return fmt.Errorf("launch supervisor: %w", err)
+		}
+	}
+
 	o.reportFunc = func(event *componentstatus.Event) {
 		componentstatus.ReportStatus(host, event)
 	}
@@ -689,4 +699,131 @@ func convertComponentHealth(statusUpdate *status.AggregateStatus) *protobufs.Com
 	}
 
 	return componentHealth
+}
+
+// launchSupervisor launches the supervisor process.
+// It expects the collector to be killed by the supervisor.
+func (o *opampAgent) launchSupervisor() error {
+	supervisorPath, configPath, err := o.resolveSupervisorPaths()
+	if err != nil {
+		return err
+	}
+
+	// Check for supervisor executable
+	_, err = os.Stat(supervisorPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("supervisor executable not found at %s", supervisorPath)
+		}
+		return fmt.Errorf("check supervisor executable: %w", err)
+	}
+
+	// Check for supervisor config file
+	_, err = os.Stat(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("supervisor config file not found at %s", configPath)
+		}
+		return fmt.Errorf("check supervisor config file: %w", err)
+	}
+
+	// Read and modify the supervisor config
+	if err := o.prepareSupervisorConfig(configPath); err != nil {
+		return fmt.Errorf("prepare supervisor config: %w", err)
+	}
+
+	o.logger.Info("Found supervisor executable and config file",
+		zap.String("supervisor", supervisorPath),
+		zap.String("original_config", configPath))
+
+	cmd := exec.Command(supervisorPath)
+	cmd.Args = append(cmd.Args, "--config", configPath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+		Pgid:    0,
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start supervisor: %w", err)
+	}
+
+	o.logger.Info("Supervisor started", zap.Int("pid", cmd.Process.Pid))
+
+	// sleep for 30 seconds allowing the supervisor to kill us
+	time.Sleep(30 * time.Second)
+
+	// if we reach this, the supervisor did not kill us, so we need to kill it
+	if err := cmd.Process.Kill(); err != nil {
+		return fmt.Errorf("kill supervisor: %w", err)
+	}
+
+	return errors.New("supervisor did not kill us")
+}
+
+// prepareSupervisorConfig reads the supervisor config, modifies necessary parameters,
+// and writes it to a temporary file. Returns the path to the modified config file.
+func (o *opampAgent) prepareSupervisorConfig(configPath string) error {
+	// Read the original config file
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("read config file: %w", err)
+	}
+
+	// Parse the YAML into a map for flexible modification
+	var config map[string]any
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("parse config file: %w", err)
+	}
+
+	// Ensure launcher section exists
+	launcher, ok := config["launcher"].(map[string]any)
+	if !ok {
+		launcher = make(map[string]any)
+		config["launcher"] = launcher
+	}
+
+	// Set launch_supervisor to true and collector_pid to current process ID
+	launcher["launch_supervisor"] = true
+	launcher["collector_pid"] = os.Getpid()
+
+	// Marshal the modified config back to YAML
+	modifiedData, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal modified config: %w", err)
+	}
+
+	// Write the modified config back to the file
+	if err := os.WriteFile(configPath, modifiedData, 0644); err != nil {
+		return fmt.Errorf("write modified config: %w", err)
+	}
+
+	o.logger.Debug("Modified supervisor config with launcher settings",
+		zap.Bool("launch_supervisor", true),
+		zap.Int("collector_pid", os.Getpid()),
+		zap.String("config_path", configPath))
+
+	return nil
+}
+
+// resolveSupervisorPaths resolves the supervisor executable and config paths.
+// It uses configured values if provided, otherwise defaults to $cwd/supervisor and $cwd/supervisor.yaml
+func (o *opampAgent) resolveSupervisorPaths() (supervisorPath, configPath string, err error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", "", fmt.Errorf("get current working directory: %w", err)
+	}
+
+	// Use configured executable path or default to $cwd/supervisor
+	supervisorPath = o.cfg.SupervisorLauncher.ExecutablePath
+	if supervisorPath == "" {
+		supervisorPath = fmt.Sprintf("%s/supervisor", cwd)
+	}
+
+	// Use configured config path or default to $cwd/supervisor.yaml
+	configPath = o.cfg.SupervisorLauncher.ConfigPath
+	if configPath == "" {
+		configPath = fmt.Sprintf("%s/supervisor.yaml", cwd)
+	}
+
+	return supervisorPath, configPath, nil
 }

@@ -39,6 +39,7 @@ type Supervisor struct {
 	Storage      Storage      `mapstructure:"storage"`
 	Telemetry    Telemetry    `mapstructure:"telemetry"`
 	HealthCheck  HealthCheck  `mapstructure:"healthcheck"`
+	Launcher     Launcher     `mapstructure:"launcher"`
 }
 
 // Load loads the Supervisor config from a file.
@@ -342,6 +343,11 @@ type Metrics struct {
 	_ struct{}
 }
 
+type Launcher struct {
+	LaunchSupervisor bool `mapstructure:"launch_supervisor"`
+	CollectorPID     int  `mapstructure:"collector_pid"`
+}
+
 // DefaultSupervisor returns the default supervisor config
 func DefaultSupervisor() Supervisor {
 	defaultStorageDir := "/var/lib/otelcol/supervisor"
@@ -386,6 +392,9 @@ func DefaultSupervisor() Supervisor {
 				OutputPaths:      []string{"stdout"},
 				ErrorOutputPaths: []string{"stderr"},
 			},
+		},
+		Launcher: Launcher{
+			LaunchSupervisor: false,
 		},
 	}
 }

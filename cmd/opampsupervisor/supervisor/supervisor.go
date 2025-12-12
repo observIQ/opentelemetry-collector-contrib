@@ -330,6 +330,14 @@ func (s *Supervisor) Start(ctx context.Context) error {
 
 	s.runCtx, s.runCtxCancel = context.WithCancel(ctx)
 
+	// special case for launching the supervisor
+	if s.config.Launcher.LaunchSupervisor {
+		if err := s.handleLaunchedSupervisor(); err != nil {
+			s.telemetrySettings.Logger.Error("Failed to kill collector process after being launched by the collector. Shutting down supervisor.", zap.Error(err))
+			return fmt.Errorf("handle launched supervisor: %w", err)
+		}
+	}
+
 	if err = s.startHealthCheckServer(); err != nil {
 		return fmt.Errorf("failed to start health check server: %w", err)
 	}
@@ -2141,6 +2149,43 @@ func configMergeFunc(src, dest map[string]any) error {
 				}
 				service["extensions"] = uniqueExts
 			}
+		}
+	}
+
+	return nil
+}
+
+// handleLaunchedSupervisor handles the case where the supervisor is launched by the collector.
+// It kills the collector process so the supervisor can take over.
+func (s *Supervisor) handleLaunchedSupervisor() error {
+	// get the collector PID
+	collectorPID := s.config.Launcher.CollectorPID
+
+	// kill the collector
+	process, err := os.FindProcess(collectorPID)
+	if err != nil {
+		s.telemetrySettings.Logger.Error("Failed to find collector process", zap.Error(err))
+		return err
+	}
+
+	doneCh := make(chan struct{}, 1)
+	go func() {
+		process.Wait()
+		doneCh <- struct{}{}
+	}()
+
+	if err := process.Signal(os.Interrupt); err != nil {
+		s.telemetrySettings.Logger.Error("Failed to send interrupt signal to collector process", zap.Error(err))
+		return err
+	}
+
+	select {
+	case <-doneCh:
+		return nil
+	case <-time.After(10 * time.Second):
+		s.telemetrySettings.Logger.Error("Failed to wait for collector process to exit - sending kill signal", zap.Int("pid", collectorPID))
+		if err := process.Signal(os.Kill); err != nil {
+			return err
 		}
 	}
 
