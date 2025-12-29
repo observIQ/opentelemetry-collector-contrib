@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/featuregate"
+	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/internal/filetest"
 )
@@ -42,7 +42,7 @@ func TestNewDoesNotModifyOffset(t *testing.T) {
 	_, err = temp.Seek(0, 0)
 	require.NoError(t, err)
 
-	fp, err := NewFromFile(temp, len(fingerprint), false)
+	fp, err := NewFromFile(temp, len(fingerprint), false, zap.NewNop())
 	require.NoError(t, err)
 
 	// Validate the fingerprint is the correct size
@@ -136,7 +136,7 @@ func TestNewFromFile(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.fileSize, int(info.Size()))
 
-			fp, err := NewFromFile(temp, tc.fingerprintSize, false)
+			fp, err := NewFromFile(temp, tc.fingerprintSize, false, zap.NewNop())
 			require.NoError(t, err)
 
 			require.Len(t, fp.firstBytes, tc.expectedLen)
@@ -269,7 +269,7 @@ func TestStartsWith_FromFile(t *testing.T) {
 	_, err = fullFile.Write(content)
 	require.NoError(t, err)
 
-	fff, err := NewFromFile(fullFile, fingerprintSize, false)
+	fff, err := NewFromFile(fullFile, fingerprintSize, false, zap.NewNop())
 	require.NoError(t, err)
 
 	partialFile, err := os.CreateTemp(tempDir, "")
@@ -287,7 +287,7 @@ func TestStartsWith_FromFile(t *testing.T) {
 		_, err = partialFile.Write(content[i:i])
 		require.NoError(t, err)
 
-		pff, err := NewFromFile(partialFile, fingerprintSize, false)
+		pff, err := NewFromFile(partialFile, fingerprintSize, false, zap.NewNop())
 		require.NoError(t, err)
 
 		require.True(t, fff.StartsWith(pff))
@@ -316,7 +316,6 @@ func TestMarshalUnmarshal(t *testing.T) {
 
 // Test compressed and uncompressed file with same content have equal fingerprint
 func TestCompressionFingerprint(t *testing.T) {
-	require.NoError(t, featuregate.GlobalRegistry().Set(DecompressedFingerprintFeatureGate.ID(), true))
 	tmp := t.TempDir()
 	compressedFile := filetest.OpenTempWithPattern(t, tmp, "*.gz")
 	gzipWriter := gzip.NewWriter(compressedFile)
@@ -333,7 +332,7 @@ func TestCompressionFingerprint(t *testing.T) {
 	_, err = compressedFile.Seek(0, io.SeekStart)
 	require.NoError(t, err)
 
-	compressedFP, err := NewFromFile(compressedFile, len(data), true)
+	compressedFP, err := NewFromFile(compressedFile, len(data), true, zap.NewNop())
 	require.NoError(t, err)
 
 	uncompressedFP := New(data)

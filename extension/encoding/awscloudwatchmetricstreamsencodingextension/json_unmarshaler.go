@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	conventions "go.opentelemetry.io/otel/semconv/v1.27.0"
+	conventions "go.opentelemetry.io/otel/semconv/v1.38.0"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/awscloudwatchmetricstreamsencodingextension/internal/metadata"
 )
@@ -170,7 +170,7 @@ func (c *formatJSONUnmarshaler) UnmarshalMetrics(record []byte) (pmetric.Metrics
 // addMetricToResource adds a new cloudwatchMetric to the
 // resource it belongs to according to resourceKey. It then
 // sets the data point for the cloudwatchMetric.
-func (c *formatJSONUnmarshaler) addMetricToResource(
+func (*formatJSONUnmarshaler) addMetricToResource(
 	byResource map[resourceKey]map[metricKey]pmetric.Metric,
 	cwMetric cloudwatchMetric,
 ) {

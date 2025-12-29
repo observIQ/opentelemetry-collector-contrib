@@ -6,7 +6,6 @@ package webhookeventreceiver
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -181,8 +180,11 @@ func TestHandleReq(t *testing.T) {
 				gzipWriter := gzip.NewWriter(&msg)
 				_, err = gzipWriter.Write(msgJSON)
 				require.NoError(t, err, "Gzip writer failed")
+				err = gzipWriter.Close()
+				require.NoError(t, err, "Gzip writer failed to close")
 
 				req := httptest.NewRequest(http.MethodPost, "http://localhost/events", &msg)
+				req.Header.Set("Content-Encoding", "gzip")
 				return req
 			}(),
 		},
@@ -200,13 +202,13 @@ func TestHandleReq(t *testing.T) {
 			require.NoError(t, err, "Failed to create receiver")
 
 			r := receiver.(*eventReceiver)
-			require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()), "Failed to start receiver")
+			require.NoError(t, r.Start(t.Context(), componenttest.NewNopHost()), "Failed to start receiver")
 			defer func() {
-				require.NoError(t, r.Shutdown(context.Background()), "Failed to shutdown receiver")
+				require.NoError(t, r.Shutdown(t.Context()), "Failed to shutdown receiver")
 			}()
 
 			w := httptest.NewRecorder()
-			r.handleReq(w, test.req, httprouter.ParamsFromContext(context.Background()))
+			r.handleReq(w, test.req, httprouter.ParamsFromContext(t.Context()))
 
 			response := w.Result()
 			_, err = io.ReadAll(response.Body)
@@ -235,7 +237,7 @@ func TestFailedReq(t *testing.T) {
 		{
 			desc:   "Invalid method",
 			cfg:    *cfg,
-			req:    httptest.NewRequest(http.MethodGet, "http://localhost/events", nil),
+			req:    httptest.NewRequest(http.MethodGet, "http://localhost/events", http.NoBody),
 			status: http.StatusBadRequest,
 		},
 		{
@@ -274,6 +276,22 @@ func TestFailedReq(t *testing.T) {
 			}(),
 			status: http.StatusUnauthorized,
 		},
+		{
+			desc: "Request body exceeds max size",
+			cfg: func() Config {
+				c := createDefaultConfig().(*Config)
+				c.Endpoint = "localhost:0"
+				c.MaxRequestBodySize = 70 * 1024 // Set to 70KB limit
+				c.SplitLogsAtNewLine = true
+				return *c
+			}(),
+			req: func() *http.Request {
+				// Create a payload larger than 70KB to ensure it exceeds the limit
+				largeBody := strings.Repeat("X", 80*1024)
+				return httptest.NewRequest(http.MethodPost, "http://localhost/events", strings.NewReader(largeBody))
+			}(),
+			status: http.StatusBadRequest,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.desc, func(t *testing.T) {
@@ -282,13 +300,13 @@ func TestFailedReq(t *testing.T) {
 			require.NoError(t, err, "Failed to create receiver")
 
 			r := receiver.(*eventReceiver)
-			require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()), "Failed to start receiver")
+			require.NoError(t, r.Start(t.Context(), componenttest.NewNopHost()), "Failed to start receiver")
 			defer func() {
-				require.NoError(t, r.Shutdown(context.Background()), "Failed to shutdown receiver")
+				require.NoError(t, r.Shutdown(t.Context()), "Failed to shutdown receiver")
 			}()
 
 			w := httptest.NewRecorder()
-			r.handleReq(w, test.req, httprouter.ParamsFromContext(context.Background()))
+			r.handleReq(w, test.req, httprouter.ParamsFromContext(t.Context()))
 
 			response := w.Result()
 			require.Equal(t, test.status, response.StatusCode)
@@ -304,13 +322,13 @@ func TestHealthCheck(t *testing.T) {
 	require.NoError(t, err, "failed to create receiver")
 
 	r := receiver.(*eventReceiver)
-	require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()), "failed to start receiver")
+	require.NoError(t, r.Start(t.Context(), componenttest.NewNopHost()), "failed to start receiver")
 	defer func() {
-		require.NoError(t, r.Shutdown(context.Background()), "failed to shutdown receiver")
+		require.NoError(t, r.Shutdown(t.Context()), "failed to shutdown receiver")
 	}()
 
 	w := httptest.NewRecorder()
-	r.handleHealthCheck(w, httptest.NewRequest(http.MethodGet, "http://localhost/health", nil), httprouter.ParamsFromContext(context.Background()))
+	r.handleHealthCheck(w, httptest.NewRequest(http.MethodGet, "http://localhost/health", http.NoBody), httprouter.ParamsFromContext(t.Context()))
 
 	response := w.Result()
 	require.Equal(t, http.StatusOK, response.StatusCode)

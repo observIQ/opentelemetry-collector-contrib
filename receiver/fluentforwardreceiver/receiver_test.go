@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tinylib/msgp/msgp"
+	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
@@ -28,7 +29,7 @@ import (
 )
 
 func setupServer(t *testing.T) (func() net.Conn, *consumertest.LogsSink, *observer.ObservedLogs, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	next := new(consumertest.LogsSink)
 	logCore, logObserver := observer.New(zap.DebugLevel)
@@ -43,7 +44,7 @@ func setupServer(t *testing.T) (func() net.Conn, *consumertest.LogsSink, *observ
 
 	receiver, err := newFluentReceiver(set, conf, next)
 	require.NoError(t, err)
-	require.NoError(t, receiver.Start(ctx, nil))
+	require.NoError(t, receiver.Start(ctx, componenttest.NewNopHost()))
 
 	connect := func() net.Conn {
 		conn, err := net.Dial("tcp", receiver.(*fluentReceiver).listener.Addr().String())
@@ -326,7 +327,7 @@ func TestForwardPackedCompressedEvent(t *testing.T) {
 }
 
 func TestUnixEndpoint(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	next := new(consumertest.LogsSink)
@@ -339,7 +340,7 @@ func TestUnixEndpoint(t *testing.T) {
 
 	receiver, err := newFluentReceiver(receivertest.NewNopSettings(metadata.Type), conf, next)
 	require.NoError(t, err)
-	require.NoError(t, receiver.Start(ctx, nil))
+	require.NoError(t, receiver.Start(ctx, componenttest.NewNopHost()))
 	defer func() { require.NoError(t, receiver.Shutdown(ctx)) }()
 
 	conn, err := net.Dial("unix", receiver.(*fluentReceiver).listener.Addr().String())
@@ -376,11 +377,11 @@ func TestHighVolume(t *testing.T) {
 	const totalMessagesPerRoutine = 1000
 
 	var wg sync.WaitGroup
-	for i := 0; i < totalRoutines; i++ {
+	for i := range totalRoutines {
 		wg.Add(1)
 		go func(num int) {
 			conn := connect()
-			for j := 0; j < totalMessagesPerRoutine; j++ {
+			for j := range totalMessagesPerRoutine {
 				eventBytes := makeSampleEvent(fmt.Sprintf("tag-%d-%d", num, j))
 				n, err := conn.Write(eventBytes)
 				assert.NoError(t, err)

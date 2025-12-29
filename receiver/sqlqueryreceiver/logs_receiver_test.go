@@ -4,7 +4,6 @@
 package sqlqueryreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sqlqueryreceiver"
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -15,6 +14,8 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 	"go.opentelemetry.io/collector/scraper/scraperhelper"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/sqlquery"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sqlqueryreceiver/internal/metadata"
@@ -38,7 +39,7 @@ func TestLogsQueryReceiver_Collect(t *testing.T) {
 			},
 		},
 	}
-	logs, err := queryReceiver.collect(context.Background())
+	logs, err := queryReceiver.collect(t.Context())
 	assert.NoError(t, err)
 	assert.NotNil(t, logs)
 	assert.Equal(t, 2, logs.LogRecordCount())
@@ -75,7 +76,7 @@ func TestLogsQueryReceiver_MissingColumnInResultSet(t *testing.T) {
 			},
 		},
 	}
-	_, err := queryReceiver.collect(context.Background())
+	_, err := queryReceiver.collect(t.Context())
 	assert.ErrorContains(t, err, "rowToLog: attribute_column 'expected_column' not found in result set")
 	assert.ErrorContains(t, err, "rowToLog: attribute_column 'expected_column_2' not found in result set")
 	assert.ErrorContains(t, err, "rowToLog: body_column 'expected_body_column' not found in result set")
@@ -83,7 +84,7 @@ func TestLogsQueryReceiver_MissingColumnInResultSet(t *testing.T) {
 
 func TestLogsQueryReceiver_BothDatasourceFields(t *testing.T) {
 	createReceiver := createLogsReceiverFunc(fakeDBConnect, mkFakeClient)
-	ctx := context.Background()
+	ctx := t.Context()
 	receiver, err := createReceiver(
 		ctx,
 		receivertest.NewNopSettings(metadata.Type),
@@ -117,4 +118,44 @@ func TestLogsQueryReceiver_BothDatasourceFields(t *testing.T) {
 	err = receiver.Start(ctx, componenttest.NewNopHost())
 	require.NoError(t, err)
 	require.NoError(t, receiver.Shutdown(ctx))
+}
+
+func TestLogsQueryReceiver_NullValue(t *testing.T) {
+	col1 := "col1"
+	col1Value := "42"
+	fakeClient := &sqlquery.FakeDBClient{
+		StringMaps: [][]sqlquery.StringMap{
+			{{col1: col1Value}},
+		},
+		// fakeClient.QueryRows will return ErrNullValueWarning on top of the StringMaps
+		ErrNullValueWarning: true,
+	}
+
+	core, recorded := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+
+	queryReceiver := logsQueryReceiver{
+		client: fakeClient,
+		query: sqlquery.Query{
+			Logs: []sqlquery.LogsCfg{
+				{
+					BodyColumn:       col1,
+					AttributeColumns: []string{col1},
+				},
+			},
+		},
+		logger: logger,
+	}
+	// ensure that the logs are collected successfully
+	logs, err := queryReceiver.collect(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, 1, logs.LogRecordCount())
+	assert.Equal(t, col1Value, logs.ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0).Body().Str())
+
+	// ensure that the warning is logged
+	all := recorded.All()
+	require.Len(t, all, 1)
+	entry := all[0]
+	require.Equal(t, "problems encountered getting log rows", entry.Message)
+	require.Equal(t, sqlquery.ErrNullValueWarning.Error(), entry.ContextMap()["error"])
 }

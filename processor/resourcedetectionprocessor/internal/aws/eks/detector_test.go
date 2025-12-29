@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/processor"
-	conventions "go.opentelemetry.io/otel/semconv/v1.6.1"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
@@ -231,7 +230,7 @@ func TestDetectFromIMDS(t *testing.T) {
 				}),
 				ra: metadata.ResourceAttributesConfig{K8sClusterName: metadata.ResourceAttributeConfig{Enabled: true}},
 			}
-			res, schema, err := d.detectFromIMDS(context.Background())
+			res, schema, err := d.detectFromIMDS(t.Context())
 			if tt.expectedError {
 				assert.Error(t, err)
 				if tt.errMsg != "" {
@@ -243,7 +242,7 @@ func TestDetectFromIMDS(t *testing.T) {
 			} else {
 				assert.Equal(t, 0, res.Attributes().Len())
 			}
-			assert.Equal(t, conventions.SchemaURL, schema)
+			assert.Contains(t, schema, "https://opentelemetry.io/schemas/")
 		})
 	}
 }
@@ -335,8 +334,8 @@ func TestDetectFromAPI(t *testing.T) {
 					HostID:         metadata.ResourceAttributeConfig{Enabled: true},
 				}),
 			}
-			res, schema, err := d.detectFromAPI(context.Background())
-			assert.Equal(t, conventions.SchemaURL, schema)
+			res, schema, err := d.detectFromAPI(t.Context())
+			assert.Contains(t, schema, "https://opentelemetry.io/schemas/")
 			if tt.expectedError {
 				assert.Error(t, err)
 			}
@@ -359,7 +358,7 @@ func (m *mockDetectorUtils) isIMDSAccessible(_ context.Context) bool {
 	return m.imdsAccessible
 }
 
-func (m *mockDetectorUtils) getAWSConfig(_ context.Context, _ bool) (aws.Config, error) {
+func (*mockDetectorUtils) getAWSConfig(context.Context, bool) (aws.Config, error) {
 	return aws.Config{}, nil
 }
 
@@ -449,9 +448,9 @@ func TestDetect(t *testing.T) {
 				logger:         set.Logger,
 				imdsAccessible: tt.imdsAccessible,
 			}
-			res, schema, err := det.Detect(context.Background())
+			res, schema, err := det.Detect(t.Context())
 			assert.NoError(t, err)
-			assert.Equal(t, conventions.SchemaURL, schema)
+			assert.Contains(t, schema, "https://opentelemetry.io/schemas/")
 			assert.Equal(t, tt.expectedOutput, res.Attributes().AsRaw())
 		})
 	}

@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config/configcompression"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 	"go.opentelemetry.io/collector/confmap/xconfmap"
@@ -52,6 +51,8 @@ func TestClientConfig(t *testing.T) {
 						Backoff: 5 * time.Second,
 					},
 				},
+				RackID:         "rack1",
+				UseLeaderEpoch: true,
 			},
 		},
 		"sasl_aws_msk_iam_oauthbearer": {
@@ -59,6 +60,18 @@ func TestClientConfig(t *testing.T) {
 				cfg := NewDefaultClientConfig()
 				cfg.Authentication.SASL = &SASLConfig{
 					Mechanism: "AWS_MSK_IAM_OAUTHBEARER",
+				}
+				return cfg
+			}(),
+		},
+		"sasl_aws_msk_iam_oauthbearer_with_region": {
+			expected: func() ClientConfig {
+				cfg := NewDefaultClientConfig()
+				cfg.Authentication.SASL = &SASLConfig{
+					Mechanism: "AWS_MSK_IAM_OAUTHBEARER",
+					AWSMSK: AWSMSKConfig{
+						Region: "us-east-1",
+					},
 				}
 				return cfg
 			}(),
@@ -95,6 +108,13 @@ func TestClientConfig(t *testing.T) {
 					Username: "abc",
 					Password: "def",
 				}
+				return cfg
+			}(),
+		},
+		"not_use_leader_epoch": {
+			expected: func() ClientConfig {
+				cfg := NewDefaultClientConfig()
+				cfg.UseLeaderEpoch = false
 				return cfg
 			}(),
 		},
@@ -139,16 +159,40 @@ func TestConsumerConfig(t *testing.T) {
 					Enable:   false,
 					Interval: 10 * time.Minute,
 				},
-				MinFetchSize:     10,
-				DefaultFetchSize: 1024,
-				MaxFetchSize:     4096,
-				MaxFetchWait:     1 * time.Second,
+				MinFetchSize:          10,
+				DefaultFetchSize:      1024,
+				MaxFetchSize:          4096,
+				MaxFetchWait:          1 * time.Second,
+				MaxPartitionFetchSize: 4096,
+			},
+		},
+		"zero_min_fetch_size": {
+			expected: ConsumerConfig{
+				SessionTimeout:    10 * time.Second,
+				HeartbeatInterval: 3 * time.Second,
+				GroupID:           "otel-collector",
+				InitialOffset:     "latest",
+				AutoCommit: AutoCommitConfig{
+					Enable:   true,
+					Interval: 1 * time.Second,
+				},
+				MinFetchSize:          0,
+				DefaultFetchSize:      1048576,
+				MaxFetchSize:          1048576,
+				MaxFetchWait:          250 * time.Millisecond,
+				MaxPartitionFetchSize: 1048576,
 			},
 		},
 
 		// Invalid configurations
 		"invalid_initial_offset": {
 			expectedErr: "initial_offset should be one of 'latest' or 'earliest'. configured value middle",
+		},
+		"invalid_fetch_size": {
+			expectedErr: "max_fetch_size (100) cannot be less than min_fetch_size (1000)",
+		},
+		"negative_min_fetch_size": {
+			expectedErr: "min_fetch_size (-100) must be non-negative",
 		},
 	})
 }
@@ -162,34 +206,55 @@ func TestProducerConfig(t *testing.T) {
 			expected: NewDefaultProducerConfig(),
 		},
 		"full": {
-			expected: ProducerConfig{
-				MaxMessageBytes: 1,
-				RequiredAcks:    0,
-				Compression:     "gzip",
-				CompressionParams: configcompression.CompressionParams{
-					Level: 1,
-				},
-				FlushMaxMessages: 2,
-			},
+			expected: func() ProducerConfig {
+				cfg := NewDefaultProducerConfig()
+				cfg.MaxMessageBytes = 1
+				cfg.RequiredAcks = 0
+				cfg.Compression = "gzip"
+				cfg.CompressionParams.Level = 1
+				cfg.FlushMaxMessages = 2
+				return cfg
+			}(),
 		},
 		"default_compression_level": {
-			expected: ProducerConfig{
-				MaxMessageBytes: 1,
-				RequiredAcks:    0,
-				Compression:     "zstd",
-				CompressionParams: configcompression.CompressionParams{
-					// zero is treated as the codec-specific default
-					Level: 0,
-				},
-				FlushMaxMessages: 2,
-			},
+			expected: func() ProducerConfig {
+				cfg := NewDefaultProducerConfig()
+				cfg.MaxMessageBytes = 1
+				cfg.RequiredAcks = 0
+				cfg.Compression = "zstd"
+				// zero is treated as the codec-specific default
+				cfg.CompressionParams.Level = 0
+				cfg.FlushMaxMessages = 2
+				return cfg
+			}(),
 		},
 		"snappy_compression": {
-			expected: ProducerConfig{
-				MaxMessageBytes: 1000000,
-				RequiredAcks:    1,
-				Compression:     "snappy",
-			},
+			expected: func() ProducerConfig {
+				cfg := NewDefaultProducerConfig()
+				cfg.Compression = "snappy"
+				return cfg
+			}(),
+		},
+		"disable_auto_topic_creation": {
+			expected: func() ProducerConfig {
+				cfg := NewDefaultProducerConfig()
+				cfg.AllowAutoTopicCreation = false
+				return cfg
+			}(),
+		},
+		"producer_linger": {
+			expected: func() ProducerConfig {
+				cfg := NewDefaultProducerConfig()
+				cfg.Linger = 100 * time.Millisecond
+				return cfg
+			}(),
+		},
+		"producer_linger_1s": {
+			expected: func() ProducerConfig {
+				cfg := NewDefaultProducerConfig()
+				cfg.Linger = 1 * time.Second
+				return cfg
+			}(),
 		},
 		"invalid_compression_level": {
 			expectedErr: `unsupported parameters {Level:-123} for compression type "gzip"`,
@@ -201,6 +266,13 @@ func TestProducerConfig(t *testing.T) {
 				return cfg
 			}(),
 		},
+		"custom_flush_max_messages": {
+			expected: func() ProducerConfig {
+				cfg := NewDefaultProducerConfig()
+				cfg.FlushMaxMessages = 5000
+				return cfg
+			}(),
+		},
 
 		// Invalid configurations
 		"invalid_compression": {
@@ -208,6 +280,15 @@ func TestProducerConfig(t *testing.T) {
 		},
 		"invalid_required_acks": {
 			expectedErr: "required_acks: expected 'all' (-1), 0, or 1; configured value is 3",
+		},
+		"flush_max_messages_zero": {
+			expectedErr: "flush_max_messages (0) must be at least 1",
+		},
+		"flush_max_messages_negative": {
+			expectedErr: "flush_max_messages (-1) must be at least 1",
+		},
+		"max_message_bytes_negative": {
+			expectedErr: "max_message_bytes (-1000) must be non-negative",
 		},
 	})
 }

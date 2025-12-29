@@ -4,7 +4,6 @@
 package kafkareceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kafkareceiver"
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -74,9 +73,9 @@ func newBenchConfigClient(b *testing.B, topic string, partitions int32,
 	messageMarking MessageMarking,
 ) (*Config, *kgo.Client) {
 	client, cfg := mustNewFakeCluster(b, kfake.SeedTopics(partitions, topic))
-	cfg.Logs.Topic = topic
-	cfg.Traces.Topic = topic
-	cfg.Metrics.Topic = topic
+	cfg.Logs.Topics = []string{topic}
+	cfg.Traces.Topics = []string{topic}
+	cfg.Metrics.Topics = []string{topic}
 	cfg.GroupID = b.Name()
 	cfg.InitialOffset = "earliest"
 	cfg.AutoCommit = autoCommit
@@ -88,21 +87,21 @@ func runBenchmark(b *testing.B, topic string, data []byte,
 	rcv component.Component, client *kgo.Client,
 ) {
 	require.NoError(b,
-		rcv.Start(context.Background(), componenttest.NewNopHost()),
+		rcv.Start(b.Context(), componenttest.NewNopHost()),
 	)
-	defer func() { require.NoError(b, rcv.Shutdown(context.Background())) }()
+	defer func() { require.NoError(b, rcv.Shutdown(b.Context())) }()
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			client.Produce(context.Background(), &kgo.Record{
+			client.Produce(b.Context(), &kgo.Record{
 				Topic: topic, Value: data,
 			}, func(_ *kgo.Record, err error) {
 				require.NoError(b, err)
 			})
 		}
 	})
-	client.Flush(context.Background())
+	client.Flush(b.Context())
 }
 
 func BenchmarkTracesReceiver(b *testing.B) {

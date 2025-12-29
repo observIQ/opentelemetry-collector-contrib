@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"runtime"
@@ -28,9 +29,10 @@ import (
 	"go.opentelemetry.io/collector/extension/extensioncapabilities"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/service"
-	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
+	"go.opentelemetry.io/collector/service/hostcapabilities"
+	conventions "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
+	expmaps "golang.org/x/exp/maps"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
@@ -95,20 +97,11 @@ var (
 	// identifyingAttributes is the list of semantic convention keys that are used
 	// for the agent description's identifying attributes.
 	identifyingAttributes = map[string]struct{}{
-		string(semconv.ServiceNameKey):       {},
-		string(semconv.ServiceVersionKey):    {},
-		string(semconv.ServiceInstanceIDKey): {},
+		string(conventions.ServiceNameKey):       {},
+		string(conventions.ServiceVersionKey):    {},
+		string(conventions.ServiceInstanceIDKey): {},
 	}
 )
-
-// moduleInfo exposes the internal collector moduleInfo interface
-// This functionality will be exposed in the collector by https://github.com/open-telemetry/opentelemetry-collector/pull/12375,
-// and once it is merged, this interface should be replaced by the new non-internal interface
-type moduleInfo interface {
-	// GetModuleInfos returns the module information for the host
-	// i.e. Receivers, Processors, Exporters, Extensions, and Connectors
-	GetModuleInfos() service.ModuleInfos
-}
 
 func (o *opampAgent) Start(ctx context.Context, host component.Host) error {
 	o.reportFunc = func(event *componentstatus.Event) {
@@ -155,7 +148,6 @@ func (o *opampAgent) Start(ctx context.Context, host component.Host) error {
 			},
 			OnMessage: o.onMessage,
 		},
-		Capabilities: o.capabilities.toAgentCapabilities(),
 	}
 
 	if err := o.createAgentDescription(); err != nil {
@@ -166,7 +158,7 @@ func (o *opampAgent) Start(ctx context.Context, host component.Host) error {
 		return err
 	}
 
-	if mi, ok := host.(moduleInfo); ok {
+	if mi, ok := host.(hostcapabilities.ModuleInfo); ok {
 		o.initAvailableComponents(mi.GetModuleInfos())
 	} else if o.capabilities.ReportsAvailableComponents {
 		// init empty availableComponents to not get an error when starting the opampClient
@@ -177,6 +169,11 @@ func (o *opampAgent) Start(ctx context.Context, host component.Host) error {
 		if err := o.opampClient.SetAvailableComponents(o.availableComponents); err != nil {
 			return err
 		}
+	}
+
+	capabilities := o.capabilities.toAgentCapabilities()
+	if err := o.opampClient.SetCapabilities(&capabilities); err != nil {
+		return err
 	}
 
 	o.logger.Debug("Starting OpAMP client...")
@@ -285,14 +282,14 @@ func (o *opampAgent) updateEffectiveConfig(conf *confmap.Conf) {
 func newOpampAgent(cfg *Config, set extension.Settings) (*opampAgent, error) {
 	agentType := set.BuildInfo.Command
 
-	sn, ok := set.Resource.Attributes().Get(string(semconv.ServiceNameKey))
+	sn, ok := set.Resource.Attributes().Get(string(conventions.ServiceNameKey))
 	if ok {
 		agentType = sn.AsString()
 	}
 
 	agentVersion := set.BuildInfo.Version
 
-	sv, ok := set.Resource.Attributes().Get(string(semconv.ServiceVersionKey))
+	sv, ok := set.Resource.Attributes().Get(string(conventions.ServiceVersionKey))
 	if ok {
 		agentVersion = sv.AsString()
 	}
@@ -308,7 +305,7 @@ func newOpampAgent(cfg *Config, set extension.Settings) (*opampAgent, error) {
 			return nil, fmt.Errorf("could not parse configured instance id: %w", err)
 		}
 	} else {
-		sid, ok := set.Resource.Attributes().Get(string(semconv.ServiceInstanceIDKey))
+		sid, ok := set.Resource.Attributes().Get(string(conventions.ServiceInstanceIDKey))
 		if ok {
 			uid, err = uuid.Parse(sid.AsString())
 			if err != nil {
@@ -378,22 +375,20 @@ func (o *opampAgent) createAgentDescription() error {
 	description := getOSDescription(o.logger)
 
 	ident := []*protobufs.KeyValue{
-		stringKeyValue(string(semconv.ServiceInstanceIDKey), o.instanceID.String()),
-		stringKeyValue(string(semconv.ServiceNameKey), o.agentType),
-		stringKeyValue(string(semconv.ServiceVersionKey), o.agentVersion),
+		stringKeyValue(string(conventions.ServiceInstanceIDKey), o.instanceID.String()),
+		stringKeyValue(string(conventions.ServiceNameKey), o.agentType),
+		stringKeyValue(string(conventions.ServiceVersionKey), o.agentVersion),
 	}
 
 	// Initially construct using a map to properly deduplicate any keys that
 	// are both automatically determined and defined in the config
 	nonIdentifyingAttributeMap := map[string]string{}
-	nonIdentifyingAttributeMap[string(semconv.OSTypeKey)] = runtime.GOOS
-	nonIdentifyingAttributeMap[string(semconv.HostArchKey)] = runtime.GOARCH
-	nonIdentifyingAttributeMap[string(semconv.HostNameKey)] = hostname
-	nonIdentifyingAttributeMap[string(semconv.OSDescriptionKey)] = description
+	nonIdentifyingAttributeMap[string(conventions.OSTypeKey)] = runtime.GOOS
+	nonIdentifyingAttributeMap[string(conventions.HostArchKey)] = runtime.GOARCH
+	nonIdentifyingAttributeMap[string(conventions.HostNameKey)] = hostname
+	nonIdentifyingAttributeMap[string(conventions.OSDescriptionKey)] = description
 
-	for k, v := range o.cfg.AgentDescription.NonIdentifyingAttributes {
-		nonIdentifyingAttributeMap[k] = v
-	}
+	maps.Copy(nonIdentifyingAttributeMap, o.cfg.AgentDescription.NonIdentifyingAttributes)
 	if o.cfg.AgentDescription.IncludeResourceAttributes {
 		for k, v := range o.resourceAttrs {
 			// skip the attributes that are being used in the identifying attributes.
@@ -405,7 +400,7 @@ func (o *opampAgent) createAgentDescription() error {
 	}
 
 	// Sort the non identifying attributes to give them a stable order for tests
-	keys := maps.Keys(nonIdentifyingAttributeMap)
+	keys := expmaps.Keys(nonIdentifyingAttributeMap)
 	sort.Strings(keys)
 
 	nonIdent := make([]*protobufs.KeyValue, 0, len(nonIdentifyingAttributeMap))

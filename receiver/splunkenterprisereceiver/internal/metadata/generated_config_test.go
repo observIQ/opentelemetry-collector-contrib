@@ -9,7 +9,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
-
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
@@ -52,6 +51,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					SplunkKvstoreBackupStatus:                   MetricConfig{Enabled: true},
 					SplunkKvstoreReplicationStatus:              MetricConfig{Enabled: true},
 					SplunkKvstoreStatus:                         MetricConfig{Enabled: true},
+					SplunkLicenseExpirationSecondsRemaining:     MetricConfig{Enabled: true},
 					SplunkLicenseIndexUsage:                     MetricConfig{Enabled: true},
 					SplunkParseQueueRatio:                       MetricConfig{Enabled: true},
 					SplunkPipelineSetCount:                      MetricConfig{Enabled: true},
@@ -109,6 +109,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					SplunkKvstoreBackupStatus:                   MetricConfig{Enabled: false},
 					SplunkKvstoreReplicationStatus:              MetricConfig{Enabled: false},
 					SplunkKvstoreStatus:                         MetricConfig{Enabled: false},
+					SplunkLicenseExpirationSecondsRemaining:     MetricConfig{Enabled: false},
 					SplunkLicenseIndexUsage:                     MetricConfig{Enabled: false},
 					SplunkParseQueueRatio:                       MetricConfig{Enabled: false},
 					SplunkPipelineSetCount:                      MetricConfig{Enabled: false},

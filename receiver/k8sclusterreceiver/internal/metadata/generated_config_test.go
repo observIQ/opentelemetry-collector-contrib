@@ -9,7 +9,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
-
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
@@ -35,6 +34,8 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					K8sContainerMemoryRequest:           MetricConfig{Enabled: true},
 					K8sContainerReady:                   MetricConfig{Enabled: true},
 					K8sContainerRestarts:                MetricConfig{Enabled: true},
+					K8sContainerStatusReason:            MetricConfig{Enabled: true},
+					K8sContainerStatusState:             MetricConfig{Enabled: true},
 					K8sContainerStorageLimit:            MetricConfig{Enabled: true},
 					K8sContainerStorageRequest:          MetricConfig{Enabled: true},
 					K8sCronjobActiveJobs:                MetricConfig{Enabled: true},
@@ -128,6 +129,8 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					K8sContainerMemoryRequest:           MetricConfig{Enabled: false},
 					K8sContainerReady:                   MetricConfig{Enabled: false},
 					K8sContainerRestarts:                MetricConfig{Enabled: false},
+					K8sContainerStatusReason:            MetricConfig{Enabled: false},
+					K8sContainerStatusState:             MetricConfig{Enabled: false},
 					K8sContainerStorageLimit:            MetricConfig{Enabled: false},
 					K8sContainerStorageRequest:          MetricConfig{Enabled: false},
 					K8sCronjobActiveJobs:                MetricConfig{Enabled: false},

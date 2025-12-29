@@ -5,8 +5,13 @@ package tinybirdexporter // import "github.com/open-telemetry/opentelemetry-coll
 
 import (
 	"context"
+	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/configcompression"
+	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/configoptional"
+	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
@@ -31,12 +36,27 @@ func NewFactory() exporter.Factory {
 }
 
 func createDefaultConfig() component.Config {
+	clientConfig := confighttp.NewDefaultClientConfig()
+	clientConfig.Timeout = 30 * time.Second
+	// Default to zstd compression
+	clientConfig.Compression = configcompression.TypeZstd
+	// We almost read 0 bytes, so no need to tune ReadBufferSize.
+	clientConfig.WriteBufferSize = 512 * 1024
+
 	return &Config{
-		Endpoint: "",
-		Token:    "",
-		Metrics:  SignalConfig{Datasource: "metrics"},
-		Traces:   SignalConfig{Datasource: "traces"},
-		Logs:     SignalConfig{Datasource: "logs"},
+		ClientConfig: clientConfig,
+		RetryConfig:  configretry.NewDefaultBackOffConfig(),
+		QueueConfig:  configoptional.Some(exporterhelper.NewDefaultQueueConfig()),
+		Token:        "",
+		Metrics: metricSignalConfigs{
+			MetricsGauge:                SignalConfig{Datasource: "gauge"},
+			MetricsSum:                  SignalConfig{Datasource: "sum"},
+			MetricsHistogram:            SignalConfig{Datasource: "histogram"},
+			MetricsExponentialHistogram: SignalConfig{Datasource: "exponential_histogram"},
+		},
+		Traces: SignalConfig{Datasource: "traces"},
+		Logs:   SignalConfig{Datasource: "logs"},
+		Wait:   false,
 	}
 }
 
@@ -45,10 +65,9 @@ func createTracesExporter(
 	set exporter.Settings,
 	cfg component.Config,
 ) (exporter.Traces, error) {
-	exp, err := newExporter(cfg, set)
-	if err != nil {
-		return nil, err
-	}
+	oCfg := cfg.(*Config)
+
+	exp := newExporter(oCfg, set)
 	return exporterhelper.NewTraces(
 		ctx,
 		set,
@@ -56,6 +75,10 @@ func createTracesExporter(
 		exp.pushTraces,
 		exporterhelper.WithStart(exp.start),
 		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
+		// explicitly disable since we rely on http.Client timeout logic.
+		exporterhelper.WithTimeout(exporterhelper.TimeoutConfig{Timeout: 0}),
+		exporterhelper.WithRetry(oCfg.RetryConfig),
+		exporterhelper.WithQueue(oCfg.QueueConfig),
 	)
 }
 
@@ -64,10 +87,9 @@ func createMetricsExporter(
 	set exporter.Settings,
 	cfg component.Config,
 ) (exporter.Metrics, error) {
-	exp, err := newExporter(cfg, set)
-	if err != nil {
-		return nil, err
-	}
+	oCfg := cfg.(*Config)
+
+	exp := newExporter(oCfg, set)
 	return exporterhelper.NewMetrics(
 		ctx,
 		set,
@@ -75,6 +97,10 @@ func createMetricsExporter(
 		exp.pushMetrics,
 		exporterhelper.WithStart(exp.start),
 		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
+		// explicitly disable since we rely on http.Client timeout logic.
+		exporterhelper.WithTimeout(exporterhelper.TimeoutConfig{Timeout: 0}),
+		exporterhelper.WithRetry(oCfg.RetryConfig),
+		exporterhelper.WithQueue(oCfg.QueueConfig),
 	)
 }
 
@@ -83,10 +109,9 @@ func createLogsExporter(
 	set exporter.Settings,
 	cfg component.Config,
 ) (exporter.Logs, error) {
-	exp, err := newExporter(cfg, set)
-	if err != nil {
-		return nil, err
-	}
+	oCfg := cfg.(*Config)
+
+	exp := newExporter(oCfg, set)
 	return exporterhelper.NewLogs(
 		ctx,
 		set,
@@ -94,5 +119,9 @@ func createLogsExporter(
 		exp.pushLogs,
 		exporterhelper.WithStart(exp.start),
 		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
+		// explicitly disable since we rely on http.Client timeout logic.
+		exporterhelper.WithTimeout(exporterhelper.TimeoutConfig{Timeout: 0}),
+		exporterhelper.WithRetry(oCfg.RetryConfig),
+		exporterhelper.WithQueue(oCfg.QueueConfig),
 	)
 }

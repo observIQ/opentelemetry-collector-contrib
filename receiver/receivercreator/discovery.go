@@ -6,10 +6,12 @@ package receivercreator // import "github.com/open-telemetry/opentelemetry-colle
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
+	"go.opentelemetry.io/collector/confmap"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
@@ -186,7 +188,13 @@ func getScraperConfFromAnnotations(
 		return userConfigMap{}, nil
 	}
 	conf := userConfigMap{}
-	if err := yaml.Unmarshal([]byte(configStr), &conf); err != nil {
+
+	var rawConf map[string]any
+	if err := yaml.Unmarshal([]byte(configStr), &rawConf); err != nil {
+		return nil, err
+	}
+	cm := confmap.NewFromStringMap(rawConf)
+	if err := cm.Unmarshal(&conf); err != nil {
 		return userConfigMap{}, fmt.Errorf("could not unmarshal configuration from hint: %v", zap.Error(err))
 	}
 
@@ -248,7 +256,7 @@ func createLogsConfig(
 	return defaultConfMap
 }
 
-func getHintAnnotation(annotations map[string]string, hintBase string, hintKey string, suffix string) (string, bool) {
+func getHintAnnotation(annotations map[string]string, hintBase, hintKey, suffix string) (string, bool) {
 	// try to scope the hint more on container level by suffixing
 	// with .<port> in case of Port event or .<container_name> in case of Pod Container event
 	containerLevelHint, ok := annotations[fmt.Sprintf("%s.%s/%s", hintBase, suffix, hintKey)]
@@ -261,7 +269,7 @@ func getHintAnnotation(annotations map[string]string, hintBase string, hintKey s
 	return podLevelHint, ok
 }
 
-func discoveryEnabled(annotations map[string]string, hintBase string, scopeSuffix string) bool {
+func discoveryEnabled(annotations map[string]string, hintBase, scopeSuffix string) bool {
 	enabledHint, found := getHintAnnotation(annotations, hintBase, discoveryEnabledHint, scopeSuffix)
 	if !found {
 		return false
@@ -305,12 +313,8 @@ func validateEndpoint(endpoint, defaultEndpoint string) error {
 func mergeAnnotations(podAnnotations, defaultAnnotations map[string]string) map[string]string {
 	annotations := make(map[string]string)
 	// Start with defaultAnnotations (lower priority)
-	for k, v := range defaultAnnotations {
-		annotations[k] = v
-	}
+	maps.Copy(annotations, defaultAnnotations)
 	// Overwrite with podAnnotations (higher priority)
-	for k, v := range podAnnotations {
-		annotations[k] = v
-	}
+	maps.Copy(annotations, podAnnotations)
 	return annotations
 }

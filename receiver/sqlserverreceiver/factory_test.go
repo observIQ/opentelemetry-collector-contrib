@@ -4,7 +4,6 @@
 package sqlserverreceiver
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
@@ -44,7 +43,6 @@ func TestFactory(t *testing.T) {
 						InitialDelay:       time.Second,
 					},
 					TopQueryCollection: TopQueryCollection{
-						LookbackTime:        uint(2 * 10),
 						MaxQuerySampleCount: 1000,
 						TopQueryCount:       200,
 						CollectionInterval:  time.Minute,
@@ -64,7 +62,7 @@ func TestFactory(t *testing.T) {
 			testFunc: func(t *testing.T) {
 				factory := NewFactory()
 				_, err := factory.CreateMetrics(
-					context.Background(),
+					t.Context(),
 					receivertest.NewNopSettings(metadata.Type),
 					nil,
 					consumertest.NewNop(),
@@ -78,7 +76,7 @@ func TestFactory(t *testing.T) {
 				factory := NewFactory()
 				cfg := factory.CreateDefaultConfig()
 				r, err := factory.CreateMetrics(
-					context.Background(),
+					t.Context(),
 					receivertest.NewNopSettings(metadata.Type),
 					cfg,
 					consumertest.NewNop(),
@@ -86,8 +84,8 @@ func TestFactory(t *testing.T) {
 				require.NoError(t, err)
 				scrapers := setupSQLServerScrapers(receivertest.NewNopSettings(metadata.Type), cfg.(*Config))
 				require.Empty(t, scrapers)
-				require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()))
-				require.NoError(t, r.Shutdown(context.Background()))
+				require.NoError(t, r.Start(t.Context(), componenttest.NewNopHost()))
+				require.NoError(t, r.Shutdown(t.Context()))
 			},
 		},
 		{
@@ -137,14 +135,14 @@ func TestFactory(t *testing.T) {
 				require.True(t, databaseIOScraperFound)
 
 				r, err := factory.CreateMetrics(
-					context.Background(),
+					t.Context(),
 					receivertest.NewNopSettings(metadata.Type),
 					cfg,
 					consumertest.NewNop(),
 				)
 				require.NoError(t, err)
-				require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()))
-				require.NoError(t, r.Shutdown(context.Background()))
+				require.NoError(t, r.Start(t.Context(), componenttest.NewNopHost()))
+				require.NoError(t, r.Shutdown(t.Context()))
 			},
 		},
 		// Test cases for logs
@@ -153,7 +151,7 @@ func TestFactory(t *testing.T) {
 			testFunc: func(t *testing.T) {
 				factory := NewFactory()
 				_, err := factory.CreateLogs(
-					context.Background(),
+					t.Context(),
 					receivertest.NewNopSettings(metadata.Type),
 					nil,
 					consumertest.NewNop())
@@ -166,7 +164,7 @@ func TestFactory(t *testing.T) {
 				factory := NewFactory()
 				cfg := factory.CreateDefaultConfig()
 				r, err := factory.CreateLogs(
-					context.Background(),
+					t.Context(),
 					receivertest.NewNopSettings(metadata.Type),
 					cfg,
 					consumertest.NewNop(),
@@ -174,8 +172,8 @@ func TestFactory(t *testing.T) {
 				require.NoError(t, err)
 				scrapers := setupSQLServerLogsScrapers(receivertest.NewNopSettings(metadata.Type), cfg.(*Config))
 				require.Empty(t, scrapers)
-				require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()))
-				require.NoError(t, r.Shutdown(context.Background()))
+				require.NoError(t, r.Start(t.Context(), componenttest.NewNopHost()))
+				require.NoError(t, r.Shutdown(t.Context()))
 			},
 		},
 		{
@@ -223,14 +221,14 @@ func TestFactory(t *testing.T) {
 				require.True(t, databaseTopQueryScraperFound)
 
 				r, err := factory.CreateLogs(
-					context.Background(),
+					t.Context(),
 					receivertest.NewNopSettings(metadata.Type),
 					cfg,
 					consumertest.NewNop(),
 				)
 				require.NoError(t, err)
-				require.NoError(t, r.Start(context.Background(), componenttest.NewNopHost()))
-				require.NoError(t, r.Shutdown(context.Background()))
+				require.NoError(t, r.Start(t.Context(), componenttest.NewNopHost()))
+				require.NoError(t, r.Shutdown(t.Context()))
 			},
 		},
 	}
@@ -264,8 +262,7 @@ func TestSetupQueries(t *testing.T) {
 
 	metricsMetadata, ok := metadata["metrics"].(map[string]any)
 	require.True(t, ok)
-	require.Len(t, metricsMetadata, 48,
-		"Every time metrics are added or removed, the function `setupQueries` must "+
-			"be modified to properly account for the change. Please update `setupQueries` and then, "+
-			"and only then, update the expected metric count here.")
+	require.Len(t, metricsMetadata, 50, "Every time metrics are added or removed, the function `setupQueries` must "+
+		"be modified to properly account for the change. Please update `setupQueries` and then, "+
+		"and only then, update the expected metric count here.")
 }

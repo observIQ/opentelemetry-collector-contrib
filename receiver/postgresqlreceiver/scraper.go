@@ -8,6 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,8 +22,10 @@ import (
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/scraper/scrapererror"
+	semconv "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.uber.org/zap"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/priorityqueue"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/postgresqlreceiver/internal/metadata"
 )
 
@@ -47,8 +52,10 @@ type postgreSQLScraper struct {
 	excludes      map[string]struct{}
 	cache         *lru.Cache[string, float64]
 	// if enabled, uses a separated attribute for the schema
-	separateSchemaAttr bool
-	queryPlanCache     *expirable.LRU[string, string]
+	separateSchemaAttr   bool
+	queryPlanCache       *expirable.LRU[string, string]
+	newestQueryTimestamp float64
+	serviceInstanceID    string
 }
 
 type errsMux struct {
@@ -103,6 +110,7 @@ func newPostgreSQLScraper(
 		cache:              cache,
 		queryPlanCache:     queryPlanCache,
 		separateSchemaAttr: separateSchemaAttr,
+		serviceInstanceID:  getInstanceID(config.Endpoint, settings.Logger),
 	}
 }
 
@@ -161,6 +169,7 @@ func (p *postgreSQLScraper) scrape(ctx context.Context) (pmetric.Metrics, error)
 
 		p.recordDatabase(now, database, r, numTables)
 		p.collectIndexes(ctx, now, dbClient, database, &errs)
+		p.collectFunctions(ctx, now, dbClient, database, &errs)
 	}
 
 	p.mb.RecordPostgresqlDatabaseCountDataPoint(now, int64(len(databases)))
@@ -170,7 +179,8 @@ func (p *postgreSQLScraper) scrape(ctx context.Context) (pmetric.Metrics, error)
 	p.collectMaxConnections(ctx, now, listClient, &errs)
 	p.collectDatabaseLocks(ctx, now, listClient, &errs)
 
-	return p.mb.Emit(), errs.combine()
+	rb := p.setupResourceBuilder(p.mb.NewResourceBuilder(), "", "", "", "")
+	return p.mb.Emit(metadata.WithResource(rb.Emit())), errs.combine()
 }
 
 func (p *postgreSQLScraper) scrapeQuerySamples(ctx context.Context, maxRowsPerQuery int64) (plog.Logs, error) {
@@ -186,47 +196,58 @@ func (p *postgreSQLScraper) scrapeQuerySamples(ctx context.Context, maxRowsPerQu
 
 	defer dbClient.Close()
 
-	return p.lb.Emit(), nil
+	rb := p.setupResourceBuilder(p.lb.NewResourceBuilder(), "", "", "", "")
+	return p.lb.Emit(metadata.WithLogsResource(rb.Emit())), nil
 }
 
-func (p *postgreSQLScraper) scrapeTopQuery(ctx context.Context, maxRowsPerQuery int64, topNQuery int64, maxExplainEachInterval int64) (plog.Logs, error) {
+func (p *postgreSQLScraper) scrapeTopQuery(ctx context.Context, maxRowsPerQuery, topNQuery, maxExplainEachInterval int64) (plog.Logs, error) {
 	var errs errsMux
 
 	p.collectTopQuery(ctx, p.clientFactory, maxRowsPerQuery, topNQuery, maxExplainEachInterval, &errs, p.logger)
 
-	return p.lb.Emit(), nil
+	rb := p.setupResourceBuilder(p.lb.NewResourceBuilder(), "", "", "", "")
+	return p.lb.Emit(metadata.WithLogsResource(rb.Emit())), nil
 }
 
 func (p *postgreSQLScraper) collectQuerySamples(ctx context.Context, dbClient client, limit int64, mux *errsMux, logger *zap.Logger) {
 	timestamp := pcommon.NewTimestampFromTime(time.Now())
 
-	attributes, err := dbClient.getQuerySamples(ctx, limit, logger)
+	attributes, newestQueryTimestamp, err := dbClient.getQuerySamples(ctx, limit, p.newestQueryTimestamp, logger)
+	p.newestQueryTimestamp = newestQueryTimestamp
 	if err != nil {
 		mux.addPartial(err)
 		return
 	}
 	for _, atts := range attributes {
-		p.lb.RecordDbServerQuerySampleEvent(context.Background(),
+		// Use a background context so query-sample logs are not automatically linked to the scrape context.
+		logCtx := context.Background()
+		if ctxFromQuery, ok := atts[querySampleTraceContextKey]; ok {
+			if ctx, ok := ctxFromQuery.(context.Context); ok {
+				logCtx = ctx
+			}
+		}
+		p.lb.RecordDbServerQuerySampleEvent(logCtx,
 			timestamp,
 			metadata.AttributeDbSystemNamePostgresql,
-			atts["db.namespace"].(string),
-			atts["db.query.text"].(string),
-			atts["user.name"].(string),
-			atts[dbAttributePrefix+"state"].(string),
-			atts[dbAttributePrefix+"pid"].(int64),
-			atts[dbAttributePrefix+"application_name"].(string),
-			atts["network.peer.address"].(string),
-			atts["network.peer.port"].(int64),
-			atts[dbAttributePrefix+"client_hostname"].(string),
-			atts[dbAttributePrefix+"query_start"].(string),
-			atts[dbAttributePrefix+"wait_event"].(string),
-			atts[dbAttributePrefix+"wait_event_type"].(string),
-			atts[dbAttributePrefix+"query_id"].(string),
+			atts[string(semconv.DBNamespaceKey)].(string),
+			atts[string(semconv.DBQueryTextKey)].(string),
+			atts[string(semconv.UserNameKey)].(string),
+			atts[dbAttributePrefix+querySampleColumnState].(string),
+			atts[dbAttributePrefix+querySampleColumnPID].(int64),
+			atts[dbAttributePrefix+querySampleColumnApplicationName].(string),
+			atts[string(semconv.NetworkPeerAddressKey)].(string),
+			atts[string(semconv.NetworkPeerPortKey)].(int64),
+			atts[dbAttributePrefix+querySampleColumnClientHostname].(string),
+			atts[dbAttributePrefix+querySampleColumnQueryStart].(string),
+			atts[dbAttributePrefix+querySampleColumnWaitEvent].(string),
+			atts[dbAttributePrefix+querySampleColumnWaitEventType].(string),
+			atts[dbAttributePrefix+querySampleColumnQueryID].(string),
+			atts[postgresqlTotalExecTimeAttributeName].(float64),
 		)
 	}
 }
 
-func (p *postgreSQLScraper) collectTopQuery(ctx context.Context, clientFactory postgreSQLClientFactory, limit int64, topNQuery int64, maxExplainEachInterval int64, mux *errsMux, logger *zap.Logger) {
+func (p *postgreSQLScraper) collectTopQuery(ctx context.Context, clientFactory postgreSQLClientFactory, limit, topNQuery, maxExplainEachInterval int64, mux *errsMux, logger *zap.Logger) {
 	timestamp := pcommon.NewTimestampFromTime(time.Now())
 
 	defaultDbClient, err := clientFactory.getClient(defaultPostgreSQLDatabase)
@@ -266,7 +287,7 @@ func (p *postgreSQLScraper) collectTopQuery(ctx context.Context, clientFactory p
 		tempBlksWrittenColumnName:   {finalConverter: convertToInt},
 	}
 
-	pq := make(priorityQueue, 0)
+	pq := make(priorityqueue.PriorityQueue[map[string]any, float64], 0)
 
 	for i, row := range rows {
 		queryID := row[dbAttributePrefix+queryidColumnName]
@@ -293,7 +314,7 @@ func (p *postgreSQLScraper) collectTopQuery(ctx context.Context, clientFactory p
 			}
 			finalValue := float64(0)
 			if valDelta > 0 {
-				p.cache.Add(queryID.(string)+columnName, valDelta)
+				p.cache.Add(queryID.(string)+columnName, valInAtts)
 				finalValue = valDelta
 			}
 			if info.finalConverter != nil {
@@ -305,10 +326,10 @@ func (p *postgreSQLScraper) collectTopQuery(ctx context.Context, clientFactory p
 		if row[dbAttributePrefix+totalExecTimeColumnName] == 0.0 {
 			continue
 		}
-		item := item{
-			row:      row,
-			priority: row[dbAttributePrefix+totalExecTimeColumnName].(float64),
-			index:    i,
+		item := priorityqueue.QueueItem[map[string]any, float64]{
+			Value:    row,
+			Priority: row[dbAttributePrefix+totalExecTimeColumnName].(float64),
+			Index:    i,
 		}
 		pq.Push(&item)
 	}
@@ -317,12 +338,12 @@ func (p *postgreSQLScraper) collectTopQuery(ctx context.Context, clientFactory p
 	explained := int64(0)
 	count := 0
 	for pq.Len() > 0 && count < int(topNQuery) {
-		item := heap.Pop(&pq).(*item)
-		query := item.row[QueryTextAttributeName].(string)
-		queryID := item.row[dbAttributePrefix+queryidColumnName].(string)
+		item := heap.Pop(&pq).(*priorityqueue.QueueItem[map[string]any, float64])
+		query := item.Value[string(semconv.DBQueryTextKey)].(string)
+		queryID := item.Value[dbAttributePrefix+queryidColumnName].(string)
 		plan, ok := p.queryPlanCache.Get(queryID + "-plan")
 		if !ok && explained < maxExplainEachInterval {
-			database := item.row[DatabaseAttributeName].(string)
+			database := item.Value[string(semconv.DBNamespaceKey)].(string)
 			dbClient, err := clientFactory.getClient(database)
 			if err == nil {
 				plan, err = dbClient.explainQuery(query, queryID, logger)
@@ -344,20 +365,20 @@ func (p *postgreSQLScraper) collectTopQuery(ctx context.Context, clientFactory p
 			context.Background(),
 			timestamp,
 			metadata.AttributeDbSystemNamePostgresql,
-			item.row[DatabaseAttributeName].(string),
+			item.Value[string(semconv.DBNamespaceKey)].(string),
 			query,
-			item.row[dbAttributePrefix+callsColumnName].(int64),
-			item.row[dbAttributePrefix+rowsColumnName].(int64),
-			item.row[dbAttributePrefix+sharedBlksDirtiedColumnName].(int64),
-			item.row[dbAttributePrefix+sharedBlksHitColumnName].(int64),
-			item.row[dbAttributePrefix+sharedBlksReadColumnName].(int64),
-			item.row[dbAttributePrefix+sharedBlksWrittenColumnName].(int64),
-			item.row[dbAttributePrefix+tempBlksReadColumnName].(int64),
-			item.row[dbAttributePrefix+tempBlksWrittenColumnName].(int64),
+			item.Value[dbAttributePrefix+callsColumnName].(int64),
+			item.Value[dbAttributePrefix+rowsColumnName].(int64),
+			item.Value[dbAttributePrefix+sharedBlksDirtiedColumnName].(int64),
+			item.Value[dbAttributePrefix+sharedBlksHitColumnName].(int64),
+			item.Value[dbAttributePrefix+sharedBlksReadColumnName].(int64),
+			item.Value[dbAttributePrefix+sharedBlksWrittenColumnName].(int64),
+			item.Value[dbAttributePrefix+tempBlksReadColumnName].(int64),
+			item.Value[dbAttributePrefix+tempBlksWrittenColumnName].(int64),
 			queryID,
-			item.row[dbAttributePrefix+"rolname"].(string),
-			item.row[dbAttributePrefix+totalExecTimeColumnName].(float64),
-			item.row[dbAttributePrefix+totalPlanTimeColumnName].(float64),
+			item.Value[dbAttributePrefix+"rolname"].(string),
+			item.Value[dbAttributePrefix+totalExecTimeColumnName].(float64),
+			item.Value[dbAttributePrefix+totalPlanTimeColumnName].(float64),
 			plan,
 		)
 		count++
@@ -402,6 +423,7 @@ func (p *postgreSQLScraper) recordDatabase(now pcommon.Timestamp, db string, r *
 		p.mb.RecordPostgresqlRollbacksDataPoint(now, stats.transactionRollback)
 		p.mb.RecordPostgresqlDeadlocksDataPoint(now, stats.deadlocks)
 		p.mb.RecordPostgresqlTempFilesDataPoint(now, stats.tempFiles)
+		p.mb.RecordPostgresqlTempIoDataPoint(now, stats.tempIo)
 		p.mb.RecordPostgresqlTupUpdatedDataPoint(now, stats.tupUpdated)
 		p.mb.RecordPostgresqlTupReturnedDataPoint(now, stats.tupReturned)
 		p.mb.RecordPostgresqlTupFetchedDataPoint(now, stats.tupFetched)
@@ -410,8 +432,7 @@ func (p *postgreSQLScraper) recordDatabase(now pcommon.Timestamp, db string, r *
 		p.mb.RecordPostgresqlBlksHitDataPoint(now, stats.blksHit)
 		p.mb.RecordPostgresqlBlksReadDataPoint(now, stats.blksRead)
 	}
-	rb := p.mb.NewResourceBuilder()
-	rb.SetPostgresqlDatabaseName(db)
+	rb := p.setupResourceBuilder(p.mb.NewResourceBuilder(), db, "", "", "")
 	p.mb.EmitForResource(metadata.WithResource(rb.Emit()))
 }
 
@@ -448,14 +469,17 @@ func (p *postgreSQLScraper) collectTables(ctx context.Context, now pcommon.Times
 			p.mb.RecordPostgresqlBlocksReadDataPoint(now, br.tidxRead, metadata.AttributeSourceTidxRead)
 			p.mb.RecordPostgresqlBlocksReadDataPoint(now, br.tidxHit, metadata.AttributeSourceTidxHit)
 		}
-		rb := p.mb.NewResourceBuilder()
-		rb.SetPostgresqlDatabaseName(db)
+
+		var schemaName string
+		var tableName string
 		if p.separateSchemaAttr {
-			rb.SetPostgresqlSchemaName(tm.schema)
-			rb.SetPostgresqlTableName(tm.table)
+			schemaName = tm.schema
+			tableName = tm.table
 		} else {
-			rb.SetPostgresqlTableName(fmt.Sprintf("%s.%s", tm.schema, tm.table))
+			tableName = fmt.Sprintf("%s.%s", tm.schema, tm.table)
 		}
+
+		rb := p.setupResourceBuilder(p.mb.NewResourceBuilder(), db, schemaName, tableName, "")
 		p.mb.EmitForResource(metadata.WithResource(rb.Emit()))
 	}
 	return int64(len(tableMetrics))
@@ -477,15 +501,39 @@ func (p *postgreSQLScraper) collectIndexes(
 	for _, stat := range idxStats {
 		p.mb.RecordPostgresqlIndexScansDataPoint(now, stat.scans)
 		p.mb.RecordPostgresqlIndexSizeDataPoint(now, stat.size)
-		rb := p.mb.NewResourceBuilder()
-		rb.SetPostgresqlDatabaseName(database)
+
+		var schemaName string
 		if p.separateSchemaAttr {
-			rb.SetPostgresqlSchemaName(stat.schema)
-			rb.SetPostgresqlTableName(stat.table)
-		} else {
-			rb.SetPostgresqlTableName(stat.table)
+			schemaName = stat.schema
 		}
-		rb.SetPostgresqlIndexName(stat.index)
+
+		rb := p.setupResourceBuilder(p.mb.NewResourceBuilder(), database, schemaName, stat.table, stat.index)
+		p.mb.EmitForResource(metadata.WithResource(rb.Emit()))
+	}
+}
+
+func (p *postgreSQLScraper) collectFunctions(
+	ctx context.Context,
+	now pcommon.Timestamp,
+	client client,
+	database string,
+	errs *errsMux,
+) {
+	funcStats, err := client.getFunctionStats(ctx, database)
+	if err != nil {
+		errs.addPartial(err)
+		return
+	}
+
+	for _, stat := range funcStats {
+		p.mb.RecordPostgresqlFunctionCallsDataPoint(now, stat.calls, stat.function)
+
+		var schemaName string
+		if p.separateSchemaAttr {
+			schemaName = stat.schema
+		}
+		rb := p.setupResourceBuilder(p.mb.NewResourceBuilder(), database, schemaName, "", "")
+
 		p.mb.EmitForResource(metadata.WithResource(rb.Emit()))
 	}
 }
@@ -650,7 +698,7 @@ func (p *postgreSQLScraper) retrieveDatabaseSize(
 	r.Unlock()
 }
 
-func (p *postgreSQLScraper) retrieveBackends(
+func (*postgreSQLScraper) retrieveBackends(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	client client,
@@ -669,41 +717,38 @@ func (p *postgreSQLScraper) retrieveBackends(
 	r.Unlock()
 }
 
-// reference: https://pkg.go.dev/container/heap#example-package-priorityQueue
-
-type item struct {
-	row      map[string]any
-	priority float64
-	index    int
+func (p *postgreSQLScraper) setupResourceBuilder(rb *metadata.ResourceBuilder, database, schema, table, index string) *metadata.ResourceBuilder {
+	rb.SetServiceInstanceID(p.serviceInstanceID)
+	if database != "" {
+		rb.SetPostgresqlDatabaseName(database)
+	}
+	if schema != "" {
+		rb.SetPostgresqlSchemaName(schema)
+	}
+	if table != "" {
+		rb.SetPostgresqlTableName(table)
+	}
+	if index != "" {
+		rb.SetPostgresqlIndexName(index)
+	}
+	return rb
 }
 
-type priorityQueue []*item
+func getInstanceID(instanceString string, logger *zap.Logger) string {
+	const fallback = "unknown:5432"
+	host, port, err := net.SplitHostPort(instanceString)
+	if err != nil {
+		logger.Warn("Unable to determine actual instance ID for constructing service.instance.id", zap.Error(err))
+		return fallback
+	}
 
-func (pq priorityQueue) Len() int { return len(pq) }
-
-func (pq priorityQueue) Less(i, j int) bool {
-	return pq[i].priority > pq[j].priority
-}
-
-func (pq priorityQueue) Swap(i, j int) {
-	pq[i], pq[j] = pq[j], pq[i]
-	pq[i].index = i
-	pq[j].index = j
-}
-
-func (pq *priorityQueue) Push(x any) {
-	n := len(*pq)
-	item := x.(*item)
-	item.index = n
-	*pq = append(*pq, item)
-}
-
-func (pq *priorityQueue) Pop() any {
-	old := *pq
-	n := len(old)
-	item := old[n-1]
-	old[n-1] = nil  // don't stop the GC from reclaiming the item eventually
-	item.index = -1 // for safety
-	*pq = old[0 : n-1]
-	return item
+	if strings.EqualFold(host, "localhost") || net.ParseIP(host).IsLoopback() {
+		localhost, hostNameErr := os.Hostname()
+		if hostNameErr != nil {
+			logger.Warn("Failed getting localhost machine name to construct service.instance.id.")
+		} else {
+			host = localhost
+		}
+	}
+	return host + ":" + port
 }

@@ -398,7 +398,7 @@ func Test_ParseStatements_ConverterNilReturn(t *testing.T) {
 
 	statements := mockGetter{values: []string{`set(dummy.attributes["bar"], "foo")`}}
 	result, err := pc.ParseStatements(statements)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nil(t, result)
 }
 
@@ -622,7 +622,7 @@ func Test_ParseConditions_ConverterNilReturn(t *testing.T) {
 
 	conditions := mockGetter{values: []string{`dummy.attributes["bar"] == "foo"`}}
 	result, err := pc.ParseConditions(conditions)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nil(t, result)
 }
 
@@ -817,7 +817,7 @@ func Test_ParseValueExpressions_ConverterNilReturn(t *testing.T) {
 
 	expressions := mockGetter{values: []string{`dummy.attributes["bar"]`}}
 	result, err := pc.ParseValueExpressions(expressions)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nil(t, result)
 }
 
@@ -913,7 +913,7 @@ func Test_NewValueExpressionsGetter(t *testing.T) {
 func mockParser(t *testing.T, options ...Option[any]) *Parser[any] {
 	mockSetFactory := NewFactory("set", &mockSetArguments[any]{},
 		func(_ FunctionContext, _ Arguments) (ExprFunc[any], error) {
-			return func(_ context.Context, _ any) (any, error) {
+			return func(context.Context, any) (any, error) {
 				return nil, nil
 			}, nil
 		})

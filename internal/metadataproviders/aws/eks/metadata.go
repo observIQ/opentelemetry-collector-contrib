@@ -107,7 +107,7 @@ func parseRegionAndInstanceID(input string) (string, string, string) {
 	// Example mockProviderID: "aws:///us-west-2a/i-049ca2df511bec762"
 	parts := strings.Split(input, "/")
 	// Prevent NPE and return empty strings if the format is invalid
-	if len(parts) < 5 || parts[0] != "aws:" || len(parts[3]) == 0 || len(parts[4]) == 0 {
+	if len(parts) < 5 || parts[0] != "aws:" || parts[3] == "" || parts[4] == "" {
 		return "", "", ""
 	}
 
@@ -150,7 +150,8 @@ func (c *metadataClient) GetInstanceMetadata(ctx context.Context) (InstanceMetad
 
 func getClusterNameTagFromReservations(reservations []types.Reservation) string {
 	for _, reservation := range reservations {
-		for _, instance := range reservation.Instances {
+		for i := range reservation.Instances {
+			instance := reservation.Instances[i]
 			for _, tag := range instance.Tags {
 				key := aws.ToString(tag.Key)
 				if key == "" {
@@ -158,8 +159,8 @@ func getClusterNameTagFromReservations(reservations []types.Reservation) string 
 				}
 				if key == clusterNameAwsEksTag || key == clusterNameEksTag {
 					return aws.ToString(tag.Value)
-				} else if strings.HasPrefix(key, kubernetesClusterNameTag) {
-					return strings.TrimPrefix(key, kubernetesClusterNameTag)
+				} else if after, ok := strings.CutPrefix(key, kubernetesClusterNameTag); ok {
+					return after
 				}
 			}
 		}

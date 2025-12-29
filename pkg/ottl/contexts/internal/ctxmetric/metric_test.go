@@ -4,10 +4,10 @@
 package ctxmetric_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 
@@ -127,16 +127,16 @@ func TestPathGetSetter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			accessor, err := ctxmetric.PathGetSetter(tt.path)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			metric := createTelemetry()
 
-			got, err := accessor.Get(context.Background(), newTestContext(metric))
-			assert.NoError(t, err)
+			got, err := accessor.Get(t.Context(), newTestContext(metric))
+			require.NoError(t, err)
 			assert.Equal(t, tt.orig, got)
 
-			err = accessor.Set(context.Background(), newTestContext(metric), tt.newVal)
-			assert.NoError(t, err)
+			err = accessor.Set(t.Context(), newTestContext(metric), tt.newVal)
+			require.NoError(t, err)
 
 			expectedMetric := createTelemetry()
 			tt.modified(expectedMetric)

@@ -98,7 +98,7 @@ func compressToGZIPReader(t *testing.T, buf []byte) io.Reader {
 
 // readAndCompressLogFile reads the data inside it, compresses it
 // and returns a GZIP reader for it.
-func readAndCompressLogFile(t *testing.T, dir string, file string) io.Reader {
+func readAndCompressLogFile(t *testing.T, dir, file string) io.Reader {
 	data, err := os.ReadFile(filepath.Join(dir, file))
 	require.NoError(t, err)
 	return compressToGZIPReader(t, data)
@@ -116,6 +116,10 @@ func TestUnmarshallCloudwatchLog_SubscriptionFilter(t *testing.T) {
 		"valid_cloudwatch_log": {
 			reader:               readAndCompressLogFile(t, filesDirectory, "valid_cloudwatch_log.json"),
 			logsExpectedFilename: "valid_cloudwatch_log_expected.yaml",
+		},
+		"valid_cloudwatch_log_control": {
+			reader:               readAndCompressLogFile(t, filesDirectory, "valid_cloudwatch_log_control.json"),
+			logsExpectedFilename: "valid_cloudwatch_log_control_expected.yaml",
 		},
 		"invalid_cloudwatch_log": {
 			reader:      readAndCompressLogFile(t, filesDirectory, "invalid_cloudwatch_log.json"),

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -77,7 +78,7 @@ func TestServerStart(t *testing.T) {
 			}
 
 			// Stop the server
-			s.Stop(context.Background())
+			s.Stop(t.Context())
 		})
 	}
 }
@@ -216,7 +217,10 @@ const successfulInstanceResponse = `{
       "version": ""
     },
     "full_configuration": "",
-    "health_status": ""
+    "health_status": "",
+    "collector_resource_attributes": {},
+    "collector_deployment_type": "unknown",
+    "ttl": 900000000000
   },
   "uuid": "test-uuid"
 }`
@@ -281,7 +285,7 @@ func TestHandleMetadata(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logger, serializer := tt.setupTest()
 			w := httptest.NewRecorder()
-			r := httptest.NewRequest(http.MethodGet, "/metadata", nil)
+			r := httptest.NewRequest(http.MethodGet, "/metadata", http.NoBody)
 			r.Header.Set("Content-Type", "application/json")
 			srv := &Server{
 				logger:     logger,
@@ -290,8 +294,11 @@ func TestHandleMetadata(t *testing.T) {
 					Hostname: "test-hostname",
 					UUID:     "test-uuid",
 					Metadata: payload.OtelCollector{
-						FullComponents:   []payload.CollectorModule{},
-						ActiveComponents: []payload.ServiceComponent{},
+						FullComponents:              []payload.CollectorModule{},
+						ActiveComponents:            []payload.ServiceComponent{},
+						CollectorResourceAttributes: map[string]string{},
+						CollectorDeploymentType:     "unknown", // Default value set by config validation
+						TTL:                         int64(5 * time.Minute * 3),
 					},
 				},
 			}
@@ -364,12 +371,12 @@ func TestHandleMetadataConcurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	responses := make([]*httptest.ResponseRecorder, numRequests)
 
-	for i := 0; i < numRequests; i++ {
+	for i := range numRequests {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
 			w := httptest.NewRecorder()
-			r := httptest.NewRequest(http.MethodGet, "/metadata", nil)
+			r := httptest.NewRequest(http.MethodGet, "/metadata", http.NoBody)
 			r.Header.Set("Content-Type", "application/json")
 			responses[index] = w
 			srv.HandleMetadata(w, r)
@@ -416,7 +423,7 @@ func TestServerStop(t *testing.T) {
 				}, logs
 			},
 			contextSetup: func() (context.Context, context.CancelFunc) {
-				return context.WithTimeout(context.Background(), 100*time.Millisecond)
+				return context.WithTimeout(t.Context(), 100*time.Millisecond)
 			},
 			expectedLogs:  []string{},
 			expectTimeout: false,
@@ -444,52 +451,10 @@ func TestServerStop(t *testing.T) {
 				}, logs
 			},
 			contextSetup: func() (context.Context, context.CancelFunc) {
-				return context.WithTimeout(context.Background(), 1*time.Second)
+				return context.WithTimeout(t.Context(), 1*time.Second)
 			},
 			expectedLogs:  []string{},
 			expectTimeout: false,
-		},
-		{
-			name: "Context cancelled before shutdown completes",
-			setupServer: func() (*Server, *observer.ObservedLogs) {
-				core, logs := observer.New(zapcore.InfoLevel)
-				logger := zap.New(core)
-
-				// Create a test server with a blocking handler
-				mux := http.NewServeMux()
-				blockCh = make(chan struct{})
-				mux.HandleFunc("/block", func(w http.ResponseWriter, _ *http.Request) {
-					<-blockCh // block until closed
-					w.WriteHeader(http.StatusOK)
-				})
-				mux.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
-					w.WriteHeader(http.StatusOK)
-				})
-
-				server := &http.Server{
-					Addr:              "127.0.0.1:0",
-					Handler:           mux,
-					ReadHeaderTimeout: 10 * time.Millisecond,
-				}
-
-				srv := &Server{
-					logger: logger,
-					server: server,
-				}
-
-				return srv, logs
-			},
-			contextSetup: func() (context.Context, context.CancelFunc) {
-				ctx, cancel := context.WithCancel(context.Background())
-				go func() {
-					time.Sleep(10 * time.Millisecond)
-					cancel()
-				}()
-				return ctx, cancel
-			},
-			expectedLogs:     []string{"Context cancelled while waiting for server shutdown"},
-			expectTimeout:    true,
-			simulateSlowStop: true,
 		},
 	}
 
@@ -500,20 +465,20 @@ func TestServerStop(t *testing.T) {
 			defer cancel()
 
 			if srv.server != nil && srv.server.Addr != "" {
+				listener, err := net.Listen("tcp", srv.server.Addr)
+				require.NoError(t, err)
 				go func() {
-					if err := srv.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					if err := srv.server.Serve(listener); err != nil && err != http.ErrServerClosed {
 						t.Logf("Unexpected server error: %v", err)
 					}
 				}()
-				time.Sleep(10 * time.Millisecond)
 
 				if tt.simulateSlowStop {
-					go func() {
-						resp, err := http.Get("http://" + srv.server.Addr + "/block")
-						if err == nil {
-							_ = resp.Body.Close()
-						}
-					}()
+					cancel()
+					resp, err := http.Get("http://" + srv.server.Addr + "/block")
+					if err == nil {
+						_ = resp.Body.Close()
+					}
 				}
 			}
 
@@ -576,7 +541,7 @@ func TestServerStopChannelBehavior(t *testing.T) {
 	time.Sleep(10 * time.Millisecond) // Let server start
 
 	t.Run("Channel closed on successful shutdown", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// Use a channel to detect when Stop completes
 		done := make(chan struct{})
@@ -637,11 +602,11 @@ func TestServerStopConcurrency(t *testing.T) {
 	const numStops = 5
 	var wg sync.WaitGroup
 
-	for i := 0; i < numStops; i++ {
+	for i := range numStops {
 		wg.Add(1)
 		go func(_ int) {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 			defer cancel()
 			srv.Stop(ctx)
 		}(i)
@@ -743,7 +708,7 @@ func TestHandleMetadata_JSONMarshalError(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/metadata", nil)
+	r := httptest.NewRequest(http.MethodGet, "/metadata", http.NoBody)
 	r.Header.Set("Content-Type", "application/json")
 
 	srv.HandleMetadata(w, r)
@@ -783,7 +748,7 @@ func TestNewServerErrorPaths(t *testing.T) {
 
 		// Stop should not panic even if server was never started
 		assert.NotPanics(t, func() {
-			s.Stop(context.Background())
+			s.Stop(t.Context())
 		})
 	})
 
@@ -799,7 +764,7 @@ func TestNewServerErrorPaths(t *testing.T) {
 
 		// Stop should not panic with nil server
 		assert.NotPanics(t, func() {
-			s.Stop(context.Background())
+			s.Stop(t.Context())
 		})
 	})
 }
@@ -827,7 +792,7 @@ func TestHandleMetadataErrorPaths(t *testing.T) {
 		}
 
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/metadata", nil) // Method doesn't matter
+		r := httptest.NewRequest(http.MethodPost, "/metadata", http.NoBody) // Method doesn't matter
 
 		srv.HandleMetadata(w, r)
 

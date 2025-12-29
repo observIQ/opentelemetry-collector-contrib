@@ -13,7 +13,7 @@ import (
 
 	gojson "github.com/goccy/go-json"
 	"go.opentelemetry.io/collector/pdata/plog"
-	conventions "go.opentelemetry.io/otel/semconv/v1.27.0"
+	conventions "go.opentelemetry.io/otel/semconv/v1.38.0"
 )
 
 const (
@@ -30,6 +30,7 @@ const (
 	categoryAppServiceHTTPLogs                 = "AppServiceHTTPLogs"
 	categoryAppServiceIPSecAuditLogs           = "AppServiceIPSecAuditLogs"
 	categoryAppServicePlatformLogs             = "AppServicePlatformLogs"
+	categoryRecommendation                     = "Recommendation"
 
 	// attributeAzureRef holds the request tracking reference, also
 	// placed in the request header "X-Azure-Ref".
@@ -40,7 +41,7 @@ const (
 	// request to the time the first byte gets sent to the client.
 	attributeTimeToFirstByte = "azure.time_to_first_byte"
 
-	// attributeDuration holds the the length of time from first byte of
+	// attributeDuration holds the length of time from first byte of
 	// request to last byte of response out, in seconds.
 	attributeDuration = "duration"
 
@@ -76,6 +77,14 @@ const (
 
 	// attributeAzureFrontDoorWAFAction holds the action taken on the request.
 	attributeAzureFrontDoorWAFAction = "azure.frontdoor.waf.action"
+
+	// Recommendation specific attributes
+	attributeAzureRecommendationCategory      = "azure.recommendation.category"
+	attributeAzureRecommendationImpact        = "azure.recommendation.impact"
+	attributeAzureRecommendationName          = "azure.recommendation.name"
+	attributeAzureRecommendationType          = "azure.recommendation.type"
+	attributeAzureRecommendationSchemaVersion = "azure.recommendation.schema_version"
+	attributeAzureRecommendationLink          = "azure.recommendation.link"
 )
 
 var (
@@ -109,6 +118,8 @@ func addRecordAttributes(category string, data []byte, record plog.LogRecord) er
 		err = addAppServiceIPSecAuditLogsProperties(data, record)
 	case categoryAppServicePlatformLogs:
 		err = addAppServicePlatformLogsProperties(data, record)
+	case categoryRecommendation:
+		err = addRecommendationLogProperties(data, record)
 	default:
 		err = errUnsupportedCategory
 	}
@@ -120,7 +131,7 @@ func addRecordAttributes(category string, data []byte, record plog.LogRecord) er
 }
 
 // putInt parses value as an int and puts it in the record
-func putInt(field string, value string, record plog.LogRecord) error {
+func putInt(field, value string, record plog.LogRecord) error {
 	n, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return fmt.Errorf("failed to get number in %q for field %q: %w", value, field, err)
@@ -132,7 +143,7 @@ func putInt(field string, value string, record plog.LogRecord) error {
 // putStr puts the value in the record if the value holds
 // meaningful data. Meaningful data is defined as not being empty
 // or "N/A".
-func putStr(field string, value string, record plog.LogRecord) {
+func putStr(field, value string, record plog.LogRecord) {
 	switch value {
 	case "", "N/A":
 		// ignore
@@ -144,7 +155,7 @@ func putStr(field string, value string, record plog.LogRecord) {
 // handleTime parses the time value and always multiplies it by
 // 1e3. This is so we don't loose so much data if the time is for
 // example "0.154". In that case, the output would be "154".
-func handleTime(field string, value string, record plog.LogRecord) error {
+func handleTime(field, value string, record plog.LogRecord) error {
 	n, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return fmt.Errorf("failed to get number in %q for field %q: %w", value, field, err)
@@ -243,8 +254,8 @@ func addErrorInfoProperties(errorInfo string, record plog.LogRecord) {
 // hostname is filled, then the destination address and port are based on
 // it. If both are filled but different, then the endpoint will cover the
 // network address and port.
-func handleDestination(backendHostname string, endpoint string, record plog.LogRecord) error {
-	addFields := func(full string, addressField string, portField string) error {
+func handleDestination(backendHostname, endpoint string, record plog.LogRecord) error {
+	addFields := func(full, addressField, portField string) error {
 		host, port, err := net.SplitHostPort(full)
 		if err != nil && strings.HasSuffix(err.Error(), missingPort) {
 			// there is no port, so let's keep using the full endpoint for the address
@@ -256,7 +267,8 @@ func handleDestination(backendHostname string, endpoint string, record plog.LogR
 			record.Attributes().PutStr(addressField, host)
 		}
 		if port != "" {
-			if err = putInt(portField, port, record); err != nil {
+			err = putInt(portField, port, record)
+			if err != nil {
 				return err
 			}
 		}
@@ -348,9 +360,9 @@ func addAzureCdnAccessLogProperties(data []byte, record plog.LogRecord) error {
 	putStr(attributeCacheStatus, properties.CacheStatus, record)
 
 	if properties.IsReceivedFromClient {
-		record.Attributes().PutStr(string(conventions.NetworkIoDirectionKey), "receive")
+		record.Attributes().PutStr(string(conventions.NetworkIODirectionKey), "receive")
 	} else {
-		record.Attributes().PutStr(string(conventions.NetworkIoDirectionKey), "transmit")
+		record.Attributes().PutStr(string(conventions.NetworkIODirectionKey), "transmit")
 	}
 
 	return nil
@@ -557,4 +569,34 @@ func addAppServiceIPSecAuditLogsProperties(_ []byte, _ plog.LogRecord) error {
 func addAppServicePlatformLogsProperties(_ []byte, _ plog.LogRecord) error {
 	// TODO @constanca-m implement this the same way as addAzureCdnAccessLogProperties
 	return errStillToImplement
+}
+
+// recommendationLogProperties represents the properties field of a Recommendation activity log.
+// See: https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/activity-log-schema#recommendation-category
+type recommendationLogProperties struct {
+	RecommendationSchemaVersion string `json:"recommendationSchemaVersion"`
+	RecommendationCategory      string `json:"recommendationCategory"`
+	RecommendationImpact        string `json:"recommendationImpact"`
+	RecommendationName          string `json:"recommendationName"`
+	RecommendationResourceLink  string `json:"recommendationResourceLink"`
+	RecommendationType          string `json:"recommendationType"`
+}
+
+// addRecommendationLogProperties parses Recommendation activity logs from Azure Advisor
+// and maps them to OpenTelemetry semantic conventions.
+// See: https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/activity-log-schema#recommendation-category
+func addRecommendationLogProperties(data []byte, record plog.LogRecord) error {
+	var properties recommendationLogProperties
+	if err := gojson.Unmarshal(data, &properties); err != nil {
+		return fmt.Errorf("failed to parse Recommendation properties: %w", err)
+	}
+
+	putStr(attributeAzureRecommendationCategory, properties.RecommendationCategory, record)
+	putStr(attributeAzureRecommendationImpact, properties.RecommendationImpact, record)
+	putStr(attributeAzureRecommendationName, properties.RecommendationName, record)
+	putStr(attributeAzureRecommendationType, properties.RecommendationType, record)
+	putStr(attributeAzureRecommendationSchemaVersion, properties.RecommendationSchemaVersion, record)
+	putStr(attributeAzureRecommendationLink, properties.RecommendationResourceLink, record)
+
+	return nil
 }

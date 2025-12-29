@@ -4,7 +4,6 @@
 package prometheusreceiver
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,7 +18,7 @@ import (
 )
 
 func TestEnableCreatedTimestampZeroIngestionGateUsage(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	mockConsumer := new(consumertest.MetricsSink)
 	cfg := createDefaultConfig().(*Config)
 	settings := receivertest.NewNopSettings(metadata.Type)
@@ -142,7 +141,7 @@ func verifyOpenMetricsCreatedTimestampZeroIngestionDisabled(t *testing.T, td *te
 			[]dataPointExpectation{
 				{
 					numberPointComparator: []numberPointComparator{
-						compareStartTimestamp(ts1),
+						compareStartTimestamp(tsZero),
 						compareTimestamp(ts1),
 						compareDoubleValue(1.0),
 					},

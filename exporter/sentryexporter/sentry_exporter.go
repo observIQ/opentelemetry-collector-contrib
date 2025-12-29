@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -253,9 +254,7 @@ func convertToSentrySpan(span ptrace.Span, library pcommon.InstrumentationScope,
 	op, description := generateSpanDescriptors(name, attributes, spanKind)
 	tags := generateTagsFromAttributes(attributes)
 
-	for k, v := range resourceTags {
-		tags[k] = v
-	}
+	maps.Copy(tags, resourceTags)
 
 	status, message := statusFromSpanStatus(span.Status(), tags)
 
@@ -294,7 +293,7 @@ func convertToSentrySpan(span ptrace.Span, library pcommon.InstrumentationScope,
 //
 // See https://github.com/open-telemetry/opentelemetry-specification/tree/5b78ee1/specification/trace/semantic_conventions
 // for more details about the semantic conventions.
-func generateSpanDescriptors(name string, attrs pcommon.Map, spanKind ptrace.SpanKind) (op string, description string) {
+func generateSpanDescriptors(name string, attrs pcommon.Map, spanKind ptrace.SpanKind) (op, description string) {
 	var opBuilder strings.Builder
 	var dBuilder strings.Builder
 

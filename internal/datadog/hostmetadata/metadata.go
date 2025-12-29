@@ -14,15 +14,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/DataDog/opentelemetry-mapping-go/pkg/inframetadata"
-	"github.com/DataDog/opentelemetry-mapping-go/pkg/inframetadata/payload"
-	"github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes"
-	ec2Attributes "github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes/ec2"
-	"github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes/gcp"
-	"github.com/DataDog/opentelemetry-mapping-go/pkg/otlp/attributes/source"
+	"github.com/DataDog/datadog-agent/pkg/opentelemetry-mapping-go/inframetadata"
+	"github.com/DataDog/datadog-agent/pkg/opentelemetry-mapping-go/inframetadata/payload"
+	"github.com/DataDog/datadog-agent/pkg/opentelemetry-mapping-go/otlp/attributes"
+	ec2Attributes "github.com/DataDog/datadog-agent/pkg/opentelemetry-mapping-go/otlp/attributes/ec2"
+	"github.com/DataDog/datadog-agent/pkg/opentelemetry-mapping-go/otlp/attributes/gcp"
+	"github.com/DataDog/datadog-agent/pkg/opentelemetry-mapping-go/otlp/attributes/source"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
-	conventions "go.opentelemetry.io/otel/semconv/v1.6.1"
+	conventions "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/datadog/clientutil"
@@ -90,6 +90,13 @@ func fillHostMetadata(params exporter.Settings, pcfg PusherConfig, p source.Prov
 	}
 }
 
+type pusher struct {
+	params     exporter.Settings
+	pcfg       PusherConfig
+	retrier    *clientutil.Retrier
+	httpClient *http.Client
+}
+
 func (p *pusher) pushMetadata(hm payload.HostMetadata) error {
 	path := p.pcfg.MetricsEndpoint + "/intake"
 	marshaled, err := json.Marshal(hm)
@@ -149,13 +156,6 @@ func (p *pusher) Push(_ context.Context, hm payload.HostMetadata) error {
 }
 
 var _ inframetadata.Pusher = (*pusher)(nil)
-
-type pusher struct {
-	params     exporter.Settings
-	pcfg       PusherConfig
-	retrier    *clientutil.Retrier
-	httpClient *http.Client
-}
 
 // NewPusher creates a new inframetadata.Pusher that pushes metadata payloads
 func NewPusher(params exporter.Settings, pcfg PusherConfig) inframetadata.Pusher {

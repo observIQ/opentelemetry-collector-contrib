@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/servicediscovery/types"
+	"go.opentelemetry.io/collector/config/configoptional"
 	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/exporter/otlpexporter"
@@ -36,7 +37,7 @@ const (
 type Config struct {
 	TimeoutSettings           exporterhelper.TimeoutConfig `mapstructure:",squash"`
 	configretry.BackOffConfig `mapstructure:"retry_on_failure"`
-	QueueSettings             exporterhelper.QueueBatchConfig `mapstructure:"sending_queue"`
+	QueueSettings             configoptional.Optional[exporterhelper.QueueBatchConfig] `mapstructure:"sending_queue"`
 
 	Protocol Protocol         `mapstructure:"protocol"`
 	Resolver ResolverSettings `mapstructure:"resolver"`
@@ -60,10 +61,10 @@ type Protocol struct {
 
 // ResolverSettings defines the configurations for the backend resolver
 type ResolverSettings struct {
-	Static      *StaticResolver      `mapstructure:"static"`
-	DNS         *DNSResolver         `mapstructure:"dns"`
-	K8sSvc      *K8sSvcResolver      `mapstructure:"k8s"`
-	AWSCloudMap *AWSCloudMapResolver `mapstructure:"aws_cloud_map"`
+	Static      configoptional.Optional[StaticResolver]      `mapstructure:"static"`
+	DNS         configoptional.Optional[DNSResolver]         `mapstructure:"dns"`
+	K8sSvc      configoptional.Optional[K8sSvcResolver]      `mapstructure:"k8s"`
+	AWSCloudMap configoptional.Optional[AWSCloudMapResolver] `mapstructure:"aws_cloud_map"`
 	// prevent unkeyed literal initialization
 	_ struct{}
 }

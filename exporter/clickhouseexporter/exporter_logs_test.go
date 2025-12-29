@@ -4,7 +4,6 @@
 package clickhouseexporter
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -14,18 +13,6 @@ import (
 
 func TestLogsExporter_New(t *testing.T) {
 	type validate func(*testing.T, *logsExporter, error)
-
-	_ = func(t *testing.T, exporter *logsExporter, err error) {
-		require.NoError(t, err)
-		require.NotNil(t, exporter)
-	}
-
-	_ = func(want error) validate {
-		return func(t *testing.T, exporter *logsExporter, err error) {
-			require.Nil(t, exporter)
-			require.ErrorIs(t, err, want, "Expected error '%v', but got '%v'", want, err)
-		}
-	}
 
 	failWithMsg := func(msg string) validate {
 		return func(t *testing.T, _ *logsExporter, err error) {
@@ -49,9 +36,9 @@ func TestLogsExporter_New(t *testing.T) {
 			exporter := newLogsExporter(zap.NewNop(), test.config)
 
 			if exporter != nil {
-				err = errors.Join(err, exporter.start(context.Background(), nil))
+				err = errors.Join(err, exporter.start(t.Context(), nil))
 				defer func() {
-					require.NoError(t, exporter.shutdown(context.Background()))
+					require.NoError(t, exporter.shutdown(t.Context()))
 				}()
 			}
 

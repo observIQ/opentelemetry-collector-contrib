@@ -28,7 +28,6 @@ import (
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	conventions "go.opentelemetry.io/otel/semconv/v1.12.0"
 
 	zipkin2 "github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/zipkin/zipkinthriftconverter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/zipkinreceiver/internal/metadata"
@@ -88,7 +87,7 @@ func TestZipkinReceiverPortAlreadyInUse(t *testing.T) {
 	}
 	traceReceiver, err := newReceiver(cfg, consumertest.NewNop(), receivertest.NewNopSettings(metadata.Type))
 	require.NoError(t, err, "Failed to create receiver: %v", err)
-	err = traceReceiver.Start(context.Background(), componenttest.NewNopHost())
+	err = traceReceiver.Start(t.Context(), componenttest.NewNopHost())
 	require.Error(t, err)
 }
 
@@ -103,7 +102,7 @@ func TestConvertSpansToTraceSpans_json(t *testing.T) {
 	require.Equal(t, 1, reqs.ResourceSpans().Len(), "Expecting only one request since all spans share same node/localEndpoint: %v", reqs.ResourceSpans().Len())
 
 	req := reqs.ResourceSpans().At(0)
-	sn, _ := req.Resource().Attributes().Get(string(conventions.ServiceNameKey))
+	sn, _ := req.Resource().Attributes().Get("service.name")
 	assert.Equal(t, "frontend", sn.Str())
 
 	// Expecting 9 non-nil spans
@@ -138,10 +137,10 @@ func TestStartTraceReception(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, zr)
 
-			err = zr.Start(context.Background(), tt.host)
+			err = zr.Start(t.Context(), tt.host)
 			assert.Equal(t, tt.wantErr, err != nil)
 			if !tt.wantErr {
-				require.NoError(t, zr.Shutdown(context.Background()))
+				require.NoError(t, zr.Shutdown(t.Context()))
 			}
 		})
 	}

@@ -36,7 +36,7 @@ func BenchmarkFromMetrics(b *testing.B) {
 										b.Run(fmt.Sprintf("exemplars per series: %v", exemplarsPerSeries), func(b *testing.B) {
 											payload := createExportRequest(resourceAttributeCount, histogramCount, nonHistogramCount, labelsPerMetric, exemplarsPerSeries, pcommon.Timestamp(uint64(time.Now().UnixNano())))
 
-											for i := 0; i < b.N; i++ {
+											for b.Loop() {
 												tsMap, err := FromMetrics(payload.Metrics(), Settings{})
 												require.NoError(b, err)
 												require.NotNil(b, tsMap)
@@ -73,8 +73,8 @@ func BenchmarkPrometheusConverter_FromMetrics(b *testing.B) {
 										b.Run(fmt.Sprintf("exemplars per series: %v", exemplarsPerSeries), func(b *testing.B) {
 											payload := createExportRequest(resourceAttributeCount, histogramCount, nonHistogramCount, labelsPerMetric, exemplarsPerSeries, pcommon.Timestamp(uint64(time.Now().UnixNano())))
 
-											for i := 0; i < b.N; i++ {
-												converter := newPrometheusConverter()
+											for b.Loop() {
+												converter := newPrometheusConverter(Settings{})
 												require.NoError(b, converter.fromMetrics(payload.Metrics(), Settings{}))
 												require.NotNil(b, converter.timeSeries())
 											}
@@ -90,7 +90,7 @@ func BenchmarkPrometheusConverter_FromMetrics(b *testing.B) {
 	}
 }
 
-func createExportRequest(resourceAttributeCount int, histogramCount int, nonHistogramCount int, labelsPerMetric int, exemplarsPerSeries int, timestamp pcommon.Timestamp) pmetricotlp.ExportRequest {
+func createExportRequest(resourceAttributeCount, histogramCount, nonHistogramCount, labelsPerMetric, exemplarsPerSeries int, timestamp pcommon.Timestamp) pmetricotlp.ExportRequest {
 	request := pmetricotlp.NewExportRequest()
 
 	rm := request.Metrics().ResourceMetrics().AppendEmpty()

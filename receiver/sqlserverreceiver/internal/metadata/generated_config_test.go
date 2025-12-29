@@ -9,7 +9,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
-
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
@@ -30,6 +29,8 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					SqlserverBatchRequestRate:                   MetricConfig{Enabled: true},
 					SqlserverBatchSQLCompilationRate:            MetricConfig{Enabled: true},
 					SqlserverBatchSQLRecompilationRate:          MetricConfig{Enabled: true},
+					SqlserverComputerUptime:                     MetricConfig{Enabled: true},
+					SqlserverCPUCount:                           MetricConfig{Enabled: true},
 					SqlserverDatabaseBackupOrRestoreRate:        MetricConfig{Enabled: true},
 					SqlserverDatabaseCount:                      MetricConfig{Enabled: true},
 					SqlserverDatabaseExecutionErrors:            MetricConfig{Enabled: true},
@@ -80,6 +81,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					HostName:              ResourceAttributeConfig{Enabled: true},
 					ServerAddress:         ResourceAttributeConfig{Enabled: true},
 					ServerPort:            ResourceAttributeConfig{Enabled: true},
+					ServiceInstanceID:     ResourceAttributeConfig{Enabled: true},
 					SqlserverComputerName: ResourceAttributeConfig{Enabled: true},
 					SqlserverDatabaseName: ResourceAttributeConfig{Enabled: true},
 					SqlserverInstanceName: ResourceAttributeConfig{Enabled: true},
@@ -93,6 +95,8 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					SqlserverBatchRequestRate:                   MetricConfig{Enabled: false},
 					SqlserverBatchSQLCompilationRate:            MetricConfig{Enabled: false},
 					SqlserverBatchSQLRecompilationRate:          MetricConfig{Enabled: false},
+					SqlserverComputerUptime:                     MetricConfig{Enabled: false},
+					SqlserverCPUCount:                           MetricConfig{Enabled: false},
 					SqlserverDatabaseBackupOrRestoreRate:        MetricConfig{Enabled: false},
 					SqlserverDatabaseCount:                      MetricConfig{Enabled: false},
 					SqlserverDatabaseExecutionErrors:            MetricConfig{Enabled: false},
@@ -143,6 +147,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 					HostName:              ResourceAttributeConfig{Enabled: false},
 					ServerAddress:         ResourceAttributeConfig{Enabled: false},
 					ServerPort:            ResourceAttributeConfig{Enabled: false},
+					ServiceInstanceID:     ResourceAttributeConfig{Enabled: false},
 					SqlserverComputerName: ResourceAttributeConfig{Enabled: false},
 					SqlserverDatabaseName: ResourceAttributeConfig{Enabled: false},
 					SqlserverInstanceName: ResourceAttributeConfig{Enabled: false},
@@ -194,6 +199,7 @@ func TestResourceAttributesConfig(t *testing.T) {
 				HostName:              ResourceAttributeConfig{Enabled: true},
 				ServerAddress:         ResourceAttributeConfig{Enabled: true},
 				ServerPort:            ResourceAttributeConfig{Enabled: true},
+				ServiceInstanceID:     ResourceAttributeConfig{Enabled: true},
 				SqlserverComputerName: ResourceAttributeConfig{Enabled: true},
 				SqlserverDatabaseName: ResourceAttributeConfig{Enabled: true},
 				SqlserverInstanceName: ResourceAttributeConfig{Enabled: true},
@@ -205,6 +211,7 @@ func TestResourceAttributesConfig(t *testing.T) {
 				HostName:              ResourceAttributeConfig{Enabled: false},
 				ServerAddress:         ResourceAttributeConfig{Enabled: false},
 				ServerPort:            ResourceAttributeConfig{Enabled: false},
+				ServiceInstanceID:     ResourceAttributeConfig{Enabled: false},
 				SqlserverComputerName: ResourceAttributeConfig{Enabled: false},
 				SqlserverDatabaseName: ResourceAttributeConfig{Enabled: false},
 				SqlserverInstanceName: ResourceAttributeConfig{Enabled: false},

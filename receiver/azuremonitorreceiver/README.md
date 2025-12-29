@@ -7,7 +7,8 @@
 | Distributions | [contrib] |
 | Issues        | [![Open issues](https://img.shields.io/github/issues-search/open-telemetry/opentelemetry-collector-contrib?query=is%3Aissue%20is%3Aopen%20label%3Areceiver%2Fazuremonitor%20&label=open&color=orange&logo=opentelemetry)](https://github.com/open-telemetry/opentelemetry-collector-contrib/issues?q=is%3Aopen+is%3Aissue+label%3Areceiver%2Fazuremonitor) [![Closed issues](https://img.shields.io/github/issues-search/open-telemetry/opentelemetry-collector-contrib?query=is%3Aissue%20is%3Aclosed%20label%3Areceiver%2Fazuremonitor%20&label=closed&color=blue&logo=opentelemetry)](https://github.com/open-telemetry/opentelemetry-collector-contrib/issues?q=is%3Aclosed+is%3Aissue+label%3Areceiver%2Fazuremonitor) |
 | Code coverage | [![codecov](https://codecov.io/github/open-telemetry/opentelemetry-collector-contrib/graph/main/badge.svg?component=receiver_azuremonitor)](https://app.codecov.io/gh/open-telemetry/opentelemetry-collector-contrib/tree/main/?components%5B0%5D=receiver_azuremonitor&displayType=list) |
-| [Code Owners](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md#becoming-a-code-owner)    | [@nslaughter](https://www.github.com/nslaughter), [@celian-garcia](https://www.github.com/celian-garcia), [@ishleenk17](https://www.github.com/ishleenk17) |
+| [Code Owners](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md#becoming-a-code-owner)    | [@celian-garcia](https://www.github.com/celian-garcia), [@ishleenk17](https://www.github.com/ishleenk17) |
+| Emeritus      | [@nslaughter](https://www.github.com/nslaughter) |
 
 [alpha]: https://github.com/open-telemetry/opentelemetry-collector/blob/main/docs/component-stability.md#alpha
 [contrib]: https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-contrib
@@ -37,6 +38,7 @@ The following settings are optional:
 - `cloud` (default = `AzureCloud`): defines which Azure cloud to use. Valid values: `AzureCloud`, `AzureUSGovernment`, `AzureChinaCloud`.
 - `dimensions.enabled` (default = `true`): allows to opt out from automatically split by all the dimensions of the resource type.
 - `dimensions.overrides` (default = `{}`): if dimensions are enabled, it allows you to specify a set of dimensions for a particular metric. This is a two levels map with first key being the resource type and second key being the metric name. Programmatic value should be used for metric name https://learn.microsoft.com/en-us/azure/azure-monitor/reference/metrics-index
+- `append_tags_as_attributes` (default = `[]`): Controls which Azure resource tags are added as resource attributes to the metrics. Can be a list of specific tag names or `["*"]` to include all tags.
 - `use_batch_api` (default = `false`): Use the batch API to fetch metrics. This is useful when the number of subscriptions is high and the API calls are rate limited.
 - `maximum_resources_per_batch` (default = 50): If batch is enabled, the maximum number of unique resource IDs to fetch per API call, current limit is 50 (as of 06/16/2025) https://learn.microsoft.com/en-us/azure/azure-monitor/metrics/migrate-to-batch-api?tabs=individual-response
 
@@ -58,7 +60,21 @@ Authenticating using managed identities has the following optional settings:
 
 ### Filtering metrics
 
-The `metrics` configuration setting is designed to limit scraping to specific metrics and their particular aggregations. It accepts a nested map where the key of the top-level is the Azure Metric Namespace, the key of the nested map is an Azure Metric Name, and the map values are a list of aggregation methods (e.g., Average, Minimum, Maximum, Total, Count). Additionally, the metric map value can be an empty array or an array with one element `*` (asterisk). In this case, the scraper will fetch all supported aggregations for a metric. The letter case of the Namespaces, Metric names, and Aggregations does not affect the functionality.
+The `metrics` configuration setting is designed to **limit** scraping to specific metrics and their particular aggregations.
+It accepts a nested map where 
+- the key of the top-level is the Azure Metric Namespace,
+- the key of the nested map is an Azure Metric Name,
+- and the map values are a list of aggregation methods (e.g., Average, Minimum, Maximum, Total, Count).
+
+> [!NOTE]  
+> - **"All aggregations" shortcut**: The metric map value can be an empty array ``[]`` or an array with one "wildcard" element `[*]`.
+    In this case, the scraper will fetch **all supported aggregations** for that metric, which is also the case if no
+    `metrics` configuration is provided.
+> - **Case Insensitive**: The letter case of the Namespaces, Metric names, and Aggregations does not affect the functionality.
+
+> [!WARNING]  
+> If you started providing a `metrics` configuration for a namespace, you have to specify all the metrics and their 
+> aggregations for that namespace. Otherwise, these metrics will be ignored.
 
 Scraping limited metrics and aggregations:
 
@@ -74,6 +90,7 @@ receivers:
       "microsoft.eventhub/namespaces": # scraper will fetch only the metrics listed below:
         IncomingMessages: [total]     # metric IncomingMessages with aggregation "Total"
         NamespaceCpuUsage: [*]        # metric NamespaceCpuUsage with all known aggregations
+        ActiveConnections: []         # metric ActiveConnections with all known aggregations (same effect than [*])
 ```
 
 ### Use Batch API (experimental)
@@ -180,6 +197,18 @@ receivers:
           # Note here that the metric display name is ``Network rules hit count`` but it's programmatic value is ``NetworkRuleHit``
           # Ref: https://learn.microsoft.com/en-us/azure/azure-monitor/reference/supported-metrics/microsoft-network-azurefirewalls-metrics
           "NetworkRuleHit": [Reason, Status]
+```
+
+Selectively including resource tags as attributes:
+
+```yaml
+receivers:
+  azuremonitor:
+    # Include all tags
+    append_tags_as_attributes: ["*"]
+    
+    # Or include only specific tags
+    append_tags_as_attributes: ["service", "environment"]
 ```
 
 ## Metrics

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/open-telemetry/otel-arrow/pkg/config"
+	"github.com/open-telemetry/otel-arrow/go/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/collector/config/configcompression"
 	"go.opentelemetry.io/collector/config/configgrpc"
 	"go.opentelemetry.io/collector/config/configopaque"
+	"go.opentelemetry.io/collector/config/configoptional"
 	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/config/configtls"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
@@ -57,23 +58,23 @@ func TestUnmarshalConfig(t *testing.T) {
 				MaxInterval:         1 * time.Minute,
 				MaxElapsedTime:      10 * time.Minute,
 			},
-			QueueSettings: exporterhelper.QueueBatchConfig{
-				Enabled:         true,
+			QueueSettings: configoptional.Some(exporterhelper.QueueBatchConfig{
 				NumConsumers:    2,
 				QueueSize:       10,
 				Sizer:           exporterhelper.RequestSizerTypeItems,
 				BlockOnOverflow: true,
-				Batch: &exporterhelper.BatchConfig{
+				Batch: configoptional.Some(exporterhelper.BatchConfig{
 					FlushTimeout: 200 * time.Millisecond,
+					Sizer:        exporterhelper.RequestSizerTypeItems,
 					MinSize:      1000,
 					MaxSize:      10000,
-				},
-			},
+				}),
+			}),
 			ClientConfig: configgrpc.ClientConfig{
-				Headers: map[string]configopaque.String{
-					"can you have a . here?": "F0000000-0000-0000-0000-000000000000",
-					"header1":                "234",
-					"another":                "somevalue",
+				Headers: configopaque.MapList{
+					{Name: "another", Value: "somevalue"},
+					{Name: "can you have a . here?", Value: "F0000000-0000-0000-0000-000000000000"},
+					{Name: "header1", Value: "234"},
 				},
 				Endpoint:    "1.2.3.4:1234",
 				Compression: "none",
@@ -83,14 +84,14 @@ func TestUnmarshalConfig(t *testing.T) {
 					},
 					Insecure: false,
 				},
-				Keepalive: &configgrpc.KeepaliveClientConfig{
+				Keepalive: configoptional.Some(configgrpc.KeepaliveClientConfig{
 					Time:                20 * time.Second,
 					PermitWithoutStream: true,
 					Timeout:             30 * time.Second,
-				},
+				}),
 				WriteBufferSize: 512 * 1024,
 				BalancerName:    "experimental",
-				Auth:            &configauth.Config{AuthenticatorID: component.NewID(component.MustNewType("nop"))},
+				Auth:            configoptional.Some(configauth.Config{AuthenticatorID: component.NewID(component.MustNewType("nop"))}),
 			},
 			Arrow: ArrowConfig{
 				NumStreams:         2,

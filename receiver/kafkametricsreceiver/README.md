@@ -24,13 +24,18 @@ This receiver supports Kafka versions:
 
 ## Getting Started
 
+> [!NOTE]
+> You can opt-in to use [`franz-go`](https://github.com/twmb/franz-go) client by enabling the feature gate
+> `receiver.kafkametricsreceiver.UseFranzGo` when you run the OpenTelemetry Collector. See the following page
+> for more details: [Feature Gates](https://github.com/open-telemetry/opentelemetry-collector/tree/main/featuregate#controlling-gates)
+
 Required settings (no defaults):
 
 - `scrapers`: any combination of the following scrapers can be enabled.
     - `topics`
     - `consumers`
     - `brokers`
-    
+
 Metrics collected by the associated scraper are listed in [metadata.yaml](metadata.yaml)
 
 Optional Settings (with defaults):
@@ -53,7 +58,8 @@ Optional Settings (with defaults):
         - `username`: The username to use.
         - `password`: The password to use.
         - `mechanism`: The sasl mechanism to use (SCRAM-SHA-256, SCRAM-SHA-512, AWS_MSK_IAM_OAUTHBEARER, or PLAIN)
-        - `aws_msk.region`: AWS Region in case of AWS_MSK_IAM_OAUTHBEARER mechanism
+        - `aws_msk`
+            - `region`: AWS Region in case of AWS_MSK_IAM_OAUTHBEARER mechanism
     - `tls` ((Deprecated in v0.124.0: configure tls at the top level): this is an alias for tls at the top level.
     - `kerberos`
         - `service_name`: Kerberos service name

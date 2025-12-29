@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -82,13 +83,13 @@ func newS3SQSReader(ctx context.Context, logger *zap.Logger, cfg *Config) (*s3SQ
 
 	// Use configured values or defaults for SQS polling parameters
 	maxMessages := int32(10) // Default to 10 messages
-	if cfg.SQS.MaxNumberOfMessages > 0 && cfg.SQS.MaxNumberOfMessages <= 10 {
-		maxMessages = int32(cfg.SQS.MaxNumberOfMessages)
+	if cfg.SQS.MaxNumberOfMessages != nil {
+		maxMessages = int32(*cfg.SQS.MaxNumberOfMessages)
 	}
 
 	waitTime := int32(20) // Default to 20 seconds
-	if cfg.SQS.WaitTimeSeconds >= 0 && cfg.SQS.WaitTimeSeconds <= 20 {
-		waitTime = int32(cfg.SQS.WaitTimeSeconds)
+	if cfg.SQS.WaitTimeSeconds != nil {
+		waitTime = int32(*cfg.SQS.WaitTimeSeconds)
 	}
 
 	return &s3SQSNotificationReader{
@@ -163,44 +164,52 @@ func (r *s3SQSNotificationReader) readAll(ctx context.Context, _ string, callbac
 
 				// Process each S3 object notification
 				for _, record := range s3Event.Records {
-					if record.EventSource == "aws:s3" && strings.HasPrefix(record.EventName, "ObjectCreated:") {
-						bucket := record.S3.Bucket.Name
-						key := record.S3.Object.Key
+					if record.EventSource != "aws:s3" || !strings.HasPrefix(record.EventName, "ObjectCreated:") {
+						continue
+					}
+					bucket := record.S3.Bucket.Name
+					key := record.S3.Object.Key
 
-						if bucket != r.s3Bucket {
-							r.logger.Debug("Skipping object from different bucket",
-								zap.String("bucket", bucket),
-								zap.String("targetBucket", r.s3Bucket))
-							continue
-						}
+					// Decode the URL-encoded S3 key
+					decodedKey, decodeErr := url.QueryUnescape(key)
+					if decodeErr != nil {
+						r.logger.Warn("Failed to decode S3 object key, using original", zap.String("key", key), zap.Error(decodeErr))
+						decodedKey = key
+					}
 
-						if r.s3Prefix != "" && !strings.HasPrefix(key, r.s3Prefix) {
-							r.logger.Debug("Skipping object not matching prefix",
-								zap.String("key", key),
-								zap.String("prefix", r.s3Prefix))
-							continue
-						}
-
-						r.logger.Info("Processing new S3 object",
+					if bucket != r.s3Bucket {
+						r.logger.Debug("Skipping object from different bucket",
 							zap.String("bucket", bucket),
-							zap.String("key", key))
+							zap.String("targetBucket", r.s3Bucket))
+						continue
+					}
 
-						var content []byte
-						content, err = retrieveS3Object(ctx, r.s3Client, bucket, key)
-						if err != nil {
-							r.logger.Error("Failed to get S3 object",
-								zap.String("bucket", bucket),
-								zap.String("key", key),
-								zap.Error(err))
-							continue
-						}
+					if r.s3Prefix != "" && !strings.HasPrefix(decodedKey, r.s3Prefix) {
+						r.logger.Debug("Skipping object not matching prefix",
+							zap.String("key", decodedKey),
+							zap.String("prefix", r.s3Prefix))
+						continue
+					}
 
-						err = callback(ctx, key, content)
-						if err != nil {
-							r.logger.Error("Failed to process S3 object content",
-								zap.String("key", key),
-								zap.Error(err))
-						}
+					r.logger.Info("Processing new S3 object",
+						zap.String("bucket", bucket),
+						zap.String("key", decodedKey))
+
+					var content []byte
+					content, err = retrieveS3Object(ctx, r.s3Client, bucket, decodedKey)
+					if err != nil {
+						r.logger.Error("Failed to get S3 object",
+							zap.String("bucket", bucket),
+							zap.String("key", decodedKey),
+							zap.Error(err))
+						continue
+					}
+
+					err = callback(ctx, decodedKey, content)
+					if err != nil {
+						r.logger.Error("Failed to process S3 object content",
+							zap.String("key", decodedKey),
+							zap.Error(err))
 					}
 				}
 

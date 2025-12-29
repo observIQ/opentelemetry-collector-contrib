@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
-	conventions "go.opentelemetry.io/otel/semconv/v1.27.0"
+	conventions "go.opentelemetry.io/otel/semconv/v1.38.0"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsfirehosereceiver/internal/metadata"
@@ -165,12 +165,12 @@ func (u Unmarshaler) UnmarshalMetrics(record []byte) (pmetric.Metrics, error) {
 }
 
 // isValid validates that the cWMetric has been unmarshalled correctly.
-func (u Unmarshaler) isValid(metric cWMetric) bool {
+func (Unmarshaler) isValid(metric cWMetric) bool {
 	return metric.MetricName != "" && metric.Namespace != "" && metric.Unit != "" && metric.Value.isSet
 }
 
 // Type of the serialized messages.
-func (u Unmarshaler) Type() string {
+func (Unmarshaler) Type() string {
 	return TypeStr
 }
 

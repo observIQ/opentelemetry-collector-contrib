@@ -42,7 +42,7 @@ func appendSpans(count int, pictFile string, random io.Reader, spanList ptrace.S
 	var spanInputs *PICTSpanInputs
 	var traceID pcommon.TraceID
 	var parentID pcommon.SpanID
-	for i := 0; i < count; i++ {
+	for range count {
 		if index >= pairsTotal {
 			index = 1
 		}
@@ -115,8 +115,6 @@ func generateTraceState(tracestate PICTInputTracestate) string {
 		return "lasterror=f39cd56cc44274fd5abd07ef1164246d10ce2955"
 	case TraceStateFour:
 		return "err@ck=80ee5638,rate@ck=1.62,rojo=00f067aa0ba902b7,congo=t61rcWkgMzE"
-	case TraceStateEmpty:
-		fallthrough
 	default:
 		return ""
 	}
@@ -134,8 +132,6 @@ func lookupSpanKind(kind PICTInputKind) ptrace.SpanKind {
 		return ptrace.SpanKindConsumer
 	case SpanKindInternal:
 		return ptrace.SpanKindInternal
-	case SpanKindUnspecified:
-		fallthrough
 	default:
 		return ptrace.SpanKindUnspecified
 	}
@@ -375,14 +371,14 @@ func appendMaxCountAttributes(includeStatus bool, attrMap pcommon.Map) {
 
 func appendSpanEvents(eventCnt PICTInputSpanChild, spanEvents ptrace.SpanEventSlice) {
 	listSize := calculateListSize(eventCnt)
-	for i := 0; i < listSize; i++ {
+	for i := range listSize {
 		appendSpanEvent(i, spanEvents)
 	}
 }
 
 func appendSpanLinks(linkCnt PICTInputSpanChild, random io.Reader, spanLinks ptrace.SpanLinkSlice) {
 	listSize := calculateListSize(linkCnt)
-	for i := 0; i < listSize; i++ {
+	for i := range listSize {
 		appendSpanLink(random, i, spanLinks)
 	}
 }
@@ -395,8 +391,6 @@ func calculateListSize(listCnt PICTInputSpanChild) int {
 		return 2
 	case SpanChildCountEight:
 		return 8
-	case SpanChildCountEmpty:
-		fallthrough
 	default:
 		return 0
 	}

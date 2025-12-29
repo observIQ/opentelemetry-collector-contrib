@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -107,7 +108,7 @@ func (mr *monitoringReceiver) Scrape(ctx context.Context) (pmetric.Metrics, erro
 		calStartTime, calEndTime = calculateStartEndTime(gInterval, gDelay)
 
 		// Get the filter query for the metric
-		filterQuery = fmt.Sprintf(`metric.type = "%s"`, metricType)
+		filterQuery = fmt.Sprintf(`metric.type = %q`, metricType)
 
 		// Define the request to list time series data
 		tsReq := &monitoringpb.ListTimeSeriesRequest{
@@ -237,7 +238,7 @@ func getFilterQuery(metric MetricConfig) string {
 
 	// see https://cloud.google.com/monitoring/api/v3/filters
 	if metric.MetricName != "" {
-		filterQuery = fmt.Sprintf(`metric.type = "%s"`, metric.MetricName)
+		filterQuery = fmt.Sprintf(`metric.type = %q`, metric.MetricName)
 	} else {
 		filterQuery = metric.MetricDescriptorFilter
 	}
@@ -274,15 +275,8 @@ func (mr *monitoringReceiver) convertGCPTimeSeriesToMetrics(metrics pmetric.Metr
 			}
 			if timeSeries.GetMetadata().GetSystemLabels() != nil {
 				for k, v := range timeSeries.GetMetadata().GetSystemLabels().GetFields() {
-					resource.Attributes().PutStr(k, fmt.Sprintf("%v", v))
+					resource.Attributes().PutStr(k, v.String())
 				}
-			}
-		}
-
-		// Add metric-specific labels if they are present
-		if len(timeSeries.GetMetric().Labels) > 0 {
-			for k, v := range timeSeries.GetMetric().GetLabels() {
-				resource.Attributes().PutStr(k, fmt.Sprintf("%v", v))
 			}
 		}
 
@@ -334,19 +328,20 @@ func (mr *monitoringReceiver) convertGCPTimeSeriesToMetrics(metrics pmetric.Metr
 
 // Helper function to generate a unique key for a resource based on its attributes
 func generateResourceKey(resourceType string, labels map[string]string, timeSeries *monitoringpb.TimeSeries) string {
-	key := resourceType
+	var key strings.Builder
+	key.WriteString(resourceType)
 	for k, v := range labels {
-		key += k + v
+		key.WriteString(k + v)
 	}
 	if timeSeries != nil {
 		for k, v := range timeSeries.Metric.Labels {
-			key += k + v
+			key.WriteString(k + v)
 		}
 		if timeSeries.Resource.Labels != nil {
 			for k, v := range timeSeries.Resource.Labels {
-				key += k + v
+				key.WriteString(k + v)
 			}
 		}
 	}
-	return key
+	return key.String()
 }

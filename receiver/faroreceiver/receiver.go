@@ -40,7 +40,7 @@ func newFaroReceiver(cfg *Config, set *receiver.Settings) (*faroReceiver, error)
 	}
 
 	transport := "http"
-	if cfg.TLS != nil {
+	if cfg.TLS.HasValue() {
 		transport = "https"
 	}
 
@@ -111,7 +111,7 @@ func (r *faroReceiver) startHTTPServer(ctx context.Context, host component.Host)
 	var err error
 	if r.serverHTTP, err = r.cfg.ToServer(
 		ctx,
-		host,
+		host.GetExtensions(),
 		r.settings.TelemetrySettings,
 		httpMux,
 		confighttp.WithErrorHandler(r.errorHandler),

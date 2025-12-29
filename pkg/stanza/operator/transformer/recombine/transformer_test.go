@@ -4,7 +4,6 @@
 package recombine
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -471,6 +470,29 @@ func TestTransformer(t *testing.T) {
 			},
 		},
 		{
+			"TestMaxBatchSizeUnlimited",
+			func() *Config {
+				cfg := NewConfig()
+				cfg.CombineField = entry.NewBodyField()
+				cfg.IsLastEntry = "body == 'end'"
+				cfg.OutputIDs = []string{"fake"}
+				cfg.MaxBatchSize = 0 // unlimited
+				return cfg
+			}(),
+			[]*entry.Entry{
+				entryWithBodyAttr(t1, "event1", map[string]string{attrs.LogFilePath: "file1"}),
+				entryWithBodyAttr(t1, "event2", map[string]string{attrs.LogFilePath: "file1"}),
+				entryWithBodyAttr(t1, "event3", map[string]string{attrs.LogFilePath: "file1"}),
+				entryWithBodyAttr(t1, "event4", map[string]string{attrs.LogFilePath: "file1"}),
+				entryWithBodyAttr(t1, "event5", map[string]string{attrs.LogFilePath: "file1"}),
+				entryWithBodyAttr(t2, "end", map[string]string{attrs.LogFilePath: "file1"}),
+			},
+			[]*entry.Entry{
+				// All entries combined into one because MaxBatchSize=0 means unlimited
+				entryWithBodyAttr(t1, "event1\nevent2\nevent3\nevent4\nevent5\nend", map[string]string{attrs.LogFilePath: "file1"}),
+			},
+		},
+		{
 			"TestMaxLogSizeForLastEntry",
 			func() *Config {
 				cfg := NewConfig()
@@ -718,7 +740,7 @@ func TestTransformer(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			set := componenttest.NewNopTelemetrySettings()
 			op, err := tc.config.Build(set)
 			require.NoError(t, err)
@@ -757,7 +779,7 @@ func TestTransformer(t *testing.T) {
 		require.NoError(t, err)
 
 		// Send an entry that isn't the last in a multiline
-		require.NoError(t, op.ProcessBatch(context.Background(), []*entry.Entry{entry.New()}))
+		require.NoError(t, op.ProcessBatch(t.Context(), []*entry.Entry{entry.New()}))
 
 		// Ensure that the entry isn't immediately sent
 		select {
@@ -792,16 +814,16 @@ func BenchmarkRecombine(b *testing.B) {
 	require.NoError(b, op.SetOutputs([]operator.Operator{fake}))
 
 	go func() {
-		for {
-			<-fake.Received
+		for range fake.Received { //nolint:revive
+			// Nothing to do
 		}
 	}()
 
 	sourcesNum := 10
 	logsNum := 10
 	entries := []*entry.Entry{}
-	for i := 0; i < logsNum; i++ {
-		for j := 0; j < sourcesNum; j++ {
+	for i := range logsNum {
+		for j := range sourcesNum {
 			start := entry.New()
 			start.Timestamp = time.Now()
 			start.Body = strings.Repeat(fmt.Sprintf("log-%d", i), 50)
@@ -810,15 +832,19 @@ func BenchmarkRecombine(b *testing.B) {
 		}
 	}
 
-	ctx := context.Background()
-	b.ResetTimer()
+	ctx := b.Context()
+
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, e := range entries {
-			require.NoError(b, op.ProcessBatch(context.Background(), []*entry.Entry{e}))
+			require.NoError(b, op.ProcessBatch(b.Context(), []*entry.Entry{e}))
 		}
 		op.(*Transformer).flushAllSources(ctx)
 	}
+	b.StopTimer()
+
+	require.NoError(b, op.Stop())
+	close(fake.Received)
 }
 
 func BenchmarkRecombineLimitTrigger(b *testing.B) {
@@ -836,8 +862,8 @@ func BenchmarkRecombineLimitTrigger(b *testing.B) {
 	require.NoError(b, op.Start(nil))
 
 	go func() {
-		for {
-			<-fake.Received
+		for range fake.Received { //nolint:revive
+			// Nothing to do
 		}
 	}()
 
@@ -849,13 +875,17 @@ func BenchmarkRecombineLimitTrigger(b *testing.B) {
 	next.Timestamp = time.Now()
 	next.Body = "next"
 
-	ctx := context.Background()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	ctx := b.Context()
+
+	for b.Loop() {
 		require.NoError(b, op.ProcessBatch(ctx, []*entry.Entry{start, next}))
 		require.NoError(b, op.ProcessBatch(ctx, []*entry.Entry{start, next}))
 		op.(*Transformer).flushAllSources(ctx)
 	}
+	b.StopTimer()
+
+	require.NoError(b, op.Stop())
+	close(fake.Received)
 }
 
 func TestTimeout(t *testing.T) {
@@ -878,7 +908,7 @@ func TestTimeout(t *testing.T) {
 	e.Timestamp = time.Now()
 	e.Body = "body"
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, recombine.Start(nil))
 	require.NoError(t, recombine.ProcessBatch(ctx, []*entry.Entry{e}))
@@ -921,7 +951,7 @@ func TestTimeoutWhenAggregationKeepHappen(t *testing.T) {
 	e.Timestamp = time.Now()
 	e.Body = "start"
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, op.Start(nil))
 	require.NoError(t, op.ProcessBatch(ctx, []*entry.Entry{e}))
@@ -986,7 +1016,7 @@ func TestSourceBatchDelete(t *testing.T) {
 	expect.AddAttribute(attrs.LogFilePath, "file1")
 	expect.Body = "start\nnext"
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, op.ProcessBatch(ctx, []*entry.Entry{start}))
 	require.Len(t, recombine.batchMap, 1)
