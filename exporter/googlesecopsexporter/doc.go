@@ -14,5 +14,5 @@
 
 //go:generate mdatagen metadata.yaml
 
-// Package chronicleexporter exports OpenTelemetry data to Chronicle.
-package chronicleexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter"
+// Package googlesecopsexporter exports OpenTelemetry data to Google SecOps.
+package googlesecopsexporter // import "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter"
