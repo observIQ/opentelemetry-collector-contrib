@@ -155,7 +155,7 @@ func TestHTTPExporter(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a mock server so we are not dependent on the actual Chronicle service
+			// Create a mock server so we are not dependent on the actual SecOps service
 			handlers := defaultHandlers
 			if tc.handlers != nil {
 				handlers = tc.handlers
@@ -433,7 +433,7 @@ func TestHTTPExporterTelemetry(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create a mock server so we are not dependent on the actual Chronicle service
+			// Create a mock server so we are not dependent on the actual SecOps service
 			handlers := defaultHandlers
 			if tc.handlers != nil {
 				handlers = tc.handlers

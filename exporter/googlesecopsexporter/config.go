@@ -35,13 +35,13 @@ const (
 	protocolGRPC  = "gRPC"
 )
 
-// Config defines configuration for the Chronicle exporter.
+// Config defines configuration for the SecOps exporter.
 type Config struct {
 	TimeoutConfig    exporterhelper.TimeoutConfig                             `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
 	QueueBatchConfig configoptional.Optional[exporterhelper.QueueBatchConfig] `mapstructure:"sending_queue"`
 	BackOffConfig    configretry.BackOffConfig                                `mapstructure:"retry_on_failure"`
 
-	// Endpoint is the URL where Chronicle data will be sent.
+	// Endpoint is the URL where SecOps data will be sent.
 	Endpoint string `mapstructure:"endpoint"`
 
 	// CredsFilePath is the file path to the Google credentials JSON file.
@@ -50,7 +50,7 @@ type Config struct {
 	// Creds are the Google credentials JSON file.
 	Creds string `mapstructure:"creds"`
 
-	// LogType is the type of log that will be sent to Chronicle if not overridden by `attributes["log_type"]` or `attributes["chronicle_log_type"]`.
+	// LogType is the type of log that will be sent to SecOps if not overridden by `attributes["log_type"]` or `attributes["chronicle_log_type"]`.
 	LogType string `mapstructure:"log_type"`
 
 	// ValidateLogTypes is a flag that determines whether or not to validate the log types using an API call to SecOps.
@@ -59,25 +59,25 @@ type Config struct {
 	// OverrideLogType is a flag that determines whether or not to override the `log_type` in the config with `attributes["log_type"]`.
 	OverrideLogType bool `mapstructure:"override_log_type"`
 
-	// RawLogField is the field name that will be used to send raw logs to Chronicle.
+	// RawLogField is the field name that will be used to send raw logs to SecOps.
 	RawLogField string `mapstructure:"raw_log_field"`
 
-	// CustomerID is the customer ID that will be used to send logs to Chronicle.
+	// CustomerID is the customer ID that will be used to send logs to SecOps.
 	CustomerID string `mapstructure:"customer_id"`
 
-	// Namespace is the namespace that will be used to send logs to Chronicle.
+	// Namespace is the namespace that will be used to send logs to SecOps.
 	Namespace string `mapstructure:"namespace"`
 
-	// Compression is the compression type that will be used to send logs to Chronicle.
+	// Compression is the compression type that will be used to send logs to SecOps.
 	Compression string `mapstructure:"compression"`
 
-	// IngestionLabels are the labels that will be attached to logs when sent to Chronicle.
+	// IngestionLabels are the labels that will be attached to logs when sent to SecOps.
 	IngestionLabels map[string]string `mapstructure:"ingestion_labels"`
 
 	// CollectAgentMetrics is a flag that determines whether or not to collect agent metrics.
 	CollectAgentMetrics bool `mapstructure:"collect_agent_metrics"`
 
-	// Protocol is the protocol that will be used to send logs to Chronicle.
+	// Protocol is the protocol that will be used to send logs to SecOps.
 	// Either https or grpc.
 	Protocol string `mapstructure:"protocol"`
 
@@ -91,18 +91,18 @@ type Config struct {
 	// Deprecated as of v1.87.1: The forwarder (Collector ID) is now determined by the license type
 	Forwarder string `mapstructure:"forwarder"`
 
-	// BatchRequestSizeLimitGRPC is the maximum batch request size, in bytes, that can be sent to Chronicle via the GRPC protocol
-	// This field is defaulted to 4000000 as that is the default Chronicle backend limit
-	// Setting this option to a value above the Chronicle backend limit may result in rejected log batch requests
+	// BatchRequestSizeLimitGRPC is the maximum batch request size, in bytes, that can be sent to SecOps via the GRPC protocol
+	// This field is defaulted to 4000000 as that is the default SecOps backend limit
+	// Setting this option to a value above the SecOps backend limit may result in rejected log batch requests
 	BatchRequestSizeLimitGRPC int `mapstructure:"batch_request_size_limit_grpc"`
 
-	// BatchRequestSizeLimitHTTP is the maximum batch request size, in bytes, that can be sent to Chronicle via the HTTP protocol
-	// This field is defaulted to 4000000 as that is the default Chronicle backend limit
-	// Setting this option to a value above the Chronicle backend limit may result in rejected log batch requests
+	// BatchRequestSizeLimitHTTP is the maximum batch request size, in bytes, that can be sent to SecOps via the HTTP protocol
+	// This field is defaulted to 4000000 as that is the default SecOps backend limit
+	// Setting this option to a value above the SecOps backend limit may result in rejected log batch requests
 	BatchRequestSizeLimitHTTP int `mapstructure:"batch_request_size_limit_http"`
 
 	// LicenseType is the license type of the bindplane instance managing this agent.
-	// This field is used to determine collector ID for Chronicle.
+	// This field is used to determine collector ID for SecOps.
 	LicenseType string `mapstructure:"license_type"`
 
 	// LogErroredPayloads is a flag that determines whether or not to log errored payloads.

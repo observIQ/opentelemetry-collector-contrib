@@ -132,12 +132,12 @@ func (exp *grpcExporter) Shutdown(context.Context) error {
 	return nil
 }
 
-// ConsumeLogs sends logs to Chronicle via gRPC.
+// ConsumeLogs sends logs to SecOps via gRPC.
 //
 // Retry behavior: When this function returns an error, the OTel collector's
 // exporterhelper will retry the entire batch (ld plog.Logs) from the beginning.
 // This means all payloads will be retried, including any that succeeded before
-// the error occurred. Chronicle is expected to handle duplicate requests
+// the error occurred. SecOps is expected to handle duplicate requests
 // idempotently to prevent duplicate log entries.
 //
 // Metrics: When retry is enabled, raw bytes are only counted on success to prevent
@@ -216,12 +216,12 @@ func (exp *grpcExporter) uploadToChronicle(ctx context.Context, request *api.Bat
 			exp.telemetry.ExporterRequestCount.Add(ctx, 1,
 				metric.WithAttributeSet(attribute.NewSet(errAttr)))
 
-			return fmt.Errorf("upload logs to chronicle: %w", err)
+			return fmt.Errorf("upload logs to secops: %w", err)
 		default:
 			exp.telemetry.ExporterRequestCount.Add(ctx, 1,
 				metric.WithAttributeSet(attribute.NewSet(attrErrorUnknown)))
 
-			return consumererror.NewPermanent(fmt.Errorf("upload logs to chronicle: %w", err))
+			return consumererror.NewPermanent(fmt.Errorf("upload logs to secops: %w", err))
 		}
 	}
 

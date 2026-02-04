@@ -159,7 +159,7 @@ func (exp *httpExporter) loadLogTypes(ctx context.Context) map[string]exists {
 		}
 		resp, err := exp.client.Do(request)
 		if err != nil {
-			exp.set.Logger.Warn("Failed to send request to Chronicle for loading log types", zap.Error(err))
+			exp.set.Logger.Warn("Failed to send request to SecOps for loading log types", zap.Error(err))
 			return nil
 		}
 		// https://cloud.google.com/chronicle/docs/reference/rest/v1alpha/projects.locations.instances.logTypes/list
@@ -194,7 +194,7 @@ func (exp *httpExporter) loadLogTypes(ctx context.Context) map[string]exists {
 			return nil
 		}
 		if resp.StatusCode != http.StatusOK {
-			exp.set.Logger.Warn("Received non-OK response from Chronicle for loading log types", zap.String("status", resp.Status), zap.ByteString("response", respBody))
+			exp.set.Logger.Warn("Received non-OK response from SecOps for loading log types", zap.String("status", resp.Status), zap.ByteString("response", respBody))
 			return nil
 		}
 		if response.NextPageToken == "" {
@@ -231,12 +231,12 @@ func (exp *httpExporter) Shutdown(context.Context) error {
 	return nil
 }
 
-// ConsumeLogs sends logs to Chronicle via HTTP.
+// ConsumeLogs sends logs to SecOps via HTTP.
 //
 // Retry behavior: When this function returns an error, the OTel collector's
 // exporterhelper will retry the entire batch (ld plog.Logs) from the beginning.
 // This means all payloads will be retried, including any that succeeded before
-// the error occurred. Chronicle is expected to handle duplicate requests
+// the error occurred. SecOps is expected to handle duplicate requests
 // idempotently to prevent duplicate log entries.
 //
 // Metrics: When retry is enabled, raw bytes are only counted on success to prevent
@@ -258,7 +258,7 @@ func (exp *httpExporter) ConsumeLogs(ctx context.Context, ld plog.Logs) error {
 				if !exp.cfg.BackOffConfig.Enabled {
 					exp.countAndReportBatchBytes(ctx, successfulPayloads)
 				}
-				return fmt.Errorf("upload to chronicle: %w", err)
+				return fmt.Errorf("upload to secops: %w", err)
 			}
 			successfulPayloads = append(successfulPayloads, payload)
 		}
@@ -341,7 +341,7 @@ func (exp *httpExporter) uploadToChronicleHTTP(ctx context.Context, logs *api.Im
 		)
 		exp.telemetry.ExporterRequestCount.Add(ctx, 1,
 			metric.WithAttributeSet(attribute.NewSet(errAttr, logTypeAttr)))
-		return fmt.Errorf("send request to Chronicle: %w", err)
+		return fmt.Errorf("send request to secops: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -362,7 +362,7 @@ func (exp *httpExporter) uploadToChronicleHTTP(ctx context.Context, logs *api.Im
 		exp.set.Logger.Warn("Failed to read response body", zap.Error(err), zap.String("logType", logType))
 	}
 
-	exp.set.Logger.Warn("Received non-OK response from Chronicle", zap.String("status", resp.Status), zap.ByteString("response", respBody), zap.String("logType", logType))
+	exp.set.Logger.Warn("Received non-OK response from SecOps", zap.String("status", resp.Status), zap.ByteString("response", respBody), zap.String("logType", logType))
 
 	// TODO interpret with https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/internal/coreinternal/errorutil/http.go
 	statusErr := errors.New(resp.Status)

@@ -45,7 +45,7 @@ const (
 	catchAllLogType = "CATCH_ALL"
 )
 
-// Specific collector IDs for Chronicle used to identify bindplane agents.
+// Specific collector IDs for SecOps used to identify bindplane agents.
 const (
 	googleCollectorIDString           = "aaaa1111-aaaa-1111-aaaa-1111aaaa1111"
 	googleEnterpriseCollectorIDString = "aaaa1111-aaaa-1111-aaaa-1111aaaa1112"
@@ -217,7 +217,7 @@ func (m *protoMarshaler) getLogType(ctx context.Context, logRecord plog.LogRecor
 	// check for attributes in attributes["chronicle_log_type"]
 	logType, err := m.getRawField(ctx, chronicleLogTypeField, logRecord, scope, resource)
 	if err != nil {
-		return "", fmt.Errorf("get chronicle log type: %w", err)
+		return "", fmt.Errorf("get secops log type: %w", err)
 	}
 
 	if logType != "" {
@@ -261,7 +261,7 @@ func (m *protoMarshaler) getNamespace(ctx context.Context, logRecord plog.LogRec
 	// check for attributes in attributes["chronicle_namespace"]
 	namespace, err := m.getRawField(ctx, chronicleNamespaceField, logRecord, scope, resource)
 	if err != nil {
-		return "", fmt.Errorf("get chronicle log type: %w", err)
+		return "", fmt.Errorf("get secops namespace: %w", err)
 	}
 	if namespace != "" {
 		return namespace, nil
@@ -273,7 +273,7 @@ func (m *protoMarshaler) getIngestionLabels(logRecord plog.LogRecord) ([]*api.La
 	// check for labels in attributes["chronicle_ingestion_labels"]
 	ingestionLabels, err := m.getRawNestedFields(chronicleIngestionLabelsPrefix, logRecord)
 	if err != nil {
-		return []*api.Label{}, fmt.Errorf("get chronicle ingestion labels: %w", err)
+		return []*api.Label{}, fmt.Errorf("get secops ingestion labels: %w", err)
 	}
 
 	// merge in labels defined in config, using the labels defined in the log record if they exist
@@ -299,7 +299,7 @@ func (m *protoMarshaler) getHTTPIngestionLabels(logRecord plog.LogRecord) (map[s
 	// Check for labels in attributes["chronicle_ingestion_labels"]
 	ingestionLabels, err := m.getHTTPRawNestedFields(chronicleIngestionLabelsPrefix, logRecord)
 	if err != nil {
-		return nil, fmt.Errorf("get chronicle ingestion labels: %w", err)
+		return nil, fmt.Errorf("get secops ingestion labels: %w", err)
 	}
 
 	if len(ingestionLabels) != 0 {

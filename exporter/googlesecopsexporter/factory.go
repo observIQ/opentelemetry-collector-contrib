@@ -26,7 +26,7 @@ import (
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 )
 
-// NewFactory creates a new Chronicle exporter factory.
+// NewFactory creates a new SecOps exporter factory.
 func NewFactory() exporter.Factory {
 	return exporter.NewFactory(
 		metadata.Type,

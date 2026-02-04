@@ -355,10 +355,10 @@ func TestProtoMarshaler_MarshalRawLogs(t *testing.T) {
 			},
 		},
 		{
-			name: "Override log type with chronicle attribute",
+			name: "Override log type with attribute",
 			cfg: Config{
 				CustomerID:                uuid.New().String(),
-				LogType:                   "DEFAULT", // This should be overridden by the chronicle_log_type attribute
+				LogType:                   "DEFAULT", // This should be overridden by the log_type attribute
 				RawLogField:               "body",
 				OverrideLogType:           true,
 				BatchRequestSizeLimitGRPC: 5242880,
@@ -1152,10 +1152,10 @@ func TestProtoMarshaler_MarshalRawLogsForHTTP(t *testing.T) {
 			},
 		},
 		{
-			name: "Override log type with chronicle attribute",
+			name: "Override log type with attribute",
 			cfg: Config{
 				CustomerID:                uuid.New().String(),
-				LogType:                   "DEFAULT", // This should be overridden by the chronicle_log_type attribute
+				LogType:                   "DEFAULT", // This should be overridden by the log_type attribute
 				RawLogField:               "body",
 				OverrideLogType:           true,
 				BatchRequestSizeLimitHTTP: 5242880,
@@ -2179,10 +2179,10 @@ func Test_getLogType(t *testing.T) {
 			expectedType: "WINEVTLOG", // the log_type attribute is not validated
 		},
 		{
-			name: "Override log type with chronicle attribute",
+			name: "Override log type with attribute",
 			cfg: Config{
 				CustomerID:                uuid.New().String(),
-				LogType:                   "DEFAULT", // This should be overridden by the chronicle_log_type attribute
+				LogType:                   "DEFAULT", // This should be overridden by the log_type attribute
 				RawLogField:               "body",
 				OverrideLogType:           true,
 				BatchRequestSizeLimitHTTP: 5242880,
