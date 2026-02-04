@@ -23,9 +23,9 @@ import (
 	json "github.com/goccy/go-json"
 
 	"github.com/google/uuid"
+	"github.com/observiq/bindplane-otel-collector/expr"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/protos/api"
-	"github.com/observiq/bindplane-otel-collector/expr"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottllog"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -40,6 +40,9 @@ const (
 	chronicleLogTypeField          = `attributes["chronicle_log_type"]`
 	chronicleNamespaceField        = `attributes["chronicle_namespace"]`
 	chronicleIngestionLabelsPrefix = `chronicle_ingestion_label`
+	secopsLogTypeField             = `attributes["secops_log_type"]`
+	secopsNamespaceField           = `attributes["secops_namespace"]`
+	secopsIngestionLabelsPrefix    = `secops_ingestion_label`
 
 	// catchAllLogType is the log type that is used when the log type is not found in the log types map
 	catchAllLogType = "CATCH_ALL"
@@ -214,10 +217,18 @@ func (m *protoMarshaler) shouldValidateLogType() bool {
 }
 
 func (m *protoMarshaler) getLogType(ctx context.Context, logRecord plog.LogRecord, scope plog.ScopeLogs, resource plog.ResourceLogs) (string, error) {
-	// check for attributes in attributes["chronicle_log_type"]
-	logType, err := m.getRawField(ctx, chronicleLogTypeField, logRecord, scope, resource)
+	// check for attributes in attributes["secops_log_type"], then fall back to attributes["chronicle_log_type"]
+	logType, err := m.getRawField(ctx, secopsLogTypeField, logRecord, scope, resource)
 	if err != nil {
 		return "", fmt.Errorf("get secops log type: %w", err)
+	}
+
+	// Fall back to chronicle_log_type if secops_log_type is not found
+	if logType == "" {
+		logType, err = m.getRawField(ctx, chronicleLogTypeField, logRecord, scope, resource)
+		if err != nil {
+			return "", fmt.Errorf("get secops log type: %w", err)
+		}
 	}
 
 	if logType != "" {
@@ -225,7 +236,7 @@ func (m *protoMarshaler) getLogType(ctx context.Context, logRecord plog.LogRecor
 			if _, ok := m.logTypes[logType]; ok {
 				return logType, nil
 			}
-			m.logger.Warn("Log type could not be validated", zap.String("logType", logType), zap.String("logTypeField", chronicleLogTypeField))
+			m.logger.Warn("Log type could not be validated", zap.String("logType", logType))
 		} else {
 			return logType, nil
 		}
@@ -258,11 +269,20 @@ func (m *protoMarshaler) getLogType(ctx context.Context, logRecord plog.LogRecor
 }
 
 func (m *protoMarshaler) getNamespace(ctx context.Context, logRecord plog.LogRecord, scope plog.ScopeLogs, resource plog.ResourceLogs) (string, error) {
-	// check for attributes in attributes["chronicle_namespace"]
-	namespace, err := m.getRawField(ctx, chronicleNamespaceField, logRecord, scope, resource)
+	// check for attributes in attributes["secops_namespace"], then fall back to attributes["chronicle_namespace"]
+	namespace, err := m.getRawField(ctx, secopsNamespaceField, logRecord, scope, resource)
 	if err != nil {
 		return "", fmt.Errorf("get secops namespace: %w", err)
 	}
+
+	// Fall back to chronicle_namespace if secops_namespace is not found
+	if namespace == "" {
+		namespace, err = m.getRawField(ctx, chronicleNamespaceField, logRecord, scope, resource)
+		if err != nil {
+			return "", fmt.Errorf("get secops namespace: %w", err)
+		}
+	}
+
 	if namespace != "" {
 		return namespace, nil
 	}
@@ -270,10 +290,25 @@ func (m *protoMarshaler) getNamespace(ctx context.Context, logRecord plog.LogRec
 }
 
 func (m *protoMarshaler) getIngestionLabels(logRecord plog.LogRecord) ([]*api.Label, error) {
-	// check for labels in attributes["chronicle_ingestion_labels"]
-	ingestionLabels, err := m.getRawNestedFields(chronicleIngestionLabelsPrefix, logRecord)
+	// check for labels in attributes with secops_ingestion_label prefix
+	secopsLabels, err := m.getRawNestedFields(secopsIngestionLabelsPrefix, logRecord)
 	if err != nil {
 		return []*api.Label{}, fmt.Errorf("get secops ingestion labels: %w", err)
+	}
+
+	// check for labels in attributes with chronicle_ingestion_label prefix (for backward compatibility)
+	chronicleLabels, err := m.getRawNestedFields(chronicleIngestionLabelsPrefix, logRecord)
+	if err != nil {
+		return []*api.Label{}, fmt.Errorf("get secops ingestion labels: %w", err)
+	}
+
+	// merge chronicle and secops labels, with secops taking priority
+	ingestionLabels := make(map[string]string)
+	for key, value := range chronicleLabels {
+		ingestionLabels[key] = value
+	}
+	for key, value := range secopsLabels {
+		ingestionLabels[key] = value
 	}
 
 	// merge in labels defined in config, using the labels defined in the log record if they exist
@@ -296,10 +331,25 @@ func (m *protoMarshaler) getIngestionLabels(logRecord plog.LogRecord) ([]*api.La
 }
 
 func (m *protoMarshaler) getHTTPIngestionLabels(logRecord plog.LogRecord) (map[string]*api.Log_LogLabel, error) {
-	// Check for labels in attributes["chronicle_ingestion_labels"]
-	ingestionLabels, err := m.getHTTPRawNestedFields(chronicleIngestionLabelsPrefix, logRecord)
+	// Check for labels in attributes with secops_ingestion_label prefix
+	secopsLabels, err := m.getHTTPRawNestedFields(secopsIngestionLabelsPrefix, logRecord)
 	if err != nil {
 		return nil, fmt.Errorf("get secops ingestion labels: %w", err)
+	}
+
+	// Check for labels in attributes with chronicle_ingestion_label prefix (for backward compatibility)
+	chronicleLabels, err := m.getHTTPRawNestedFields(chronicleIngestionLabelsPrefix, logRecord)
+	if err != nil {
+		return nil, fmt.Errorf("get secops ingestion labels: %w", err)
+	}
+
+	// merge chronicle and secops labels, with secops taking priority
+	ingestionLabels := make(map[string]*api.Log_LogLabel)
+	for key, value := range chronicleLabels {
+		ingestionLabels[key] = value
+	}
+	for key, value := range secopsLabels {
+		ingestionLabels[key] = value
 	}
 
 	if len(ingestionLabels) != 0 {
@@ -348,6 +398,22 @@ func (m *protoMarshaler) getRawField(ctx context.Context, field string, logRecor
 	case chronicleNamespaceField:
 		attributes := logRecord.Attributes().AsRaw()
 		if namespace, ok := attributes["chronicle_namespace"]; ok {
+			if v, ok := namespace.(string); ok {
+				return v, nil
+			}
+		}
+		return "", nil
+	case secopsLogTypeField:
+		attributes := logRecord.Attributes().AsRaw()
+		if logType, ok := attributes["secops_log_type"]; ok {
+			if v, ok := logType.(string); ok {
+				return v, nil
+			}
+		}
+		return "", nil
+	case secopsNamespaceField:
+		attributes := logRecord.Attributes().AsRaw()
+		if namespace, ok := attributes["secops_namespace"]; ok {
 			if v, ok := namespace.(string); ok {
 				return v, nil
 			}

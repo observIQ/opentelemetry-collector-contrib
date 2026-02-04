@@ -46,13 +46,13 @@ currently supported log types are:
 - windows_event.system
 - sql_server
 
-If the `attributes["chronicle_log_type"]` field is present in the log, we will use its value in the payload instead of the automatic detection or the `log_type` in the config.
+If the `attributes["secops_log_type"]` or `attributes["chronicle_log_type"]` field is present in the log, we will use its value in the payload instead of the automatic detection or the `log_type` in the config. If both are present, `secops_log_type` takes priority.
 
 ### Namespace and Ingestion Labels
 
-If the `attributes["chronicle_namespace"]` field is present in the log, we will use its value in the payload instead of the `namespace` in the config.
+If the `attributes["secops_namespace"]` or `attributes["chronicle_namespace"]` field is present in the log, we will use its value in the payload instead of the `namespace` in the config. If both are present, `secops_namespace` takes priority.
 
-If there are nested fields in `attributes["chronicle_ingestion_label"]`, we will use the values in the payload instead of the `ingestion_labels` in the config.
+If there are nested fields in `attributes["secops_ingestion_label"]` or `attributes["chronicle_ingestion_label"]`, we will use the values in the payload, merged with the `ingestion_labels` in the config. If both prefixes are present, they are merged with `secops_ingestion_label` values taking priority over `chronicle_ingestion_label` values for the same key.
 
 ## Credentials
 

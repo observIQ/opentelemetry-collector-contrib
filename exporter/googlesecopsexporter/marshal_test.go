@@ -1675,6 +1675,36 @@ var getRawFieldCases = []getRawFieldCase{
 		resource: plog.NewResourceLogs(),
 		expect:   "test",
 	},
+	{
+		name:  "Attribute secops_log_type",
+		field: `attributes["secops_log_type"]`,
+		logRecord: func() plog.LogRecord {
+			lr := plog.NewLogRecord()
+			lr.Attributes().PutStr("status", "200")
+			lr.Attributes().PutStr("log.file.name", "/var/log/containers/agent_agent_ns.log")
+			lr.Attributes().PutStr("secops_log_type", "MICROSOFT_SQL")
+			return lr
+		}(),
+		scope:    plog.NewScopeLogs(),
+		resource: plog.NewResourceLogs(),
+		expect:   "MICROSOFT_SQL",
+	},
+	{
+		name:  "Attribute secops_namespace",
+		field: `attributes["secops_namespace"]`,
+		logRecord: func() plog.LogRecord {
+			lr := plog.NewLogRecord()
+			lr.Attributes().PutStr("status", "200")
+			lr.Attributes().PutStr("log_type", "k8s-container")
+			lr.Attributes().PutStr("log.file.name", "/var/log/containers/agent_agent_ns.log")
+			lr.Attributes().PutStr("secops_log_type", "MICROSOFT_SQL")
+			lr.Attributes().PutStr("secops_namespace", "test")
+			return lr
+		}(),
+		scope:    plog.NewScopeLogs(),
+		resource: plog.NewResourceLogs(),
+		expect:   "test",
+	},
 }
 
 func Test_getRawField(t *testing.T) {
@@ -2283,6 +2313,42 @@ func Test_getLogType(t *testing.T) {
 				return mockLogs(mockLogRecord("Log with logtype", map[string]any{"log_type": "MISSING_TYPE", "chronicle_namespace": "test", `chronicle_ingestion_label["realkey1"]`: "realvalue1", `chronicle_ingestion_label["realkey2"]`: "realvalue2"}))
 			},
 			expectedType: "CATCH_ALL",
+		},
+		{
+			name: "secops_log_type takes priority over chronicle_log_type",
+			cfg: Config{
+				CustomerID:                uuid.New().String(),
+				RawLogField:               "body",
+				BatchRequestSizeLimitHTTP: 5242880,
+			},
+			logRecords: func() plog.Logs {
+				return mockLogs(mockLogRecord("Log with both prefixes", map[string]any{"secops_log_type": "SECOPS_TYPE", "chronicle_log_type": "CHRONICLE_TYPE"}))
+			},
+			expectedType: "SECOPS_TYPE",
+		},
+		{
+			name: "secops_log_type only",
+			cfg: Config{
+				CustomerID:                uuid.New().String(),
+				RawLogField:               "body",
+				BatchRequestSizeLimitHTTP: 5242880,
+			},
+			logRecords: func() plog.Logs {
+				return mockLogs(mockLogRecord("Log with secops prefix", map[string]any{"secops_log_type": "SECOPS_TYPE"}))
+			},
+			expectedType: "SECOPS_TYPE",
+		},
+		{
+			name: "chronicle_log_type as fallback when secops_log_type absent",
+			cfg: Config{
+				CustomerID:                uuid.New().String(),
+				RawLogField:               "body",
+				BatchRequestSizeLimitHTTP: 5242880,
+			},
+			logRecords: func() plog.Logs {
+				return mockLogs(mockLogRecord("Log with chronicle prefix", map[string]any{"chronicle_log_type": "CHRONICLE_TYPE"}))
+			},
+			expectedType: "CHRONICLE_TYPE",
 		},
 	}
 
