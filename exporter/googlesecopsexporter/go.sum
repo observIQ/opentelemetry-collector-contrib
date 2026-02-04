@@ -87,6 +87,10 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJ
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFdJifH4BDsTlE89Zl93FEloxaWZfGcifgq8=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
+github.com/observiq/bindplane-otel-collector/expr v1.91.0 h1:tQWqTtHk02Wnk6Lteaj8j91iKRJocMyCc5QUE4JK7zM=
+github.com/observiq/bindplane-otel-collector/expr v1.91.0/go.mod h1:VD3ATWSE4gRF3osT6v7L4PekZXB/DInLj4hkoqsmMcE=
+github.com/observiq/bindplane-otel-collector/internal/osinfo v1.91.0 h1:J/23OUIPfqcb17TbHF6JUOAQPGQ4W/dz1NSRcN7ZvWw=
+github.com/observiq/bindplane-otel-collector/internal/osinfo v1.91.0/go.mod h1:ofvq+QczI9nLDA7tK6q5fVG/GNsuMRinrcUjYpXmxUE=
 github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.144.0 h1:Qv3nLVGKJ9LQCGwxteJxjSNyQ5CP99QRvYPFn6d8Y60=
 github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.144.0/go.mod h1:O2rZKRXk1WeYhzfJBVXES/g7+PlIds/TzPZW/4NfTNA=
 github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl v0.144.0 h1:TMRTvQSAeeLtkKwSrqcbectxDRPiqB6yYM3IvjC75es=

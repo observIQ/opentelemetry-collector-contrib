@@ -1,4 +1,4 @@
-module github.com/observiq/bindplane-otel-collector/exporter/chronicleexporter
+module github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter
 
 go 1.24.11
 
@@ -103,7 +103,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/observiq/bindplane-otel-collector/internal/osinfo => ../../internal/osinfo
-
-replace github.com/observiq/bindplane-otel-collector/expr => ../../expr

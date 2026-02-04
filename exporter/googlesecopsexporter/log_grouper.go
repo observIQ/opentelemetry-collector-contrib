@@ -18,7 +18,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/observiq/bindplane-otel-collector/exporter/chronicleexporter/protos/api"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/protos/api"
 )
 
 type logGroup struct {

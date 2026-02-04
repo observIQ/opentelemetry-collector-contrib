@@ -2,7 +2,7 @@
 
 syntax = "proto3";
 
-option go_package = "github.com/exporter/chronicleexporter/proto/api";
+option go_package = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/proto/api";
 
 import "google/protobuf/timestamp.proto";
 
