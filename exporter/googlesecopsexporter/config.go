@@ -31,8 +31,10 @@ import (
 const (
 	// noCompression is the no compression type.
 	noCompression = "none"
+	// protocolHTTPS selects the DataPlane API (v1alpha) using HTTPS for ingestion.
 	protocolHTTPS = "https"
-	protocolGRPC  = "gRPC"
+	// protocolGRPC selects the Legacy Ingestion API (v2) using gRPC for ingestion.
+	protocolGRPC = "gRPC"
 )
 
 // Config defines configuration for the SecOps exporter.
@@ -78,25 +80,27 @@ type Config struct {
 	CollectAgentMetrics bool `mapstructure:"collect_agent_metrics"`
 
 	// Protocol is the protocol that will be used to send logs to SecOps.
-	// Either https or grpc.
+	// Supported values:
+	//   - "grpc": Uses the Legacy Ingestion API (v2) with gRPC transport
+	//   - "https": Uses the DataPlane API (v1alpha) with HTTPS transport
 	Protocol string `mapstructure:"protocol"`
 
-	// Location is the location that will be used when the protocol is https.
+	// Location is the GCP location/region that will be used when the protocol is https (DataPlane API).
 	Location string `mapstructure:"location"`
 
-	// Project is the project that will be used when the protocol is https.
+	// Project is the GCP project ID that will be used when the protocol is https (DataPlane API).
 	Project string `mapstructure:"project"`
 
 	// Forwarder is the forwarder that will be used when the protocol is https.
 	// Deprecated as of v1.87.1: The forwarder (Collector ID) is now determined by the license type
 	Forwarder string `mapstructure:"forwarder"`
 
-	// BatchRequestSizeLimitGRPC is the maximum batch request size, in bytes, that can be sent to SecOps via the GRPC protocol
+	// BatchRequestSizeLimitGRPC is the maximum batch request size, in bytes, that can be sent to SecOps via the Legacy Ingestion API (gRPC protocol)
 	// This field is defaulted to 4000000 as that is the default SecOps backend limit
 	// Setting this option to a value above the SecOps backend limit may result in rejected log batch requests
 	BatchRequestSizeLimitGRPC int `mapstructure:"batch_request_size_limit_grpc"`
 
-	// BatchRequestSizeLimitHTTP is the maximum batch request size, in bytes, that can be sent to SecOps via the HTTP protocol
+	// BatchRequestSizeLimitHTTP is the maximum batch request size, in bytes, that can be sent to SecOps via the DataPlane API (HTTPS protocol)
 	// This field is defaulted to 4000000 as that is the default SecOps backend limit
 	// Setting this option to a value above the SecOps backend limit may result in rejected log batch requests
 	BatchRequestSizeLimitHTTP int `mapstructure:"batch_request_size_limit_http"`

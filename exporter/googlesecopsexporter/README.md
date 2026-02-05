@@ -1,8 +1,15 @@
 # Google SecOps Exporter
 
-**Currently only v2 of the ingestion API is supported**
-
 This exporter facilitates the sending of logs to Google SecOps, which is a security analytics platform provided by Google. It is designed to integrate with OpenTelemetry collectors to export telemetry data such as logs to a Google SecOps account.
+
+## Supported APIs
+
+The exporter supports two Google SecOps ingestion APIs:
+
+- **Legacy Ingestion API (v2)**: Uses gRPC transport with malachite endpoints. This is the default protocol.
+- **DataPlane API (v1alpha)**: Uses HTTPS transport with regional chronicle.googleapis.com endpoints.
+
+The protocol is configured using the `protocol` field (see Configuration section below).
 
 ## Supported Pipelines
 
@@ -18,21 +25,24 @@ This exporter facilitates the sending of logs to Google SecOps, which is a secur
 
 The exporter can be configured using the following fields:
 
-| Field                           | Type              | Default                                | Required | Description                                                                                 |
-| ------------------------------- | ----------------- | -------------------------------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `endpoint`                      | string            | `malachiteingestion-pa.googleapis.com` | `false`  | The Endpoint for sending to Google SecOps.                                                  |
-| `creds_file_path`               | string            |                                        | `true`   | The file path to the Google credentials JSON file.                                          |
-| `creds`                         | string            |                                        | `true`   | The Google credentials JSON.                                                                |
-| `log_type`                      | string            |                                        | `false`  | The type of log that will be sent.                                                          |
-| `raw_log_field`                 | string            |                                        | `false`  | The field name for raw logs.                                                                |
-| `customer_id`                   | string            |                                        | `false`  | The customer ID used for sending logs.                                                      |
-| `override_log_type`             | bool              | `true`                                 | `false`  | Whether or not to override the `log_type` in the config with `attributes["log_type"]`       |
-| `namespace`                     | string            |                                        | `false`  | User-configured environment namespace to identify the data domain the logs originated from. |
-| `compression`                   | string            | `none`                                 | `false`  | The compression type to use when sending logs. valid values are `none` and `gzip`           |
-| `ingestion_labels`              | map[string]string |                                        | `false`  | Key-value pairs of labels to be applied to the logs when sent to Google SecOps.             |
-| `collect_agent_metrics`         | bool              | `true`                                 | `false`  | Enables collecting metrics about the agent's process and log ingestion metrics              |
-| `batch_request_size_limit_grpc` | int               | `4000000`                              | `false`  | The maximum size, in bytes, allowed for a gRPC batch creation request.                      |
-| `batch_request_size_limit_http` | int               | `4000000`                              | `false`  | The maximum size, in bytes, allowed for a HTTP batch creation request.                      |
+| Field                           | Type              | Default                                | Required | Description                                                                                                               |
+| ------------------------------- | ----------------- | -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `protocol`                      | string            | `grpc`                                 | `false`  | The protocol/API to use: `grpc` (Legacy Ingestion API v2) or `https` (DataPlane API v1alpha).                            |
+| `endpoint`                      | string            | `malachiteingestion-pa.googleapis.com` | `false`  | The endpoint for sending to Google SecOps (Legacy Ingestion API). See regional endpoints in the documentation.           |
+| `location`                      | string            |                                        | `false`  | The GCP location/region (required when `protocol` is `https`).                                                           |
+| `project`                       | string            |                                        | `false`  | The GCP project ID (required when `protocol` is `https`).                                                                |
+| `creds_file_path`               | string            |                                        | `true`   | The file path to the Google credentials JSON file.                                                                        |
+| `creds`                         | string            |                                        | `true`   | The Google credentials JSON.                                                                                              |
+| `log_type`                      | string            |                                        | `false`  | The type of log that will be sent.                                                                                        |
+| `raw_log_field`                 | string            |                                        | `false`  | The field name for raw logs.                                                                                              |
+| `customer_id`                   | string            |                                        | `false`  | The customer ID used for sending logs.                                                                                    |
+| `override_log_type`             | bool              | `true`                                 | `false`  | Whether or not to override the `log_type` in the config with `attributes["log_type"]`                                     |
+| `namespace`                     | string            |                                        | `false`  | User-configured environment namespace to identify the data domain the logs originated from.                               |
+| `compression`                   | string            | `none`                                 | `false`  | The compression type to use when sending logs. valid values are `none` and `gzip`                                         |
+| `ingestion_labels`              | map[string]string |                                        | `false`  | Key-value pairs of labels to be applied to the logs when sent to Google SecOps.                                           |
+| `collect_agent_metrics`         | bool              | `true`                                 | `false`  | Enables collecting metrics about the agent's process and log ingestion metrics                                            |
+| `batch_request_size_limit_grpc` | int               | `4000000`                              | `false`  | The maximum size, in bytes, allowed for a gRPC batch creation request (Legacy Ingestion API).                             |
+| `batch_request_size_limit_http` | int               | `4000000`                              | `false`  | The maximum size, in bytes, allowed for a HTTP batch creation request (DataPlane API).                                    |
 
 ### Log Type
 
@@ -63,26 +73,44 @@ For additional information on accessing Google SecOps, see the [Google SecOps do
 
 ## Log Batch Creation Request Limits
 
-`batch_request_size_limit_grpc` and `batch_request_size_limit_http` are used for ensuring log batch creation requests don't exceed Google SecOps backend limits - the former for the gRPC endpoint, and the latter for the HTTP endpoint. If a request exceeds the configured size limit, the request will be split into multiple requests that adhere to this limit, with each request containing a subset of the logs contained in the original request. Any single logs that result in the request exceeding the size limit will be dropped.
+`batch_request_size_limit_grpc` and `batch_request_size_limit_http` are used for ensuring log batch creation requests don't exceed Google SecOps backend limits. These limits apply to the Legacy Ingestion API (gRPC) and DataPlane API (HTTPS) respectively. If a request exceeds the configured size limit, the request will be split into multiple requests that adhere to this limit, with each request containing a subset of the logs contained in the original request. Any single logs that result in the request exceeding the size limit will be dropped.
 
 ## Example Configuration
 
-### Basic Configuration
+### Legacy Ingestion API (gRPC) - Basic Configuration
+
+This is the default protocol using the Legacy Ingestion API (v2) with gRPC transport:
 
 ```yaml
 googlesecops:
+  protocol: grpc  # Optional - this is the default
   creds_file_path: "/path/to/google/creds.json"
   log_type: "ABSOLUTE"
   customer_id: "customer-123"
 ```
 
-### Basic Configuration with Regional Endpoint
+### Legacy Ingestion API (gRPC) - With Regional Endpoint
 
 ```yaml
 googlesecops:
-  endpoint: https://malachiteingestion-pa.googleapis.com
+  protocol: grpc
+  endpoint: malachiteingestion-eu.googleapis.com  # European endpoint
   creds_file_path: "/path/to/google/creds.json"
   log_type: "ONEPASSWORD"
+  customer_id: "customer-123"
+```
+
+### DataPlane API (HTTPS) - Basic Configuration
+
+Using the newer DataPlane API (v1alpha) with HTTPS transport:
+
+```yaml
+googlesecops:
+  protocol: https
+  location: us  # GCP region
+  project: my-gcp-project-id
+  creds_file_path: "/path/to/google/creds.json"
+  log_type: "ABSOLUTE"
   customer_id: "customer-123"
 ```
 
@@ -90,6 +118,7 @@ googlesecops:
 
 ```yaml
 googlesecops:
+  protocol: grpc
   creds_file_path: "/path/to/google/creds.json"
   log_type: ""
   customer_id: "customer-123"

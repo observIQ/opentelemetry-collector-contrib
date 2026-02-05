@@ -42,6 +42,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+// httpScope is the OAuth2 scope for the DataPlane API
 const httpScope = "https://www.googleapis.com/auth/cloud-platform"
 
 const (
@@ -377,8 +378,8 @@ func (exp *httpExporter) uploadToChronicleHTTP(ctx context.Context, logs *api.Im
 	}
 }
 
-// This uses the DataPlane URL for the request
-// URL for the request: https://{region}-chronicle.googleapis.com/{version}/projects/{project}/location/{region}/instances/{customerID}
+// httpEndpoint constructs the DataPlane API endpoint URL for log ingestion.
+// URL format: https://{region}-chronicle.googleapis.com/v1alpha/projects/{project}/locations/{region}/instances/{customerID}/logTypes/{logType}/logs:import
 // Override for testing
 var httpEndpoint = func(cfg *Config, logType string) string {
 	formatString := "%s/logTypes/%s/logs:import"

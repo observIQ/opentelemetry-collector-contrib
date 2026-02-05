@@ -40,6 +40,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// grpcScope is the OAuth2 scope for the Legacy Ingestion API (malachite)
 const grpcScope = "https://www.googleapis.com/auth/malachite-ingestion"
 
 type grpcExporter struct {

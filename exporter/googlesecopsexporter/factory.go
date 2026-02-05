@@ -35,6 +35,7 @@ func NewFactory() exporter.Factory {
 }
 
 const (
+	// defaultEndpoint is the default endpoint for the Legacy Ingestion API (gRPC protocol)
 	defaultEndpoint                  = "malachiteingestion-pa.googleapis.com"
 	defaultBatchRequestSizeLimitGRPC = 4000000
 	defaultBatchRequestSizeLimitHTTP = 4000000
