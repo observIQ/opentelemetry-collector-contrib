@@ -6,7 +6,6 @@ require (
 	github.com/goccy/go-json v0.10.5
 	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/uuid v1.6.0
-	github.com/observiq/bindplane-otel-collector/expr v1.91.0
 	github.com/observiq/bindplane-otel-collector/internal/osinfo v1.91.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl v0.144.0
 	github.com/shirou/gopsutil/v3 v3.24.5
@@ -40,7 +39,6 @@ require (
 	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/antchfx/xmlquery v1.5.0 // indirect
 	github.com/antchfx/xpath v1.3.5 // indirect
-	github.com/antonmedv/expr v1.15.5 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

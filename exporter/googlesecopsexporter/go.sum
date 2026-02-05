@@ -10,8 +10,6 @@ github.com/antchfx/xmlquery v1.5.0 h1:uAi+mO40ZWfyU6mlUBxRVvL6uBNZ6LMU4M3+mQIBV4
 github.com/antchfx/xmlquery v1.5.0/go.mod h1:lJfWRXzYMK1ss32zm1GQV3gMIW/HFey3xDZmkP1SuNc=
 github.com/antchfx/xpath v1.3.5 h1:PqbXLC3TkfeZyakF5eeh3NTWEbYl4VHNVeufANzDbKQ=
 github.com/antchfx/xpath v1.3.5/go.mod h1:i54GszH55fYfBmoZXapTHN8T8tkcHfRgLyVwwqzXNcs=
-github.com/antonmedv/expr v1.15.5 h1:y0Iz3cEwmpRz5/r3w4qQR0MfIqJGdGM1zbhD/v0G5Vg=
-github.com/antonmedv/expr v1.15.5/go.mod h1:0E/6TxnOlRNp81GMzX9QfDPAmHo2Phg00y4JUv1ihsE=
 github.com/cenkalti/backoff/v5 v5.0.3 h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=
 github.com/cenkalti/backoff/v5 v5.0.3/go.mod h1:rkhZdG3JZukswDf7f0cwqPNk4K0sa+F97BxZthm/crw=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
@@ -87,8 +85,6 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJ
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFdJifH4BDsTlE89Zl93FEloxaWZfGcifgq8=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
-github.com/observiq/bindplane-otel-collector/expr v1.91.0 h1:tQWqTtHk02Wnk6Lteaj8j91iKRJocMyCc5QUE4JK7zM=
-github.com/observiq/bindplane-otel-collector/expr v1.91.0/go.mod h1:VD3ATWSE4gRF3osT6v7L4PekZXB/DInLj4hkoqsmMcE=
 github.com/observiq/bindplane-otel-collector/internal/osinfo v1.91.0 h1:J/23OUIPfqcb17TbHF6JUOAQPGQ4W/dz1NSRcN7ZvWw=
 github.com/observiq/bindplane-otel-collector/internal/osinfo v1.91.0/go.mod h1:ofvq+QczI9nLDA7tK6q5fVG/GNsuMRinrcUjYpXmxUE=
 github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.144.0 h1:Qv3nLVGKJ9LQCGwxteJxjSNyQ5CP99QRvYPFn6d8Y60=

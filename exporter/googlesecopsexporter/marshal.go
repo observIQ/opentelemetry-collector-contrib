@@ -23,7 +23,6 @@ import (
 	json "github.com/goccy/go-json"
 
 	"github.com/google/uuid"
-	"github.com/observiq/bindplane-otel-collector/expr"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/protos/api"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottllog"
@@ -421,7 +420,7 @@ func (m *protoMarshaler) getRawField(ctx context.Context, field string, logRecor
 		return "", nil
 	}
 
-	lrExpr, err := expr.NewOTTLLogRecordExpression(field, m.teleSettings)
+	lrExpr, err := newOTTLLogRecordExpression(field, m.teleSettings)
 	if err != nil {
 		return "", fmt.Errorf("raw_log_field is invalid: %s", err)
 	}

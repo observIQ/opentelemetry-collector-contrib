@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/observiq/bindplane-otel-collector/expr"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configoptional"
 	"go.opentelemetry.io/collector/config/configretry"
@@ -120,7 +119,7 @@ func (cfg *Config) Validate() error {
 	}
 
 	if cfg.RawLogField != "" {
-		_, err := expr.NewOTTLLogRecordExpression(cfg.RawLogField, component.TelemetrySettings{
+		_, err := newOTTLLogRecordExpression(cfg.RawLogField, component.TelemetrySettings{
 			Logger: zap.NewNop(),
 		})
 		if err != nil {
