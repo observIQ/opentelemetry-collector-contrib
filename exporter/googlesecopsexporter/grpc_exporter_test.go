@@ -132,7 +132,7 @@ func TestGRPCExporter(t *testing.T) {
 				return logs
 			}(),
 			expectedRequests: 1,
-			expectedErr:      "upload logs to chronicle: rpc error: code = Unavailable desc = Service Unavailable",
+			expectedErr:      "upload logs to secops: rpc error: code = Unavailable desc = Service Unavailable",
 			permanentErr:     false,
 		},
 		{
@@ -149,7 +149,7 @@ func TestGRPCExporter(t *testing.T) {
 				return logs
 			}(),
 			expectedRequests: 1,
-			expectedErr:      "Permanent error: upload logs to chronicle: rpc error: code = Unauthenticated desc = Unauthorized",
+			expectedErr:      "Permanent error: upload logs to secops: rpc error: code = Unauthenticated desc = Unauthorized",
 			permanentErr:     true,
 		},
 	}
@@ -439,7 +439,7 @@ func TestGRPCExporterTelemetry(t *testing.T) {
 			// Check error expectations based on test case
 			if tc.expectError {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "upload logs to chronicle")
+				require.Contains(t, err.Error(), "upload logs to secops")
 			} else {
 				require.NoError(t, err)
 			}

@@ -28,7 +28,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/protos/api"
-	"github.com/observiq/bindplane-otel-collector/internal/osinfo"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumererror"
@@ -79,7 +78,7 @@ func newHTTPExporter(cfg *Config, params exporter.Settings, telemetry *metadata.
 	if err != nil {
 		return nil, fmt.Errorf("create proto marshaler: %w", err)
 	}
-	macAddress := osinfo.MACAddress()
+	macAddress := getMACAddress()
 	params.Logger.Debug("Creating HTTP exporter", zap.String("exporter_id", params.ID.String()), zap.String("mac_address", macAddress))
 	return &httpExporter{
 		cfg:       cfg,
