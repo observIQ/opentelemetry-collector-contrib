@@ -4,7 +4,9 @@ status:
   class: exporter
   stability:
     alpha: [logs]
-  distributions: [observiq]
+  distributions: [contrib]
+  codeowners:
+    active: [dpaasman00, mrsillydog]
 
 telemetry:
   metrics:
