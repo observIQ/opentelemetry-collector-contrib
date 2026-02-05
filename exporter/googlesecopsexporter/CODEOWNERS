@@ -1,0 +1,5 @@
+# Code owners for Google SecOps Exporter
+# This exporter is maintained by observIQ
+# See https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/CONTRIBUTING.md#becoming-a-code-owner
+
+* @dpaasman00 @mrsillydog
