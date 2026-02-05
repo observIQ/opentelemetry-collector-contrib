@@ -15,6 +15,18 @@ The protocol is configured using the `protocol` field (see Configuration section
 
 - Logs
 
+## Prerequisites
+
+Before using this exporter, you need:
+
+1. **Google Cloud Service Account**: A service account with appropriate permissions to access the Google SecOps API
+2. **Service Account Credentials**: JSON credentials file for the service account
+3. **Google SecOps Access**: Your service account must have access to the Google SecOps API endpoints
+4. **Customer ID**: Your Google SecOps customer ID (required for most configurations)
+5. **API Selection**: Choose between the Legacy Ingestion API (gRPC) or the newer DataPlane API (HTTPS)
+
+For more information on setting up credentials and API access, see the [Google SecOps API documentation](https://cloud.google.com/chronicle/docs/reference/ingestion-api).
+
 ## How It Works
 
 1. The exporter uses the configured credentials to authenticate with the Google Cloud services.
@@ -126,3 +138,10 @@ googlesecops:
     env: dev
     zone: USA
 ```
+
+## Additional Resources
+
+- [Google SecOps Ingestion API Documentation](https://cloud.google.com/chronicle/docs/reference/ingestion-api)
+- [Google SecOps API Authentication](https://cloud.google.com/chronicle/docs/reference/ingestion-api#getting_api_authentication_credentials)
+- [Regional Endpoints](https://cloud.google.com/chronicle/docs/reference/ingestion-api#regional_endpoints)
+- [Google SecOps Overview](https://cloud.google.com/products/security-operations)
