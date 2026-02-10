@@ -6,6 +6,7 @@ package windowseventlogreceiver // import "github.com/open-telemetry/opentelemet
 import (
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,6 +42,24 @@ func TestNegativeCacheSizeRejected(t *testing.T) {
 	err := cm.Unmarshal(cfg)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "cache_size")
+}
+
+func TestNegativeCacheTTLRejected(t *testing.T) {
+	cfg := &ResolveSIDsConfig{
+		Enabled:  true,
+		CacheTTL: -1 * time.Second,
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "cache_ttl must not be negative")
+}
+
+func TestZeroCacheTTLAccepted(t *testing.T) {
+	cfg := &ResolveSIDsConfig{
+		Enabled:  true,
+		CacheTTL: 0,
+	}
+	require.NoError(t, cfg.Validate())
 }
 
 func TestCreateAndShutdown(t *testing.T) {
