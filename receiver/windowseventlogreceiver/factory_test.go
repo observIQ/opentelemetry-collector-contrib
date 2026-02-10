@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
 
@@ -26,6 +27,20 @@ func TestCreateDefaultConfig(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig()
 	require.NotNil(t, cfg, "failed to create default config")
+}
+
+func TestNegativeCacheSizeRejected(t *testing.T) {
+	factory := NewFactory()
+	cfg := factory.CreateDefaultConfig()
+
+	cm := confmap.NewFromStringMap(map[string]any{
+		"resolve_sids": map[string]any{
+			"cache_size": -1,
+		},
+	})
+	err := cm.Unmarshal(cfg)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "cache_size")
 }
 
 func TestCreateAndShutdown(t *testing.T) {

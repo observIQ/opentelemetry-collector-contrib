@@ -48,7 +48,7 @@ type cache struct {
 // New creates a new SID cache with the given configuration
 func New(config Config) (Cache, error) {
 	// Validate and set defaults
-	if config.Size <= 0 {
+	if config.Size == 0 {
 		config.Size = DefaultCacheSize
 	}
 	if config.TTL <= 0 {
@@ -60,7 +60,7 @@ func New(config Config) (Cache, error) {
 	}
 
 	// Create LRU cache with eviction callback
-	lruCache, err := lru.NewWithEvict(config.Size, func(_ string, _ *cacheEntry) {
+	lruCache, err := lru.NewWithEvict(int(config.Size), func(_ string, _ *cacheEntry) {
 		c.evictions.Add(1)
 	})
 	if err != nil {

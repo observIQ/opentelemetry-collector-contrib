@@ -61,7 +61,7 @@ type Stats struct {
 // Config contains configuration for the SID cache
 type Config struct {
 	// Size is the maximum number of entries in the cache (LRU eviction)
-	Size int
+	Size uint
 
 	// TTL is how long cache entries remain valid
 	TTL time.Duration

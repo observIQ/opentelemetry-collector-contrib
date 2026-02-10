@@ -52,7 +52,7 @@ func createLogsReceiver(
 		}
 
 		set.Logger.Info("SID resolution enabled",
-			zap.Int("cache_size", cacheConfig.Size),
+			zap.Uint("cache_size", cacheConfig.Size),
 			zap.Duration("cache_ttl", cacheConfig.TTL))
 	}
 

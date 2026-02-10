@@ -44,7 +44,7 @@ type ResolveSIDsConfig struct {
 
 	// CacheSize is the maximum number of SIDs to cache (LRU eviction)
 	// Default: 10000
-	CacheSize int `mapstructure:"cache_size"`
+	CacheSize uint `mapstructure:"cache_size"`
 
 	// CacheTTL is how long cache entries remain valid
 	// Default: 15m

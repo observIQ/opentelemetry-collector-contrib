@@ -14,7 +14,7 @@ func TestNew(t *testing.T) {
 	tests := []struct {
 		name        string
 		config      Config
-		expectSize  int
+		expectSize  uint
 		expectTTL   time.Duration
 		expectError bool
 	}{
@@ -32,15 +32,6 @@ func TestNew(t *testing.T) {
 			config:     Config{},
 			expectSize: DefaultCacheSize,
 			expectTTL:  DefaultCacheTTL,
-		},
-		{
-			name: "negative size uses default",
-			config: Config{
-				Size: -1,
-				TTL:  5 * time.Minute,
-			},
-			expectSize: DefaultCacheSize,
-			expectTTL:  5 * time.Minute,
 		},
 	}
 
