@@ -7,8 +7,14 @@ package sidcache
 
 import "errors"
 
-// lookupSID is a stub for non-Windows platforms
-// This allows the code to compile on macOS/Linux during development
+// New returns an error on non-Windows platforms since SID resolution
+// requires the Windows Local Security Authority API.
+func New(_ Config) (Cache, error) {
+	return nil, errors.New("SID cache is only supported on Windows")
+}
+
+// lookupSID is a stub for non-Windows platforms.
+// This allows the code to compile on macOS/Linux during development.
 func lookupSID(_ string) (*ResolvedSID, error) {
 	return nil, errors.New("SID lookup is only supported on Windows")
 }

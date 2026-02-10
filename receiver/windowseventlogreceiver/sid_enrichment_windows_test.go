@@ -36,8 +36,8 @@ func (m *mockCache) Close() error {
 	return nil
 }
 
-func (m *mockCache) Stats() sidcache.CacheStats {
-	return sidcache.CacheStats{}
+func (m *mockCache) Stats() sidcache.Stats {
+	return sidcache.Stats{}
 }
 
 func TestNewSIDEnrichingConsumer(t *testing.T) {
