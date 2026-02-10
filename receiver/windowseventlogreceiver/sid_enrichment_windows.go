@@ -129,6 +129,34 @@ func (s *sidEnrichingConsumer) enrichEventDataFields(bodyMap pcommon.Map) {
 	s.enrichEventDataMap(eventDataMap)
 }
 
+// tryResolveSID checks whether a key/value pair represents a SID field and resolves it.
+// Returns the resolved SID or nil if the field is not a SID, is empty, or resolution fails.
+func (s *sidEnrichingConsumer) tryResolveSID(key string, value pcommon.Value) *sidcache.ResolvedSID {
+	if !sidcache.IsSIDField(key) {
+		return nil
+	}
+
+	if value.Type() != pcommon.ValueTypeStr {
+		return nil
+	}
+
+	sid := value.Str()
+	if sid == "" {
+		return nil
+	}
+
+	resolved, err := s.sidCache.Resolve(sid)
+	if err != nil {
+		s.logger.Debug("Failed to resolve SID in event_data",
+			zap.String("field", key),
+			zap.String("sid", sid),
+			zap.Error(err))
+		return nil
+	}
+
+	return resolved
+}
+
 // enrichEventDataArray enriches SID fields in the event_data.data array format
 func (s *sidEnrichingConsumer) enrichEventDataArray(dataSlice pcommon.Slice) {
 	// Track which SIDs we've seen to add companion fields after the original
@@ -141,34 +169,10 @@ func (s *sidEnrichingConsumer) enrichEventDataArray(dataSlice pcommon.Slice) {
 			continue
 		}
 
-		itemMap := item.Map()
-		itemMap.Range(func(key string, value pcommon.Value) bool {
-			// Check if this field name indicates it's a SID
-			if !sidcache.IsSIDField(key) {
-				return true
+		item.Map().Range(func(key string, value pcommon.Value) bool {
+			if resolved := s.tryResolveSID(key, value); resolved != nil {
+				sidsToEnrich[key] = resolved
 			}
-
-			// Check if value is a string that looks like a SID
-			if value.Type() != pcommon.ValueTypeStr {
-				return true
-			}
-
-			sid := value.Str()
-			if sid == "" {
-				return true
-			}
-
-			// Resolve SID
-			resolved, err := s.sidCache.Resolve(sid)
-			if err != nil {
-				s.logger.Debug("Failed to resolve SID in event_data",
-					zap.String("field", key),
-					zap.String("sid", sid),
-					zap.Error(err))
-				return true
-			}
-
-			sidsToEnrich[key] = resolved
 			return true
 		})
 	}
@@ -202,34 +206,10 @@ func (s *sidEnrichingConsumer) enrichEventDataMap(eventDataMap pcommon.Map) {
 	// Track SIDs to enrich (we'll add fields after iteration to avoid modifying during range)
 	sidsToEnrich := make(map[string]*sidcache.ResolvedSID)
 
-	// Find all SID fields
 	eventDataMap.Range(func(key string, value pcommon.Value) bool {
-		// Check if this field name indicates it's a SID
-		if !sidcache.IsSIDField(key) {
-			return true
+		if resolved := s.tryResolveSID(key, value); resolved != nil {
+			sidsToEnrich[key] = resolved
 		}
-
-		// Check if value is a string that looks like a SID
-		if value.Type() != pcommon.ValueTypeStr {
-			return true
-		}
-
-		sid := value.Str()
-		if sid == "" {
-			return true
-		}
-
-		// Resolve SID
-		resolved, err := s.sidCache.Resolve(sid)
-		if err != nil {
-			s.logger.Debug("Failed to resolve SID in event_data",
-				zap.String("field", key),
-				zap.String("sid", sid),
-				zap.Error(err))
-			return true
-		}
-
-		sidsToEnrich[key] = resolved
 		return true
 	})
 
