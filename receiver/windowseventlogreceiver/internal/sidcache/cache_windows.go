@@ -6,6 +6,7 @@
 package sidcache
 
 import (
+	"errors"
 	"fmt"
 	"syscall"
 	"time"
@@ -94,7 +95,7 @@ func lookupSID(sidString string) (*ResolvedSID, error) {
 		uintptr(unsafe.Pointer(&sid)),
 	)
 	if ret == 0 {
-		return nil, fmt.Errorf("ConvertStringSidToSid failed")
+		return nil, errors.New("ConvertStringSidToSid failed")
 	}
 	defer procLocalFree.Call(uintptr(unsafe.Pointer(sid)))
 
