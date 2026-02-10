@@ -161,7 +161,7 @@ receivers:
       cache_ttl: 15m       # Re-resolve SIDs after 15 minutes
 ```
 
-**Before SID Resolution (disabled):**
+**Without SID Resolution:**
 ```json
 {
   "security": {
@@ -174,7 +174,7 @@ receivers:
 }
 ```
 
-**After SID Resolution (enabled):**
+**With SID Resolution:**
 ```json
 {
   "security": {
@@ -200,6 +200,7 @@ receivers:
 ```
 
 **Performance Characteristics:**
+
 - Cache hit latency: < 1 microsecond
 - Cache miss latency: < 5 milliseconds (Windows LSA API call)
 - Expected cache hit rate: > 99% in steady state
@@ -207,6 +208,7 @@ receivers:
 - Throughput impact: < 5% with cache enabled
 
 **Limitations:**
+
 - Only resolves SIDs for the local system or the domain the Windows machine is joined to
 - Cannot resolve SIDs from trusted domains (requires LDAP extension)
 - Remote collection: SID resolution only works when the collector runs on Windows
