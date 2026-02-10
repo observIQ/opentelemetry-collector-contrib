@@ -222,6 +222,7 @@ processor/intervalprocessor
 processor/isolationforestprocessor
 processor/logdedupprocessor
 processor/logstransformprocessor
+processor/lookupprocessor
 processor/metricsgenerationprocessor
 processor/metricstarttimeprocessor
 processor/metricstransformprocessor
@@ -326,6 +327,7 @@ receiver/tcplogreceiver
 receiver/tlscheckreceiver
 receiver/udplogreceiver
 receiver/vcenterreceiver
+receiver/vcrreceiver
 receiver/wavefrontreceiver
 receiver/webhookeventreceiver
 receiver/windowseventlogreceiver

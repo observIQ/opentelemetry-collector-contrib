@@ -66,6 +66,9 @@ type Config struct {
 	// LogsDynamicID configures whether log record attribute `elasticsearch.document_id` is set as the document ID in ES.
 	LogsDynamicID DynamicIDSettings `mapstructure:"logs_dynamic_id"`
 
+	// TracesDynamicID configures whether span attribute `elasticsearch.document_id` is set as the document ID in ES.
+	TracesDynamicID DynamicIDSettings `mapstructure:"traces_dynamic_id"`
+
 	// LogsDynamicPipeline configures whether log record attribute `elasticsearch.document_pipeline` is set as the document ingest pipeline for ES.
 	LogsDynamicPipeline DynamicPipelineSettings `mapstructure:"logs_dynamic_pipeline"`
 
@@ -497,6 +500,9 @@ func handleDeprecatedConfig(cfg *Config, logger *zap.Logger) {
 		cfg.Retry.MaxRetries = cfg.Retry.MaxRequests - 1
 		// Do not set cfg.Retry.Enabled = false if cfg.Retry.MaxRequest = 1 to avoid breaking change on behavior
 		logger.Warn("retry::max_requests has been deprecated, and will be removed in a future version. Use retry::max_retries instead.")
+	}
+	if canonicalMappingModeName(cfg.Mapping.Mode) != MappingOTel.String() {
+		logger.Warn("mapping::mode config option is now deprecated and will soon be ignored. Use the `elastic.mapping.mode` scope attribute instead. See the README for migration instructions.")
 	}
 	if cfg.LogsDynamicIndex.Enabled {
 		logger.Warn("logs_dynamic_index::enabled has been deprecated, and will be removed in a future version. It is now a no-op. Dynamic document routing is now the default. See Elasticsearch Exporter README.")
