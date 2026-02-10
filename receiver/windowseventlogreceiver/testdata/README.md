@@ -32,6 +32,7 @@ This creates `./bin/otelcontribcol_windows_amd64.exe`.
 ### 2. Transfer to Windows Machine (if cross-compiling)
 
 Copy the following files to a Windows machine:
+
 - The collector binary from `./bin/otelcontribcol_windows_amd64.exe`
 - The example configuration file(s) from this directory
 
@@ -61,16 +62,18 @@ Check the output (console or log file depending on your exporter configuration) 
 ## Configuration Options
 
 ### Required
+
 - `channel` - The Windows Event Log channel to monitor
 
 ### Optional
+
 - `start_at` - Where to start reading: `beginning` or `end` (default: `end`)
 - `max_reads` - Maximum number of records to read per poll (default: 100)
 - `poll_interval` - How often to poll for new events (default: 1s)
 
 ### Operators
 
-The windowseventlogreceiver uses the Stanza adapter framework, which supports additional operators for log processing:
+The `windowseventlogreceiver` uses the Stanza adapter framework, which supports additional operators for log processing:
 
 ```yaml
 receivers:
