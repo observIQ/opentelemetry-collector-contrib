@@ -1,0 +1,162 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package googlesecopsexporter
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestConfigValidate(t *testing.T) {
+	testCases := []struct {
+		desc        string
+		config      *Config
+		expectedErr string
+	}{
+		{
+			desc: "Both creds_file_path and creds are set",
+			config: &Config{
+				CredsFilePath:             "/path/to/creds_file",
+				Creds:                     "creds_example",
+				LogType:                   "log_type_example",
+				Compression:               noCompression,
+				BatchRequestSizeLimitGRPC: defaultBatchRequestSizeLimitGRPC,
+			},
+			expectedErr: "can only specify creds_file_path or creds",
+		},
+		{
+			desc: "Valid config with creds",
+			config: &Config{
+				Creds:                     "creds_example",
+				LogType:                   "log_type_example",
+				Compression:               noCompression,
+				Protocol:                  protocolGRPC,
+				BatchRequestSizeLimitGRPC: defaultBatchRequestSizeLimitGRPC,
+			},
+			expectedErr: "",
+		},
+		{
+			desc: "Valid config with creds_file_path",
+			config: &Config{
+				CredsFilePath:             "/path/to/creds_file",
+				LogType:                   "log_type_example",
+				Compression:               noCompression,
+				Protocol:                  protocolGRPC,
+				BatchRequestSizeLimitGRPC: defaultBatchRequestSizeLimitGRPC,
+			},
+			expectedErr: "",
+		},
+		{
+			desc: "Valid config with raw log field",
+			config: &Config{
+				CredsFilePath:             "/path/to/creds_file",
+				LogType:                   "log_type_example",
+				RawLogField:               `body["field"]`,
+				Compression:               noCompression,
+				Protocol:                  protocolGRPC,
+				BatchRequestSizeLimitGRPC: defaultBatchRequestSizeLimitGRPC,
+			},
+			expectedErr: "",
+		},
+		{
+			desc: "Invalid batch request size limit",
+			config: &Config{
+				Creds:                     "creds_example",
+				LogType:                   "log_type_example",
+				Compression:               noCompression,
+				Protocol:                  protocolGRPC,
+				BatchRequestSizeLimitGRPC: 0,
+			},
+			expectedErr: "positive batch request size limit is required when protocol is grpc",
+		},
+		{
+			desc: "Invalid compression type",
+			config: &Config{
+				CredsFilePath: "/path/to/creds_file",
+				LogType:       "log_type_example",
+				Compression:   "invalid",
+			},
+			expectedErr: "invalid compression type",
+		},
+		{
+			desc: "Protocol is https and location is empty",
+			config: &Config{
+				CredsFilePath:             "/path/to/creds_file",
+				LogType:                   "log_type_example",
+				Protocol:                  protocolHTTPS,
+				Compression:               noCompression,
+				Forwarder:                 "forwarder_example",
+				Project:                   "project_example",
+				BatchRequestSizeLimitHTTP: defaultBatchRequestSizeLimitHTTP,
+			},
+			expectedErr: "location is required when protocol is https",
+		},
+		{
+			desc: "Protocol is https and forwarder is empty",
+			config: &Config{
+				CredsFilePath:             "/path/to/creds_file",
+				LogType:                   "log_type_example",
+				Protocol:                  protocolHTTPS,
+				Compression:               noCompression,
+				Project:                   "project_example",
+				Location:                  "location_example",
+				BatchRequestSizeLimitHTTP: defaultBatchRequestSizeLimitHTTP,
+			},
+			expectedErr: "",
+		},
+		{
+			desc: "Protocol is https and project is empty",
+			config: &Config{
+				CredsFilePath:             "/path/to/creds_file",
+				LogType:                   "log_type_example",
+				Protocol:                  protocolHTTPS,
+				Compression:               noCompression,
+				Location:                  "location_example",
+				Forwarder:                 "forwarder_example",
+				BatchRequestSizeLimitHTTP: defaultBatchRequestSizeLimitHTTP,
+			},
+			expectedErr: "project is required when protocol is https",
+		},
+		{
+			desc: "Protocol is https and http batch request size limit is 0",
+			config: &Config{
+				CredsFilePath:             "/path/to/creds_file",
+				LogType:                   "log_type_example",
+				Protocol:                  protocolHTTPS,
+				Compression:               noCompression,
+				Project:                   "project_example",
+				Location:                  "location_example",
+				Forwarder:                 "forwarder_example",
+				BatchRequestSizeLimitHTTP: 0,
+			},
+			expectedErr: "positive batch request size limit is required when protocol is https",
+		},
+		{
+			desc: "Valid https config",
+			config: &Config{
+				CredsFilePath:             "/path/to/creds_file",
+				LogType:                   "log_type_example",
+				Protocol:                  protocolHTTPS,
+				Compression:               noCompression,
+				Project:                   "project_example",
+				Location:                  "location_example",
+				Forwarder:                 "forwarder_example",
+				BatchRequestSizeLimitHTTP: defaultBatchRequestSizeLimitHTTP,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			err := tc.config.Validate()
+			if tc.expectedErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectedErr)
+			}
+		})
+	}
+}
