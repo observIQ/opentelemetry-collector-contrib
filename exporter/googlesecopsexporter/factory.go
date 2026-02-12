@@ -50,9 +50,9 @@ const (
 func createDefaultConfig() component.Config {
 	return &Config{
 		Protocol:                  protocolGRPC,
-		TimeoutConfig:             exporterhelper.NewDefaultTimeoutConfig(),     // 5 seconds - validated for Google SecOps API
+		TimeoutConfig:             exporterhelper.NewDefaultTimeoutConfig(),                    // 5 seconds - validated for Google SecOps API
 		QueueBatchConfig:          configoptional.Some(exporterhelper.NewDefaultQueueConfig()), // Default queue: 1000 items
-		BackOffConfig:             configretry.NewDefaultBackOffConfig(),        // Default retry: 5s initial, 30s max
+		BackOffConfig:             configretry.NewDefaultBackOffConfig(),                       // Default retry: 5s initial, 30s max
 		OverrideLogType:           true,
 		Compression:               noCompression,
 		CollectAgentMetrics:       true,

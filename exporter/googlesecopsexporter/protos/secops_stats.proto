@@ -4,9 +4,9 @@
 // to the Chronicle Server side proto definition
 syntax = "proto3";
 
-package malachite.ingestion.v2;
+package googlesecops.ingestion.v2;
 
-option go_package = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/proto/api";
+option go_package = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/protos/api";
 
 import "google/protobuf/timestamp.proto";
 // Stats about the collection agent.

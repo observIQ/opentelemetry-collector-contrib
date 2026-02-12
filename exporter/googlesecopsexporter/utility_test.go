@@ -50,9 +50,9 @@ func TestBaseEndpoint(t *testing.T) {
 // TestParseLogTypes tests the parseLogTypes function
 func TestParseLogTypes(t *testing.T) {
 	testCases := []struct {
-		name          string
-		logTypesPath  string
-		expectedType  string
+		name         string
+		logTypesPath string
+		expectedType string
 	}{
 		{
 			name:         "simple type",

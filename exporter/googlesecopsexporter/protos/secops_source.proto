@@ -1,9 +1,9 @@
 // Copyright 2021 Google LLC
 syntax = "proto3";
 
-package malachite.ingestion.v2;
+package googlesecops.ingestion.v2;
 
-option go_package = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/proto/api";
+option go_package = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/protos/api";
 
 // Information about the source collection point.
 // In the future we can extend this message to include additional metadata

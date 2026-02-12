@@ -1,13 +1,13 @@
 // Copyright 2021 Google LLC
 syntax = "proto3";
 
-package malachite.ingestion.v2;
+package googlesecops.ingestion.v2;
 
-option go_package = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/proto/api";
+option go_package = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/protos/api";
 
 import "google/api/annotations.proto";
-import "events.proto";
-import "chronicle_log.proto";
+import "secops_events.proto";
+import "secops_log.proto";
 
 
 service IngestionServiceV2 {
@@ -44,6 +44,5 @@ message BatchCreateLogsRequest {
 message BatchCreateLogsResponse {
   // Intentionally empty response.
 }
-
 
 

@@ -1,12 +1,12 @@
 // Copyright 2021 Google LLC
 syntax = "proto3";
 
-package malachite.ingestion.v2;
+package googlesecops.ingestion.v2;
 
-option go_package = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/proto/api";
+option go_package = "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/protos/api";
 
-import "source.proto";
-import "stats.proto";
+import "secops_source.proto";
+import "secops_stats.proto";
 import "google/protobuf/timestamp.proto";
 
 
