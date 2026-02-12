@@ -3,7 +3,8 @@ type: googlesecops
 status:
   class: exporter
   stability:
-    development: [logs]
+    alpha: [logs]
+  distributions: [contrib]
   codeowners:
     active: [braydonk, dpaasman00, mrsillydog]
 
