@@ -1,0 +1,150 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package googlesecopsexporter
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/config/configoptional"
+	"go.opentelemetry.io/collector/config/configretry"
+	"go.opentelemetry.io/collector/exporter/exporterhelper"
+	"go.uber.org/zap"
+	"google.golang.org/grpc/encoding/gzip"
+)
+
+const (
+	// noCompression is the no compression type.
+	noCompression = "none"
+	// protocolHTTPS selects the DataPlane API (v1alpha) using HTTPS for ingestion.
+	protocolHTTPS = "https"
+	// protocolGRPC selects the Legacy Ingestion API (v2) using gRPC for ingestion.
+	protocolGRPC = "gRPC"
+)
+
+// Config defines configuration for the SecOps exporter.
+type Config struct {
+	TimeoutConfig    exporterhelper.TimeoutConfig                             `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
+	QueueBatchConfig configoptional.Optional[exporterhelper.QueueBatchConfig] `mapstructure:"sending_queue"`
+	BackOffConfig    configretry.BackOffConfig                                `mapstructure:"retry_on_failure"`
+
+	// Endpoint is the URL where SecOps data will be sent.
+	Endpoint string `mapstructure:"endpoint"`
+
+	// CredsFilePath is the file path to the Google credentials JSON file.
+	CredsFilePath string `mapstructure:"creds_file_path"`
+
+	// Creds are the Google credentials JSON file.
+	Creds string `mapstructure:"creds"`
+
+	// LogType is the type of log that will be sent to SecOps if not overridden by `attributes["log_type"]` or `attributes["chronicle_log_type"]`.
+	LogType string `mapstructure:"log_type"`
+
+	// ValidateLogTypes is a flag that determines whether or not to validate the log types using an API call to SecOps.
+	ValidateLogTypes bool `mapstructure:"validate_log_types"`
+
+	// OverrideLogType is a flag that determines whether or not to override the `log_type` in the config with `attributes["log_type"]`.
+	OverrideLogType bool `mapstructure:"override_log_type"`
+
+	// RawLogField is the field name that will be used to send raw logs to SecOps.
+	RawLogField string `mapstructure:"raw_log_field"`
+
+	// CustomerID is the customer ID that will be used to send logs to SecOps.
+	CustomerID string `mapstructure:"customer_id"`
+
+	// Namespace is the namespace that will be used to send logs to SecOps.
+	Namespace string `mapstructure:"namespace"`
+
+	// Compression is the compression type that will be used to send logs to SecOps.
+	Compression string `mapstructure:"compression"`
+
+	// IngestionLabels are the labels that will be attached to logs when sent to SecOps.
+	IngestionLabels map[string]string `mapstructure:"ingestion_labels"`
+
+	// CollectAgentMetrics is a flag that determines whether or not to collect agent metrics.
+	CollectAgentMetrics bool `mapstructure:"collect_agent_metrics"`
+
+	// Protocol is the protocol that will be used to send logs to SecOps.
+	// Supported values:
+	//   - "grpc": Uses the Legacy Ingestion API (v2) with gRPC transport
+	//   - "https": Uses the DataPlane API (v1alpha) with HTTPS transport
+	Protocol string `mapstructure:"protocol"`
+
+	// Location is the GCP location/region that will be used when the protocol is https (DataPlane API).
+	Location string `mapstructure:"location"`
+
+	// Project is the GCP project ID that will be used when the protocol is https (DataPlane API).
+	Project string `mapstructure:"project"`
+
+	// Forwarder is the forwarder that will be used when the protocol is https.
+	// Deprecated as of v1.87.1: The forwarder (Collector ID) is now determined by the license type
+	Forwarder string `mapstructure:"forwarder"`
+
+	// BatchRequestSizeLimitGRPC is the maximum batch request size, in bytes, that can be sent to SecOps via the Legacy Ingestion API (gRPC protocol)
+	// This field is defaulted to 4000000 as that is the default SecOps backend limit
+	// Setting this option to a value above the SecOps backend limit may result in rejected log batch requests
+	BatchRequestSizeLimitGRPC int `mapstructure:"batch_request_size_limit_grpc"`
+
+	// BatchRequestSizeLimitHTTP is the maximum batch request size, in bytes, that can be sent to SecOps via the DataPlane API (HTTPS protocol)
+	// This field is defaulted to 4000000 as that is the default SecOps backend limit
+	// Setting this option to a value above the SecOps backend limit may result in rejected log batch requests
+	BatchRequestSizeLimitHTTP int `mapstructure:"batch_request_size_limit_http"`
+
+	// LicenseType is the license type of the bindplane instance managing this agent.
+	// This field is used to determine collector ID for SecOps.
+	LicenseType string `mapstructure:"license_type"`
+
+	// LogErroredPayloads is a flag that determines whether or not to log errored payloads.
+	LogErroredPayloads bool `mapstructure:"log_errored_payloads"`
+}
+
+// Validate checks if the configuration is valid.
+func (cfg *Config) Validate() error {
+	if cfg.CredsFilePath != "" && cfg.Creds != "" {
+		return errors.New("can only specify creds_file_path or creds")
+	}
+
+	if cfg.RawLogField != "" {
+		_, err := newOTTLLogRecordExpression(cfg.RawLogField, component.TelemetrySettings{
+			Logger: zap.NewNop(),
+		})
+		if err != nil {
+			return fmt.Errorf("raw_log_field is invalid: %s", err)
+		}
+	}
+
+	if cfg.Compression != gzip.Name && cfg.Compression != noCompression {
+		return fmt.Errorf("invalid compression type: %s", cfg.Compression)
+	}
+
+	if strings.HasPrefix(cfg.Endpoint, "http://") || strings.HasPrefix(cfg.Endpoint, "https://") {
+		return fmt.Errorf("endpoint should not contain a protocol: %s", cfg.Endpoint)
+	}
+
+	if cfg.Protocol == protocolHTTPS {
+		if cfg.Location == "" {
+			return errors.New("location is required when protocol is https")
+		}
+		if cfg.Project == "" {
+			return errors.New("project is required when protocol is https")
+		}
+		if cfg.BatchRequestSizeLimitHTTP <= 0 {
+			return errors.New("positive batch request size limit is required when protocol is https")
+		}
+
+		return nil
+	}
+
+	if cfg.Protocol == protocolGRPC {
+		if cfg.BatchRequestSizeLimitGRPC <= 0 {
+			return errors.New("positive batch request size limit is required when protocol is grpc")
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("invalid protocol: %s", cfg.Protocol)
+}
