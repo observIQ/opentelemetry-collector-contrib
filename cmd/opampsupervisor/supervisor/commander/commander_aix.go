@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build !windows && !aix
+//go:build aix
 
 package commander
 
@@ -11,7 +11,7 @@ import (
 )
 
 func sendShutdownSignal(process *os.Process) error {
-	return process.Signal(os.Interrupt)
+	return process.Signal(syscall.SIGTERM)
 }
 
 func sysProcAttrs() *syscall.SysProcAttr {

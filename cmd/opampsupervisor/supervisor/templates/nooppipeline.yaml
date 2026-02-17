@@ -8,3 +8,9 @@ service:
     traces:
       receivers: [nop]
       exporters: [nop]
+
+  telemetry:
+    # Disable agents own telemetry to avoid port binding collisions for port 8888. Bindplane
+    # will enable metrics and configure the port when a configuration is pushed to the agent.
+    metrics:
+      level: none
