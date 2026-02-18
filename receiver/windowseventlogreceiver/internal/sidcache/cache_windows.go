@@ -31,7 +31,7 @@ var (
 
 // LSA constants
 const (
-	POLICY_LOOKUP_NAMES = 0x00000800
+	policyLookupNames = 0x00000800
 )
 
 // SID_NAME_USE enumeration
@@ -224,7 +224,7 @@ func lookupSID(sidString string) (*ResolvedSID, error) {
 	if ret == 0 {
 		return nil, errors.New("ConvertStringSidToSid failed")
 	}
-	defer procLocalFree.Call(uintptr(unsafe.Pointer(sid)))
+	defer procLocalFree.Call(uintptr(unsafe.Pointer(sid))) //nolint:errcheck // cleanup: no action on error
 
 	// Open LSA policy
 	var policyHandle windows.Handle
@@ -235,13 +235,13 @@ func lookupSID(sidString string) (*ResolvedSID, error) {
 	status, _, _ := procLsaOpenPolicy.Call(
 		0, // Local system
 		uintptr(unsafe.Pointer(&objAttrs)),
-		POLICY_LOOKUP_NAMES,
+		policyLookupNames,
 		uintptr(unsafe.Pointer(&policyHandle)),
 	)
 	if status != 0 {
 		return nil, fmt.Errorf("LsaOpenPolicy failed with status: %x", status)
 	}
-	defer procLsaClose.Call(uintptr(policyHandle))
+	defer procLsaClose.Call(uintptr(policyHandle)) //nolint:errcheck // cleanup: no action on error
 
 	// Prepare SID array for LsaLookupSids2
 	sidArray := []*windows.SID{sid}
@@ -261,10 +261,10 @@ func lookupSID(sidString string) (*ResolvedSID, error) {
 
 	// Clean up LSA memory
 	if domains != nil {
-		defer procLsaFreeMemory.Call(uintptr(unsafe.Pointer(domains)))
+		defer procLsaFreeMemory.Call(uintptr(unsafe.Pointer(domains))) //nolint:errcheck // cleanup: no action on error
 	}
 	if names != nil {
-		defer procLsaFreeMemory.Call(uintptr(unsafe.Pointer(names)))
+		defer procLsaFreeMemory.Call(uintptr(unsafe.Pointer(names))) //nolint:errcheck // cleanup: no action on error
 	}
 
 	// status == 0 means success, 0xC0000073 (STATUS_NONE_MAPPED) means SID not found
@@ -284,9 +284,7 @@ func lookupSID(sidString string) (*ResolvedSID, error) {
 	if names.DomainIndex >= 0 && domains != nil && uint32(names.DomainIndex) < domains.Entries {
 		// Get the domain from the domain list
 		domainPtr := unsafe.Pointer(domains.Domains)
-		domainInfo := (*lsaTrustInformation)(unsafe.Pointer(
-			uintptr(domainPtr) + uintptr(names.DomainIndex)*unsafe.Sizeof(lsaTrustInformation{}),
-		))
+		domainInfo := (*lsaTrustInformation)(unsafe.Add(domainPtr, uintptr(names.DomainIndex)*unsafe.Sizeof(lsaTrustInformation{})))
 
 		if domainInfo.Name.Buffer != nil {
 			domainUTF16 := unsafe.Slice(domainInfo.Name.Buffer, domainInfo.Name.Length/2)

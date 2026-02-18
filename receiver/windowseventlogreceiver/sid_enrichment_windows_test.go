@@ -6,7 +6,6 @@
 package windowseventlogreceiver
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -32,11 +31,11 @@ func (m *mockCache) Resolve(sid string) (*sidcache.ResolvedSID, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockCache) Close() error {
+func (*mockCache) Close() error {
 	return nil
 }
 
-func (m *mockCache) Stats() sidcache.Stats {
+func (*mockCache) Stats() sidcache.Stats {
 	return sidcache.Stats{}
 }
 
@@ -72,7 +71,7 @@ func TestSIDEnrichingConsumer_ConsumeLogs_NilCache(t *testing.T) {
 	lr := sl.LogRecords().AppendEmpty()
 	lr.Body().SetStr("test log")
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 	assert.Equal(t, 1, nextConsumer.LogRecordCount())
 }
@@ -106,7 +105,7 @@ func TestSIDEnrichingConsumer_EnrichSecurityField(t *testing.T) {
 	securityMap := bodyMap.PutEmptyMap("security")
 	securityMap.PutStr("user_id", testSID)
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 
 	// Verify enrichment
@@ -137,7 +136,7 @@ func TestSIDEnrichingConsumer_EnrichSecurityField(t *testing.T) {
 
 func TestSIDEnrichingConsumer_EnrichSecurityField_NoSecurityMap(t *testing.T) {
 	cache := &mockCache{
-		resolveFunc: func(sid string) (*sidcache.ResolvedSID, error) {
+		resolveFunc: func(_ string) (*sidcache.ResolvedSID, error) {
 			return &sidcache.ResolvedSID{AccountName: "TEST"}, nil
 		},
 	}
@@ -151,14 +150,14 @@ func TestSIDEnrichingConsumer_EnrichSecurityField_NoSecurityMap(t *testing.T) {
 	lr := sl.LogRecords().AppendEmpty()
 	lr.Body().SetStr("no security map")
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 	assert.Equal(t, 1, nextConsumer.LogRecordCount())
 }
 
 func TestSIDEnrichingConsumer_EnrichSecurityField_ResolveError(t *testing.T) {
 	cache := &mockCache{
-		resolveFunc: func(sid string) (*sidcache.ResolvedSID, error) {
+		resolveFunc: func(_ string) (*sidcache.ResolvedSID, error) {
 			return nil, errors.New("lookup failed")
 		},
 	}
@@ -175,7 +174,7 @@ func TestSIDEnrichingConsumer_EnrichSecurityField_ResolveError(t *testing.T) {
 	securityMap := bodyMap.PutEmptyMap("security")
 	securityMap.PutStr("user_id", "S-1-5-18")
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 
 	// Should still pass through without enrichment
@@ -240,7 +239,7 @@ func TestSIDEnrichingConsumer_EnrichEventDataArray(t *testing.T) {
 	item2Map := item2.SetEmptyMap()
 	item2Map.PutStr("TargetUserSid", testSID2)
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 
 	// Verify enrichment
@@ -312,7 +311,7 @@ func TestSIDEnrichingConsumer_EnrichEventDataMap(t *testing.T) {
 	eventDataMap.PutStr("SubjectUserSid", testSID)
 	eventDataMap.PutStr("OtherField", "some value")
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 
 	// Verify enrichment
@@ -355,7 +354,7 @@ func TestSIDEnrichingConsumer_EnrichEventDataMap(t *testing.T) {
 
 func TestSIDEnrichingConsumer_EnrichEventDataMap_NoEventData(t *testing.T) {
 	cache := &mockCache{
-		resolveFunc: func(sid string) (*sidcache.ResolvedSID, error) {
+		resolveFunc: func(_ string) (*sidcache.ResolvedSID, error) {
 			return &sidcache.ResolvedSID{AccountName: "TEST"}, nil
 		},
 	}
@@ -369,14 +368,14 @@ func TestSIDEnrichingConsumer_EnrichEventDataMap_NoEventData(t *testing.T) {
 	lr := sl.LogRecords().AppendEmpty()
 	lr.Body().SetEmptyMap()
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 	assert.Equal(t, 1, nextConsumer.LogRecordCount())
 }
 
 func TestSIDEnrichingConsumer_EnrichEventDataMap_EmptyEventData(t *testing.T) {
 	cache := &mockCache{
-		resolveFunc: func(sid string) (*sidcache.ResolvedSID, error) {
+		resolveFunc: func(_ string) (*sidcache.ResolvedSID, error) {
 			return &sidcache.ResolvedSID{AccountName: "TEST"}, nil
 		},
 	}
@@ -392,7 +391,7 @@ func TestSIDEnrichingConsumer_EnrichEventDataMap_EmptyEventData(t *testing.T) {
 	bodyMap := lr.Body().SetEmptyMap()
 	bodyMap.PutEmptyMap("event_data")
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 	assert.Equal(t, 1, nextConsumer.LogRecordCount())
 }
@@ -421,14 +420,14 @@ func TestSIDEnrichingConsumer_MultipleLogRecords(t *testing.T) {
 	sl := rl.ScopeLogs().AppendEmpty()
 
 	// Add multiple log records
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		lr := sl.LogRecords().AppendEmpty()
 		bodyMap := lr.Body().SetEmptyMap()
 		securityMap := bodyMap.PutEmptyMap("security")
 		securityMap.PutStr("user_id", testSID)
 	}
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 
 	// All records should be enriched
@@ -438,7 +437,7 @@ func TestSIDEnrichingConsumer_MultipleLogRecords(t *testing.T) {
 	records := consumedLogs[0].ResourceLogs().At(0).ScopeLogs().At(0).LogRecords()
 	assert.Equal(t, 3, records.Len())
 
-	for i := 0; i < records.Len(); i++ {
+	for i := range records.Len() {
 		record := records.At(i)
 		secVal, ok := record.Body().Map().Get("security")
 		require.True(t, ok)
@@ -452,7 +451,7 @@ func TestSIDEnrichingConsumer_MultipleLogRecords(t *testing.T) {
 
 func TestSIDEnrichingConsumer_NonMapBody(t *testing.T) {
 	cache := &mockCache{
-		resolveFunc: func(sid string) (*sidcache.ResolvedSID, error) {
+		resolveFunc: func(_ string) (*sidcache.ResolvedSID, error) {
 			return &sidcache.ResolvedSID{AccountName: "TEST"}, nil
 		},
 	}
@@ -466,7 +465,7 @@ func TestSIDEnrichingConsumer_NonMapBody(t *testing.T) {
 	lr := sl.LogRecords().AppendEmpty()
 	lr.Body().SetStr("string body, not a map")
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 
 	// Should pass through without error
@@ -503,7 +502,7 @@ func TestSIDEnrichingConsumer_UserIDField(t *testing.T) {
 	eventDataMap := bodyMap.PutEmptyMap("event_data")
 	eventDataMap.PutStr("UserID", testSID)
 
-	err := consumer.ConsumeLogs(context.Background(), logs)
+	err := consumer.ConsumeLogs(t.Context(), logs)
 	require.NoError(t, err)
 
 	// Verify enrichment

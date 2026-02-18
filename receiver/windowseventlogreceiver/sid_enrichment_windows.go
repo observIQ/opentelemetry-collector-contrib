@@ -51,7 +51,7 @@ func (s *sidEnrichingConsumer) ConsumeLogs(ctx context.Context, logs plog.Logs) 
 			scopeLogs := resourceLogs.ScopeLogs().At(j)
 			for k := 0; k < scopeLogs.LogRecords().Len(); k++ {
 				logRecord := scopeLogs.LogRecords().At(k)
-				s.enrichLogRecord(ctx, logRecord)
+				s.enrichLogRecord(logRecord)
 			}
 		}
 	}
@@ -60,7 +60,7 @@ func (s *sidEnrichingConsumer) ConsumeLogs(ctx context.Context, logs plog.Logs) 
 }
 
 // enrichLogRecord enriches a single log record with SID resolution
-func (s *sidEnrichingConsumer) enrichLogRecord(ctx context.Context, record plog.LogRecord) {
+func (s *sidEnrichingConsumer) enrichLogRecord(record plog.LogRecord) {
 	body := record.Body()
 	if body.Type() != pcommon.ValueTypeMap {
 		return
