@@ -8,7 +8,14 @@ package commander
 import (
 	"os"
 	"syscall"
+	"time"
 )
+
+const minAgentAgeForShutdownSignal time.Duration = 0
+
+func oneShotTimeout() time.Duration {
+	return 30 * time.Second
+}
 
 func sendShutdownSignal(process *os.Process) error {
 	return process.Signal(syscall.SIGTERM)

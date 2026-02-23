@@ -17,6 +17,10 @@ import (
 // The Go runtime can swallow a Ctrl-Break that arrives while it is still bootstrapping, leaving the agent running.
 const minAgentAgeForShutdownSignal = 500 * time.Millisecond
 
+func oneShotTimeout() time.Duration {
+	return 3 * time.Second
+}
+
 var (
 	kernel32API = windows.NewLazySystemDLL("kernel32.dll")
 

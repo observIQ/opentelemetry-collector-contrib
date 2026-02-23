@@ -13,6 +13,10 @@ import (
 
 const minAgentAgeForShutdownSignal time.Duration = 0
 
+func oneShotTimeout() time.Duration {
+	return 3 * time.Second
+}
+
 func sendShutdownSignal(process *os.Process) error {
 	return process.Signal(os.Interrupt)
 }
