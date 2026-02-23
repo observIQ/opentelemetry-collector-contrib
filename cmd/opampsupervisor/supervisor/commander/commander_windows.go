@@ -9,9 +9,14 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
+
+func oneShotTimeout() time.Duration {
+	return 3 * time.Second
+}
 
 var (
 	kernel32API = windows.NewLazySystemDLL("kernel32.dll")

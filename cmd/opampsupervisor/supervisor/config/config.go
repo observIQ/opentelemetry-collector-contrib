@@ -376,9 +376,9 @@ func DefaultSupervisor() Supervisor {
 			Directory: defaultStorageDir,
 		},
 		Agent: Agent{
-			OrphanDetectionInterval: 5 * time.Second,
-			ConfigApplyTimeout:      5 * time.Second,
-			BootstrapTimeout:        3 * time.Second,
+			OrphanDetectionInterval: defaultOrphanDetectionInterval(),
+			ConfigApplyTimeout:      defaultConfigApplyTimeout(),
+			BootstrapTimeout:        defaultBootstrapTimeout(),
 			PassthroughLogs:         false,
 		},
 		Telemetry: Telemetry{

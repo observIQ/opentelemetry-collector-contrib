@@ -304,7 +304,7 @@ func (c *Commander) StartOneShot() ([]byte, []byte, error) {
 		doneCh <- struct{}{}
 	}()
 
-	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	waitCtx, cancel := context.WithTimeout(ctx, oneShotTimeout())
 
 	defer cancel()
 

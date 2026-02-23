@@ -8,7 +8,12 @@ package commander
 import (
 	"os"
 	"syscall"
+	"time"
 )
+
+func oneShotTimeout() time.Duration {
+	return 3 * time.Second
+}
 
 func sendShutdownSignal(process *os.Process) error {
 	return process.Signal(os.Interrupt)
