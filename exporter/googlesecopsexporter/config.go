@@ -112,7 +112,7 @@ func (cfg *Config) Validate() error {
 			Logger: zap.NewNop(),
 		})
 		if err != nil {
-			return fmt.Errorf("raw_log_field is invalid: %s", err)
+			return fmt.Errorf("raw_log_field is invalid: %w", err)
 		}
 	}
 

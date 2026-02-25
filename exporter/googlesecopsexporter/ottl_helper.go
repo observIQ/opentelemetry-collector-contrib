@@ -5,12 +5,14 @@ package googlesecopsexporter
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"go.opentelemetry.io/collector/component"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottllog"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/ottlfuncs"
-	"go.opentelemetry.io/collector/component"
 )
 
 // ottlLogRecordExpression evaluates an OTTL expression, returning a resultant value.
@@ -80,14 +82,14 @@ func newValueFactory() ottl.Factory[*ottllog.TransformContext] {
 func createValueFunction(_ ottl.FunctionContext, a ottl.Arguments) (ottl.ExprFunc[*ottllog.TransformContext], error) {
 	args, ok := a.(*valueArguments)
 	if !ok {
-		return nil, fmt.Errorf("valueFactory args must be of type *valueArguments")
+		return nil, errors.New("valueFactory args must be of type *valueArguments")
 	}
 
 	return valueFn(args)
 }
 
 func valueFn(c *valueArguments) (ottl.ExprFunc[*ottllog.TransformContext], error) {
-	return func(ctx context.Context, tCtx *ottllog.TransformContext) (interface{}, error) {
+	return func(ctx context.Context, tCtx *ottllog.TransformContext) (any, error) {
 		return c.Target.Get(ctx, tCtx)
 	}, nil
 }

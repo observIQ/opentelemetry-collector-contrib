@@ -5,15 +5,16 @@ package googlesecopsexporter
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/internal/metadata"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configoptional"
 	"go.opentelemetry.io/collector/config/configretry"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/pdata/plog"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlesecopsexporter/internal/metadata"
 )
 
 // NewFactory creates a new SecOps exporter factory.
@@ -69,7 +70,7 @@ func createLogsExporter(
 		params,
 		c,
 		func(_ context.Context, _ plog.Logs) error {
-			return fmt.Errorf("not yet implemented")
+			return errors.New("not yet implemented")
 		},
 		exporterhelper.WithTimeout(c.TimeoutConfig),
 		exporterhelper.WithQueue(c.QueueBatchConfig),
