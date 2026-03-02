@@ -1,6 +1,8 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build windows
+
 package sidcache
 
 // wellKnownSIDs is a map of well-known Windows SIDs to their resolved information
