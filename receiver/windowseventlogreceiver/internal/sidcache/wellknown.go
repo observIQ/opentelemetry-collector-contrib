@@ -3,7 +3,7 @@
 
 //go:build windows
 
-package sidcache
+package sidcache // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowseventlogreceiver/internal/sidcache"
 
 // wellKnownSIDs is a map of well-known Windows SIDs to their resolved information
 // These SIDs are constant and don't require API lookups

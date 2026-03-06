@@ -3,7 +3,7 @@
 
 //go:build !windows
 
-package sidcache
+package sidcache // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowseventlogreceiver/internal/sidcache"
 
 import "errors"
 

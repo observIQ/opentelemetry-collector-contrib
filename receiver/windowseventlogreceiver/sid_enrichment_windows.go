@@ -3,7 +3,7 @@
 
 //go:build windows
 
-package windowseventlogreceiver
+package windowseventlogreceiver // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowseventlogreceiver"
 
 import (
 	"context"

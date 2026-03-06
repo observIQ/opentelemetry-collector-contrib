@@ -4,7 +4,7 @@
 // Package sidcache provides a high-performance LRU cache for Windows SID-to-name resolution.
 // It uses the Windows Local Security Authority (LSA) API to resolve Security Identifiers (SIDs)
 // to human-readable user and group names, with support for well-known SIDs and TTL-based expiration.
-package sidcache
+package sidcache // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowseventlogreceiver/internal/sidcache"
 
 import (
 	"regexp"

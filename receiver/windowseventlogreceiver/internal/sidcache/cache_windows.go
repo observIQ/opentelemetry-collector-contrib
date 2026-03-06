@@ -3,7 +3,7 @@
 
 //go:build windows
 
-package sidcache
+package sidcache // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/windowseventlogreceiver/internal/sidcache"
 
 import (
 	"errors"
@@ -68,7 +68,7 @@ type lsaObjectAttributes struct {
 // LSA_REFERENCED_DOMAIN_LIST structure
 type lsaReferencedDomainList struct {
 	Entries uint32
-	Domains uintptr
+	Domains unsafe.Pointer
 }
 
 // LSA_TRUST_INFORMATION structure
@@ -283,8 +283,7 @@ func lookupSID(sidString string) (*ResolvedSID, error) {
 	domain := ""
 	if names.DomainIndex >= 0 && domains != nil && uint32(names.DomainIndex) < domains.Entries {
 		// Get the domain from the domain list
-		domainPtr := unsafe.Pointer(domains.Domains)
-		domainInfo := (*lsaTrustInformation)(unsafe.Add(domainPtr, uintptr(names.DomainIndex)*unsafe.Sizeof(lsaTrustInformation{})))
+		domainInfo := (*lsaTrustInformation)(unsafe.Add(domains.Domains, uintptr(names.DomainIndex)*unsafe.Sizeof(lsaTrustInformation{})))
 
 		if domainInfo.Name.Buffer != nil {
 			domainUTF16 := unsafe.Slice(domainInfo.Name.Buffer, domainInfo.Name.Length/2)
