@@ -25,6 +25,7 @@ import (
 	"golang.org/x/sys/windows/registry"
 	"golang.org/x/sys/windows/svc/eventlog"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/consumerretry"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/adapter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/input/windows"
@@ -337,7 +338,8 @@ func TestExcludeProvider(t *testing.T) {
 func createTestConfig() *WindowsLogConfig {
 	return &WindowsLogConfig{
 		BaseConfig: adapter.BaseConfig{
-			Operators: []operator.Config{},
+			Operators:      []operator.Config{},
+			RetryOnFailure: consumerretry.NewDefaultConfig(),
 		},
 		InputConfig: func() windows.Config {
 			c := windows.NewConfig()
@@ -358,7 +360,8 @@ func createTestConfigWithQuery() *WindowsLogConfig {
   `
 	return &WindowsLogConfig{
 		BaseConfig: adapter.BaseConfig{
-			Operators: []operator.Config{},
+			Operators:      []operator.Config{},
+			RetryOnFailure: consumerretry.NewDefaultConfig(),
 		},
 		InputConfig: func() windows.Config {
 			c := windows.NewConfig()
