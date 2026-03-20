@@ -559,7 +559,7 @@ func TestParseBodyWithUserData(t *testing.T) {
 		},
 	}
 
-	body := formattedBody(e, EventDataFormatMap)
+	body := formattedBody(e, EventDataFormatArray)
 	require.Equal(t, map[string]any{
 		"name": "LogFileCleared",
 		"data": map[string]string{
@@ -591,7 +591,7 @@ func TestUnmarshalSystemEventWithRenderingInfo(t *testing.T) {
 	require.Empty(t, event.RenderingInfo.Task)
 	require.Empty(t, event.RenderingInfo.Opcode)
 
-	body := formattedBody(event, EventDataFormatMap)
+	body := formattedBody(event, EventDataFormatArray)
 
 	// Level, Task, Opcode fall back to System values when absent from RenderingInfo.
 	require.Equal(t, "Information", body["level"])
@@ -625,7 +625,7 @@ func TestUnmarshalSecurityEventWithRenderingInfo(t *testing.T) {
 	require.Equal(t, []string{"Audit Success"}, event.RenderingInfo.Keywords)
 	require.Contains(t, event.RenderingInfo.Message, "An account was successfully logged on.")
 
-	body := formattedBody(event, EventDataFormatMap)
+	body := formattedBody(event, EventDataFormatArray)
 
 	// Rendered values from RenderingInfo take precedence over raw System values.
 	require.Equal(t, "Information", body["level"]) // vs raw "0"
@@ -1025,7 +1025,7 @@ func TestParseBodyWithProcessingErrorData(t *testing.T) {
 		},
 	}
 
-	body := formattedBody(e, EventDataFormatMap)
+	body := formattedBody(e, EventDataFormatArray)
 	require.Equal(t, map[string]any{
 		"error_code":     uint32(15005),
 		"data_item_name": "SubjectUserSid",
@@ -1073,7 +1073,7 @@ func TestParseBodyWithDebugData(t *testing.T) {
 		},
 	}
 
-	body := formattedBody(e, EventDataFormatMap)
+	body := formattedBody(e, EventDataFormatArray)
 	require.Equal(t, map[string]any{
 		"sequence_number": uint32(42),
 		"flag_name":       "TRACE_LEVEL_INFORMATION",
@@ -1127,7 +1127,7 @@ func TestParseBodyWithBinaryEventData(t *testing.T) {
 		BinaryEventData: "AABBCCDD",
 	}
 
-	body := formattedBody(e, EventDataFormatMap)
+	body := formattedBody(e, EventDataFormatArray)
 	require.Equal(t, "AABBCCDD", body["binary_event_data"])
 }
 
