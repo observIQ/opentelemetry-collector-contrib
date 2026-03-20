@@ -59,6 +59,7 @@ func (c *Config) Build(set component.TelemetrySettings) (operator.Operator, erro
 		currentMaxReads:          c.MaxReads,
 		startAt:                  c.StartAt,
 		pollInterval:             c.PollInterval,
+		waitTimeout:              c.WaitTimeout,
 		raw:                      c.Raw,
 		eventDataFormat:          c.EventDataFormat,
 		includeLogRecordOriginal: c.IncludeLogRecordOriginal,

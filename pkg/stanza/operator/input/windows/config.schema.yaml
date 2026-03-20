@@ -22,6 +22,9 @@ $defs:
       poll_interval:
         type: string
         format: duration
+      wait_timeout:
+        type: string
+        format: duration
       query:
         x-pointer: true
         type: string
