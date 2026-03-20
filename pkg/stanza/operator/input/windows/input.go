@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sys/windows"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/internal/metadata"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator/helper"
 )
@@ -43,18 +44,18 @@ type Input struct {
 	// WaitForMultipleObjects in awaitAndReadEvents. A plain context cancellation cannot
 	// interrupt a blocking Windows syscall, so this handle bridges Go's cancellation model
 	// to the Windows API layer.
-	cancelEvent              windows.Handle
-	persister                operator.Persister
-	publisherCache           publisherCache
-	cancel                   context.CancelFunc
-	wg                       sync.WaitGroup
-	subscription             Subscription
-	maxEventsPerPollCycle    int
-	eventsReadInPollCycle    int
-	remote                   RemoteConfig
-	remoteSessionHandle      windows.Handle
-	startRemoteSession       func() error
-	processEvent             func(context.Context, Event) error
+	cancelEvent           windows.Handle
+	persister             operator.Persister
+	publisherCache        publisherCache
+	cancel                context.CancelFunc
+	wg                    sync.WaitGroup
+	subscription          Subscription
+	maxEventsPerPollCycle int
+	eventsReadInPollCycle int
+	remote                RemoteConfig
+	remoteSessionHandle   windows.Handle
+	startRemoteSession    func() error
+	processEvent          func(context.Context, Event) error
 }
 
 // newInput creates a new Input operator.
@@ -174,7 +175,7 @@ func (i *Input) Start(persister operator.Persister) error {
 
 	if !subscriptionError {
 		i.subscription = subscription
-		if EventDrivenScrapingGate.IsEnabled() {
+		if metadata.StanzaWindowsEventDrivenScrapingFeatureGate.IsEnabled() {
 			cancelEvent, err := windows.CreateEvent(nil, 1, 0, nil) // manual-reset, initially non-signaled
 			if err != nil {
 				return fmt.Errorf("failed to create cancel event: %w", err)
