@@ -51,7 +51,7 @@ type Config struct {
 	PollInterval        time.Duration `mapstructure:"poll_interval,omitempty"`
 	MaxEventsPerPoll    int           `mapstructure:"max_events_per_poll,omitempty"`
 	// WaitTimeout is the maximum duration to wait for new events before performing a
-	// safety-net poll in event-driven mode (see receiver.windowseventlog.eventDrivenScraping
+	// safety-net poll in event-driven mode (see stanza.windows.eventDrivenScraping
 	// feature gate). Under normal conditions the subscription signal fires immediately, so
 	// this value is rarely reached. Defaults to 5s. Ignored when the feature gate is not enabled.
 	WaitTimeout              time.Duration   `mapstructure:"wait_timeout,omitempty"`
