@@ -22,9 +22,6 @@ $defs:
       poll_interval:
         type: string
         format: duration
-      wait_timeout:
-        type: string
-        format: duration
       query:
         x-pointer: true
         type: string
@@ -36,6 +33,10 @@ $defs:
         type: string
       suppress_rendering_info:
         type: boolean
+      wait_timeout:
+        description: WaitTimeout is the maximum duration to wait for new events before performing a safety-net poll in event-driven mode (see stanza.windows.eventDrivenScraping feature gate). Under normal conditions the subscription signal fires immediately, so this value is rarely reached. Defaults to 5s. Ignored when the feature gate is not enabled.
+        type: string
+        format: duration
     allOf:
       - $ref: /pkg/stanza/operator/helper.input_config
   event_data_format:
