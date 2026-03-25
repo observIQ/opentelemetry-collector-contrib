@@ -520,7 +520,7 @@ func (r *rawEventXML) getRenderedLevel() string {
 	return ""
 }
 
-func (_ *rawEventXML) toEventXML() *EventXML {
+func (*rawEventXML) toEventXML() *EventXML {
 	panic("toEventXML called on rawEventXML: only valid in non-raw mode")
 }
 
