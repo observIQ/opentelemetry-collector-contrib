@@ -510,15 +510,16 @@ type rawRenderingInfoXML struct {
 	Level string `xml:"Level"`
 }
 
-func (e *rawEventXML) getOriginal() string   { return e.Original }
-func (e *rawEventXML) getSystemTime() string { return e.TimeCreated.SystemTime }
-func (e *rawEventXML) getLevel() string      { return e.Level }
-func (e *rawEventXML) getRenderedLevel() string {
-	if e.RenderingInfo != nil {
-		return e.RenderingInfo.Level
+func (r *rawEventXML) getOriginal() string   { return r.Original }
+func (r *rawEventXML) getSystemTime() string { return r.TimeCreated.SystemTime }
+func (r *rawEventXML) getLevel() string      { return r.Level }
+func (r *rawEventXML) getRenderedLevel() string {
+	if r.RenderingInfo != nil {
+		return r.RenderingInfo.Level
 	}
 	return ""
 }
+
 func (r *rawEventXML) toEventXML() *EventXML {
 	panic("toEventXML called on rawEventXML: only valid in non-raw mode")
 }
