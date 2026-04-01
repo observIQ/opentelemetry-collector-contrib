@@ -35,6 +35,12 @@ func createLogsReceiver(
 	nextConsumer consumer.Logs,
 ) (receiver.Logs, error) {
 	receiverCfg := cfg.(*WindowsLogConfig)
+
+	telemetryBuilder, err := metadata.NewTelemetryBuilder(set.TelemetrySettings)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create SID cache if enabled
 	var cache sidcache.Cache
 	if receiverCfg.ResolveSIDs.Enabled {
@@ -43,7 +49,6 @@ func createLogsReceiver(
 			TTL:  receiverCfg.ResolveSIDs.CacheTTL,
 		}
 
-		var err error
 		cache, err = sidcache.New(cacheConfig)
 		if err != nil {
 			return nil, err
@@ -54,8 +59,15 @@ func createLogsReceiver(
 			zap.Duration("cache_ttl", cacheConfig.TTL))
 	}
 
-	// Wrap the consumer with SID enrichment
+	// Inject telemetry bridge so the operator can record per-event and per-channel metrics.
+	receiverCfg.InputConfig.Telemetry = &receiverWindowsTelemetry{tb: telemetryBuilder}
+
+	// Wrap the consumer with SID enrichment, then lag tracking.
 	enrichedConsumer := newSIDEnrichingConsumer(nextConsumer, cache, set.Logger)
+	lagConsumer, err := newLagTrackingConsumer(enrichedConsumer, telemetryBuilder, receiverCfg.InputConfig.Channel)
+	if err != nil {
+		return nil, err
+	}
 
 	stanzaFactory := adapter.NewFactory(receiverType{}, metadata.LogsStability)
 
@@ -74,7 +86,7 @@ func createLogsReceiver(
 				Password: rc.Password,
 				Domain:   rc.Domain,
 			}
-			r, err := stanzaFactory.CreateLogs(ctx, set, &dcCfg, enrichedConsumer)
+			r, err := stanzaFactory.CreateLogs(ctx, set, &dcCfg, lagConsumer)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create receiver for domain controller %q: %w", rc.Server, err)
 			}
@@ -83,8 +95,8 @@ func createLogsReceiver(
 		return &multiLogsReceiver{receivers: receivers}, nil
 	}
 
-	// Create the underlying Stanza receiver with the enriched consumer
-	return stanzaFactory.CreateLogs(ctx, set, cfg, enrichedConsumer)
+	// Create the underlying Stanza receiver with the lag-tracking consumer.
+	return stanzaFactory.CreateLogs(ctx, set, cfg, lagConsumer)
 }
 
 type multiLogsReceiver struct {
