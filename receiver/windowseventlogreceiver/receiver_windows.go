@@ -37,6 +37,11 @@ func createLogsReceiver(
 ) (receiver.Logs, error) {
 	receiverCfg := cfg.(*WindowsLogConfig)
 
+	telemetryBuilder, err := metadata.NewTelemetryBuilder(set.TelemetrySettings)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create SID cache if enabled
 	var cache sidcache.Cache
 	if receiverCfg.ResolveSIDs.Enabled {
@@ -45,7 +50,6 @@ func createLogsReceiver(
 			TTL:  receiverCfg.ResolveSIDs.CacheTTL,
 		}
 
-		var err error
 		cache, err = sidcache.New(cacheConfig)
 		if err != nil {
 			return nil, err
@@ -56,12 +60,19 @@ func createLogsReceiver(
 			zap.Duration("cache_ttl", cacheConfig.TTL))
 	}
 
-	// Wrap the consumer with SID enrichment
-	enrichedConsumer := newSIDEnrichingConsumer(nextConsumer, cache, set.Logger)
+	// Inject telemetry bridge so the operator can record per-event and per-channel metrics.
+	receiverCfg.InputConfig.Telemetry = &receiverWindowsTelemetry{tb: telemetryBuilder}
 
-	// Create the underlying Stanza receiver with the enriched consumer
+	// Wrap the consumer with SID enrichment, then lag tracking
+	enrichedConsumer := newSIDEnrichingConsumer(nextConsumer, cache, set.Logger)
+	lagConsumer, err := newLagTrackingConsumer(enrichedConsumer, telemetryBuilder, receiverCfg.InputConfig.Channel)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the underlying Stanza receiver with the lag-tracking consumer
 	stanzaFactory := adapter.NewFactory(receiverType{}, metadata.LogsStability)
-	return stanzaFactory.CreateLogs(ctx, set, cfg, enrichedConsumer)
+	return stanzaFactory.CreateLogs(ctx, set, cfg, lagConsumer)
 }
 
 // receiverType implements adapter.LogReceiverType

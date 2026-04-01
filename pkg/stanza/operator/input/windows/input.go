@@ -56,6 +56,9 @@ type Input struct {
 	remoteSessionHandle   windows.Handle
 	startRemoteSession    func() error
 	processEvent          func(context.Context, Event) error
+	telemetry             WindowsInputTelemetry
+	logHandle             uintptr
+	lastRecordID          uint64
 }
 
 // newInput creates a new Input operator.
@@ -71,6 +74,7 @@ func newInput(settings component.TelemetrySettings) *Input {
 		},
 	}
 	input.startRemoteSession = input.defaultStartRemoteSession
+	input.telemetry = noopWindowsInputTelemetry{}
 	return input
 }
 
@@ -128,6 +132,14 @@ func (i *Input) Start(persister operator.Persister) error {
 	if i.isRemote() {
 		if err := i.startRemoteSession(); err != nil {
 			return fmt.Errorf("failed to start remote session for server %s: %w", i.remote.Server, err)
+		}
+	}
+
+	if i.channel != "" {
+		if handle, err := evtOpenLog(uintptr(i.remoteSessionHandle), windows.StringToUTF16Ptr(i.channel), EvtOpenChannelPath); err != nil {
+			i.Logger().Warn("Failed to open log handle for channel_size metric", zap.String("channel", i.channel), zap.Error(err))
+		} else {
+			i.logHandle = handle
 		}
 	}
 
@@ -230,6 +242,13 @@ func (i *Input) Stop() error {
 		errs = multierr.Append(errs, fmt.Errorf("failed to close publishers: %w", err))
 	}
 
+	if i.logHandle != 0 {
+		if err := evtClose(i.logHandle); err != nil {
+			errs = multierr.Append(errs, fmt.Errorf("failed to close log handle for %q: %w", i.channel, err))
+		}
+		i.logHandle = 0
+	}
+
 	return multierr.Append(errs, i.stopRemoteSession())
 }
 
@@ -243,6 +262,13 @@ func (i *Input) pollAndRead(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(i.pollInterval):
+			if i.channel != "" && i.logHandle != 0 {
+				var variant evtVariant
+				var bufferUsed uint32
+				if err := evtGetLogInfo(i.logHandle, EvtLogNumberOfLogRecords, &variant, &bufferUsed); err == nil {
+					i.telemetry.RecordChannelSize(ctx, i.channel, int64(variant.Value))
+				}
+			}
 			i.read(ctx)
 		}
 	}
@@ -274,6 +300,15 @@ func (i *Input) readBatch(ctx context.Context) bool {
 	if err == nil && actualMaxReads < maxBatchSize {
 		i.currentMaxReads = actualMaxReads
 		i.Logger().Debug("Encountered RPC_S_INVALID_BOUND, reduced batch size", zap.Int("current_batch_size", i.currentMaxReads), zap.Int("original_batch_size", i.maxReads))
+	}
+
+	if errors.Is(err, ErrorEVTQueryResultStale) {
+		i.Logger().Warn("Windows Event Log bookmark invalidated: ring buffer overflowed and events were dropped; subscription has been reopened",
+			zap.String("channel", i.channel),
+			zap.Uint64("last_record_id", i.lastRecordID),
+		)
+		i.lastRecordID = 0 // reset: next event establishes a new baseline to avoid a false gap warning
+		return false
 	}
 
 	if err != nil {
@@ -316,6 +351,9 @@ func (i *Input) readBatch(ctx context.Context) bool {
 	}
 
 	i.eventsReadInPollCycle += len(events)
+	if len(events) > 0 {
+		i.telemetry.RecordBatchSize(ctx, i.channel, int64(len(events)))
+	}
 	return len(events) != 0
 }
 
@@ -338,6 +376,13 @@ func (i *Input) awaitAndReadEvents(ctx context.Context) {
 		}
 
 		i.eventsReadInPollCycle = 0
+		if i.channel != "" && i.logHandle != 0 {
+			var variant evtVariant
+			var bufferUsed uint32
+			if err := evtGetLogInfo(i.logHandle, EvtLogNumberOfLogRecords, &variant, &bufferUsed); err == nil {
+				i.telemetry.RecordChannelSize(ctx, i.channel, int64(variant.Value))
+			}
+		}
 		i.read(ctx)
 	}
 }
@@ -355,6 +400,31 @@ func (i *Input) getPublisherName(event Event) (name string, excluded bool) {
 	return providerName, false
 }
 
+// checkRecordIDGap logs a warning when consecutive event RecordIDs are not
+// contiguous, indicating that events were silently dropped from the ring buffer.
+// Skipped in query mode (channel == "") because events from multiple channels
+// have unrelated RecordID sequences.
+func (i *Input) checkRecordIDGap(ctx context.Context, event parsedEvent) {
+	if i.channel == "" {
+		return
+	}
+	recordID := event.getRecordID()
+	if recordID == 0 {
+		return // absent or unparseable RecordID
+	}
+	if i.lastRecordID != 0 && recordID > i.lastRecordID+1 {
+		missed := recordID - i.lastRecordID - 1
+		i.Logger().Warn("Windows Event Log gap detected; events may have been missed from the channel",
+			zap.String("channel", i.channel),
+			zap.Uint64("last_record_id", i.lastRecordID),
+			zap.Uint64("current_record_id", recordID),
+			zap.Uint64("estimated_missed", missed),
+		)
+		i.telemetry.RecordMissedEvents(ctx, i.channel, int64(missed))
+	}
+	i.lastRecordID = recordID
+}
+
 func (i *Input) renderSimpleAndSend(ctx context.Context, event Event) error {
 	render := event.RenderSimple
 	if i.raw {
@@ -364,6 +434,8 @@ func (i *Input) renderSimpleAndSend(ctx context.Context, event Event) error {
 	if err != nil {
 		return fmt.Errorf("render simple event: %w", err)
 	}
+	i.checkRecordIDGap(ctx, simpleEvent)
+	i.telemetry.RecordEventSize(ctx, i.channel, len(simpleEvent.getOriginal()))
 	return i.sendEvent(ctx, simpleEvent)
 }
 
@@ -374,6 +446,8 @@ func (i *Input) renderDeepAndSend(ctx context.Context, event Event, publisher Pu
 	}
 	deepEvent, err := render(i.buffer, publisher)
 	if err == nil {
+		i.checkRecordIDGap(ctx, deepEvent)
+		i.telemetry.RecordEventSize(ctx, i.channel, len(deepEvent.getOriginal()))
 		return i.sendEvent(ctx, deepEvent)
 	}
 	return multierr.Append(
