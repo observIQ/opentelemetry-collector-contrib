@@ -8,13 +8,51 @@ import (
 	"errors"
 	"fmt"
 
-	gojson "github.com/goccy/go-json"
 	jsoniter "github.com/json-iterator/go"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	conventions "go.opentelemetry.io/otel/semconv/v1.38.0"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/encoding/azureencodingextension/internal/unmarshaler"
+)
+
+// List of supported Azure Resource Log Categories
+const (
+	categoryApplicationGatewayAccessLog        = "ApplicationGatewayAccessLog"
+	categoryApplicationGatewayPerformanceLog   = "ApplicationGatewayPerformanceLog"
+	categoryApplicationGatewayFirewallLog      = "ApplicationGatewayFirewallLog"
+	categoryAppServiceAppLogs                  = "AppServiceAppLogs"
+	categoryAppServiceAuditLogs                = "AppServiceAuditLogs"
+	categoryAppServiceAuthenticationLogs       = "AppServiceAuthenticationLogs"
+	categoryAppServiceConsoleLogs              = "AppServiceConsoleLogs"
+	categoryAppServiceFileAuditLogs            = "AppServiceFileAuditLogs"
+	categoryAppServiceHTTPLogs                 = "AppServiceHTTPLogs"
+	categoryAppServiceIPSecAuditLogs           = "AppServiceIPSecAuditLogs"
+	categoryAppServicePlatformLogs             = "AppServicePlatformLogs"
+	categoryAzureCdnAccessLog                  = "AzureCdnAccessLog"
+	categoryAzureMSApplicationMetricsLog       = "ApplicationMetricsLogs"
+	categoryAzureMSDiagnosticErrorLog          = "DiagnosticErrorLogs"
+	categoryAzureMSOperationalLog              = "OperationalLogs"
+	categoryAzureMSRuntimeAuditLog             = "RuntimeAuditLogs"
+	categoryAzureMSVNetAndIPFilteringLog       = "VNetAndIPFilteringLogs"
+	categoryDataFactoryActivityRuns            = "ActivityRuns"
+	categoryDataFactoryPipelineRuns            = "PipelineRuns"
+	categoryDataFactoryTriggerRuns             = "TriggerRuns"
+	categoryFrontDoorAccessLog                 = "FrontDoorAccessLog"
+	categoryFrontDoorHealthProbeLog            = "FrontDoorHealthProbeLog"
+	categoryFrontdoorWebApplicationFirewallLog = "FrontDoorWebApplicationFirewallLog"
+	categoryFunctionAppLogs                    = "FunctionAppLogs"
+	categoryStorageRead                        = "StorageRead"
+	categoryStorageWrite                       = "StorageWrite"
+	categoryStorageDelete                      = "StorageDelete"
+	categoryAdministrative                     = "Administrative"
+	categoryAlert                              = "Alert"
+	categoryAutoscale                          = "Autoscale"
+	categorySecurity                           = "Security"
+	categoryPolicy                             = "Policy"
+	categoryRecommendation                     = "Recommendation"
+	categoryResourceHealth                     = "ResourceHealth"
+	categoryServiceHealth                      = "ServiceHealth"
 )
 
 // Non-SemConv attributes that are used for common Azure Log Record fields
@@ -27,13 +65,9 @@ const (
 	// from `operationVersion` field in Azure Log Record
 	attributeAzureOperationVersion = "azure.operation.version"
 
-	// OpenTelemetry attribute name for Azure Duration,
+	// OpenTelemetry attribute name for generic Azure Operation Duration,
 	// from `durationMs` field in Azure Log Record
-	attributeAzureDuration = "azure.duration"
-
-	// OpenTelemetry attribute name for Azure Identity,
-	// from `identity` field in Azure Log Record
-	attributeAzureIdentity = "azure.identity"
+	attributeAzureOperationDuration = "azure.operation.duration"
 
 	// OpenTelemetry attribute name for Azure Log Record properties,
 	// from `properties` field in Azure Log Record
@@ -54,6 +88,26 @@ const (
 	attributesAzureResultDescription = "azure.result.description"
 )
 
+// Common Non-SemConv attributes that are used in "properties" fields across multiple
+// Azure Log Record Categories
+const (
+	// OpenTelemetry attribute name for "Host" HTTP Header value
+	attributeHTTPHeaderHost = "http.request.header.host"
+
+	// OpenTelemetry attribute name for the WAF action taken on the request
+	attributeSecurityRuleActionKey = "security_rule.action"
+
+	// OpenTelemetry attribute name for the operations mode of the WAF policy
+	attributeSecurityRuleRulesetModeKey = "security_rule.ruleset.mode"
+
+	// OpenTelemetry attribute name for Error Code
+	attributeErrorCode = "error.code"
+
+	// OpenTelemetry attribute name for Azure HTTP Request Duration,
+	// from `durationMs` field in Azure Log Record
+	attributeAzureRequestDuration = "azure.request.duration"
+)
+
 var errNoTimestamp = errors.New("no valid time fields are set on Log record ('time' or 'timestamp')")
 
 // azureLogRecord is a common interface for all category-specific structures
@@ -70,21 +124,20 @@ type azureLogRecord interface {
 // This schema are applicable to most Resource Logs and
 // can be extended with additional fields for specific Log Categories
 type azureLogRecordBase struct {
-	Time              string          `json:"time"`      // most Categories use this field for timestamp
-	TimeStamp         string          `json:"timestamp"` // some Categories use this field for timestamp
-	ResourceID        string          `json:"resourceId"`
-	TenantID          string          `json:"tenantId"`
-	OperationName     string          `json:"operationName"`
-	OperationVersion  *string         `json:"operationVersion"`
-	ResultType        *string         `json:"resultType"`
-	ResultSignature   *string         `json:"resultSignature"`
-	ResultDescription *string         `json:"resultDescription"`
-	DurationMs        *json.Number    `json:"durationMs"` // int
-	CallerIPAddress   *string         `json:"callerIpAddress"`
-	CorrelationID     *string         `json:"correlationId"`
-	Identity          *map[string]any `json:"identity"`
-	Level             *string         `json:"level"`
-	Location          string          `json:"location"`
+	Time              string       `json:"time"`      // most Categories use this field for timestamp
+	TimeStamp         string       `json:"timestamp"` // some Categories use this field for timestamp
+	ResourceID        string       `json:"resourceId"`
+	TenantID          string       `json:"tenantId"`
+	OperationName     string       `json:"operationName"`
+	OperationVersion  *string      `json:"operationVersion"`
+	ResultType        *string      `json:"resultType"`
+	ResultSignature   *string      `json:"resultSignature"`
+	ResultDescription *string      `json:"resultDescription"`
+	DurationMs        *json.Number `json:"durationMs"` // int
+	CallerIPAddress   *string      `json:"callerIpAddress"`
+	CorrelationID     *string      `json:"correlationId"`
+	Level             *json.Number `json:"level"`
+	Location          string       `json:"location"`
 }
 
 // GetResource returns resource attributes for the parsed Log Record
@@ -129,7 +182,7 @@ func (r *azureLogRecordBase) GetLevel() (plog.SeverityNumber, string, bool) {
 	severity := asSeverity(*r.Level)
 	// Saving original log.Level text,
 	// not the internal OpenTelemetry SeverityNumber -> SeverityText mapping
-	return severity, *r.Level, true
+	return severity, r.Level.String(), true
 }
 
 // PutCommonAttributes puts already parsed common attributes into provided Attributes Map/Body
@@ -143,10 +196,11 @@ func (r *azureLogRecordBase) PutCommonAttributes(attrs pcommon.Map, _ pcommon.Va
 	unmarshaler.AttrPutStrPtrIf(attrs, attributesAzureResultDescription, r.ResultDescription)
 	unmarshaler.AttrPutStrPtrIf(attrs, string(conventions.NetworkPeerAddressKey), r.CallerIPAddress)
 	unmarshaler.AttrPutStrPtrIf(attrs, attributeAzureCorrelationID, r.CorrelationID)
-	unmarshaler.AttrPutIntNumberPtrIf(attrs, attributeAzureDuration, r.DurationMs)
-	if r.Identity != nil {
-		unmarshaler.AttrPutMapIf(attrs, attributeAzureIdentity, *r.Identity)
-	}
+	unmarshaler.AttrPutIntNumberPtrIf(attrs, attributeAzureOperationDuration, r.DurationMs)
+	// Identity is NOT processed here. Each category-specific struct is
+	// responsible for calling the appropriate identity parser in its own
+	// PutCommonAttributes override, because the identity field has different
+	// structures across Azure log categories (Activity, Storage, etc.).
 }
 
 // PutProperties puts already attributes from "properties" field into provided Attributes Map/Body
@@ -156,10 +210,12 @@ func (*azureLogRecordBase) PutProperties(_ pcommon.Map, _ pcommon.Value) error {
 	return nil
 }
 
-// azureLogRecordBase represents a single Azure log following the common schema,
-// but has unknown for us Category
+// azureLogRecordGeneric represents a single Azure log following the common schema,
+// but has unknown for us Category.
 // In this case we couldn't correctly map properties to attributes and simply copy them
-// as-is to the attributes
+// as-is to the attributes.
+// Identity is not handled for unknown categories - each known category handles
+// its own identity structure with a typed struct.
 type azureLogRecordGeneric struct {
 	azureLogRecordBase
 
@@ -178,7 +234,7 @@ func (r *azureLogRecordGeneric) PutProperties(attrs pcommon.Map, body pcommon.Va
 	// so we'll try to parse it as JSON here
 	// If parsing will fail - we will put value of "properties" field
 	// into `azure.properties` Attribute and return parse error to caller
-	if err := gojson.Unmarshal(r.Properties, &properties); err != nil {
+	if err := jsoniter.ConfigFastest.Unmarshal(r.Properties, &properties); err != nil {
 		attrs.PutStr(attributesAzureProperties, string(r.Properties))
 		return fmt.Errorf("failed to parse Azure Logs 'properties' field as JSON: %w", err)
 	}
@@ -196,7 +252,7 @@ func (r *azureLogRecordGeneric) PutProperties(attrs pcommon.Map, body pcommon.Va
 				value.SetStr(fmt.Sprintf("%v", v))
 			}
 		case "duration":
-			value := attrs.PutEmpty(attributeAzureDuration)
+			value := attrs.PutEmpty(attributeAzureOperationDuration)
 			if err := value.FromRaw(v); err != nil {
 				value.SetStr(fmt.Sprintf("%v", v))
 			}
@@ -213,8 +269,81 @@ func (r *azureLogRecordGeneric) PutProperties(attrs pcommon.Map, body pcommon.Va
 }
 
 // processLogRecord tries to parse incoming record based of provided logCategory
-func processLogRecord(_ string, record []byte) (azureLogRecord, error) {
-	parsed := new(azureLogRecordGeneric)
+func processLogRecord(logCategory string, record []byte) (azureLogRecord, error) {
+	var parsed azureLogRecord
+
+	switch logCategory {
+	case categoryApplicationGatewayAccessLog:
+		parsed = new(azureApplicationGatewayAccessLog)
+	case categoryApplicationGatewayPerformanceLog:
+		parsed = new(azureApplicationGatewayPerformanceLog)
+	case categoryApplicationGatewayFirewallLog:
+		parsed = new(azureApplicationGatewayFirewallLog)
+	case categoryAppServiceAppLogs:
+		parsed = new(azureAppServiceAppLog)
+	case categoryAppServiceAuditLogs:
+		parsed = new(azureAppServiceAuditLog)
+	case categoryAppServiceAuthenticationLogs:
+		parsed = new(azureAppServiceAuthenticationLog)
+	case categoryAppServiceConsoleLogs:
+		parsed = new(azureAppServiceConsoleLog)
+	case categoryAppServiceHTTPLogs:
+		parsed = new(azureAppServiceHTTPLog)
+	case categoryAppServiceIPSecAuditLogs:
+		parsed = new(azureAppServiceIPSecAuditLog)
+	case categoryAppServicePlatformLogs:
+		parsed = new(azureAppServicePlatformLog)
+	case categoryAppServiceFileAuditLogs:
+		parsed = new(azureAppServiceFileAuditLog)
+	case categoryAzureCdnAccessLog:
+		parsed = new(azureHTTPAccessLog)
+	case categoryAzureMSApplicationMetricsLog:
+		parsed = new(azureMSApplicationMetricsLog)
+	case categoryAzureMSDiagnosticErrorLog:
+		parsed = new(azureMSDiagnosticErrorLog)
+	case categoryAzureMSOperationalLog:
+		parsed = new(azureMSOperationalLog)
+	case categoryAzureMSRuntimeAuditLog:
+		parsed = new(azureMSRuntimeAuditLog)
+	case categoryAzureMSVNetAndIPFilteringLog:
+		parsed = new(azureMSVNetAndIPFilteringLog)
+	case categoryDataFactoryActivityRuns:
+		parsed = new(azureDataFactoryActivityRunsLog)
+	case categoryDataFactoryPipelineRuns:
+		parsed = new(azureDataFactoryPipelineRunsLog)
+	case categoryDataFactoryTriggerRuns:
+		parsed = new(azureDataFactoryTriggerRunsLog)
+	case categoryFrontDoorAccessLog:
+		parsed = new(azureHTTPAccessLog)
+	case categoryFrontDoorHealthProbeLog:
+		parsed = new(frontDoorHealthProbeLog)
+	case categoryFrontdoorWebApplicationFirewallLog:
+		parsed = new(frontDoorWAFLog)
+	case categoryFunctionAppLogs:
+		parsed = new(azureFunctionAppLog)
+	// StorageRead, StorageWrite, StorageDelete share the same properties,
+	// called StorageBlobLogs, see https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/storagebloblogs
+	case categoryStorageRead, categoryStorageWrite, categoryStorageDelete:
+		parsed = new(azureStorageBlobLog)
+	case categoryAdministrative:
+		parsed = new(azureAdministrativeLog)
+	case categoryAlert:
+		parsed = new(azureAlertLog)
+	case categoryAutoscale:
+		parsed = new(azureAutoscaleLog)
+	case categorySecurity:
+		parsed = new(azureSecurityLog)
+	case categoryPolicy:
+		parsed = new(azurePolicyLog)
+	case categoryServiceHealth:
+		parsed = new(azureServiceHealthLog)
+	case categoryRecommendation:
+		parsed = new(azureRecommendationLog)
+	case categoryResourceHealth:
+		parsed = new(azureResourceHealthLog)
+	default:
+		parsed = new(azureLogRecordGeneric)
+	}
 
 	// Unfortunately, "goccy/go-json" has a bug with case-insensitive key matching
 	// for nested structures, so we have to use jsoniter here

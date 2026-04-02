@@ -29,15 +29,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/kafkareceiver/internal/metadata"
 )
 
-func setFranzGo(tb testing.TB, value bool) {
-	// Feature gate is now stable and always enabled.
-	// This function is kept for backward compatibility with existing tests
-	// but no longer modifies the feature gate state.
-	if !value {
-		tb.Skip("Sarama client tests are skipped as the franz-go feature gate is now stable and always enabled")
-	}
-}
-
 func TestConsumerShutdownConsuming(t *testing.T) {
 	type tCfg struct {
 		mark        MessageMarking
@@ -162,10 +153,8 @@ func TestConsumerShutdownConsuming(t *testing.T) {
 	testShutdown := func(tb testing.TB, testConfig tCfg, want assertions) {
 		// Test that the consumer shuts down while consuming a message and
 		// commits the offset after it's left the group.
-		setFranzGo(tb, true)
 
 		kafkaClient, cfg := mustNewFakeCluster(tb, kfake.SeedTopics(1, topic))
-		cfg.ConsumerConfig = configkafka.NewDefaultConsumerConfig()
 		cfg.GroupID = tb.Name()
 		cfg.AutoCommit = configkafka.AutoCommitConfig{Enable: true, Interval: 10 * time.Second}
 		// Set MinFetchSize to ensure all records are fetched at once
@@ -181,7 +170,7 @@ func TestConsumerShutdownConsuming(t *testing.T) {
 		newConsumeFunc := func() (newConsumeMessageFunc, chan<- struct{}) {
 			consuming := make(chan struct{})
 			return func(component.Host, *receiverhelper.ObsReport, *metadata.TelemetryBuilder) (consumeMessageFunc, error) {
-				return func(ctx context.Context, _ kafkaMessage, _ attribute.Set) error {
+				return func(ctx context.Context, _ *kgo.Record, _ attribute.Set) error {
 					wg.Add(1)
 					defer wg.Done()
 
@@ -242,12 +231,10 @@ func TestConsumerShutdownConsuming(t *testing.T) {
 }
 
 func TestConsumerShutdownNotStarted(t *testing.T) {
-	setFranzGo(t, true)
-
 	_, cfg := mustNewFakeCluster(t, kfake.SeedTopics(1, "test"))
 	settings, _, _ := mustNewSettings(t)
 	consumeFn := func(component.Host, *receiverhelper.ObsReport, *metadata.TelemetryBuilder) (consumeMessageFunc, error) {
-		return func(_ context.Context, _ kafkaMessage, _ attribute.Set) error {
+		return func(_ context.Context, _ *kgo.Record, _ attribute.Set) error {
 			return nil
 		}, nil
 	}
@@ -268,10 +255,8 @@ func TestConsumerShutdownNotStarted(t *testing.T) {
 // handling (lost() → pc.wait). It spins up a kfake cluster, floods them with
 // records, and repeatedly invokes lost() while consumption is in-flight.
 func TestRaceLostVsConsume(t *testing.T) {
-	setFranzGo(t, true)
 	topic := "otlp_spans"
 	kafkaClient, cfg := mustNewFakeCluster(t, kfake.SeedTopics(1, topic))
-	cfg.ConsumerConfig = configkafka.NewDefaultConsumerConfig()
 	cfg.GroupID = t.Name()
 	cfg.MaxFetchSize = 1 // Force a lot of iterations of consume()
 	cfg.AutoCommit = configkafka.AutoCommitConfig{
@@ -291,7 +276,7 @@ func TestRaceLostVsConsume(t *testing.T) {
 
 	// Noop consume function.
 	consumeFn := func(component.Host, *receiverhelper.ObsReport, *metadata.TelemetryBuilder) (consumeMessageFunc, error) {
-		return func(context.Context, kafkaMessage, attribute.Set) error {
+		return func(context.Context, *kgo.Record, attribute.Set) error {
 			return nil
 		}, nil
 	}
@@ -309,7 +294,6 @@ func TestRaceLostVsConsume(t *testing.T) {
 			c.lost(t.Context(), nil, topicMap, false)
 			c.assigned(t.Context(), kafkaClient, topicMap)
 			c.client.ForceRebalance()
-			time.Sleep(time.Millisecond)
 		}
 	}()
 
@@ -325,7 +309,7 @@ func TestLost(t *testing.T) {
 	settings, _, _ := mustNewSettings(t)
 
 	consumeFn := func(component.Host, *receiverhelper.ObsReport, *metadata.TelemetryBuilder) (consumeMessageFunc, error) {
-		return func(_ context.Context, _ kafkaMessage, _ attribute.Set) error {
+		return func(_ context.Context, _ *kgo.Record, _ attribute.Set) error {
 			return nil
 		}, nil
 	}
@@ -344,19 +328,16 @@ func TestLost(t *testing.T) {
 }
 
 func TestFranzConsumer_UseLeaderEpoch_Smoke(t *testing.T) {
-	setFranzGo(t, true)
-
 	topic := "otlp_spans"
 	kafkaClient, cfg := mustNewFakeCluster(t, kfake.SeedTopics(1, topic))
 	cfg.UseLeaderEpoch = false // <-- exercise the option
-	cfg.ConsumerConfig = configkafka.NewDefaultConsumerConfig()
 	cfg.GroupID = t.Name()
 	cfg.AutoCommit = configkafka.AutoCommitConfig{Enable: true, Interval: 100 * time.Millisecond}
 
 	var called atomic.Int64
 	settings, _, _ := mustNewSettings(t)
 	consumeFn := func(component.Host, *receiverhelper.ObsReport, *metadata.TelemetryBuilder) (consumeMessageFunc, error) {
-		return func(_ context.Context, _ kafkaMessage, _ attribute.Set) error {
+		return func(_ context.Context, _ *kgo.Record, _ attribute.Set) error {
 			called.Add(1)
 			return nil
 		}, nil
@@ -409,18 +390,13 @@ func TestMakeUseLeaderEpochAdjuster_ClearsEpoch(t *testing.T) {
 // It creates three topics (logs-a, logs-b, logs-c) matching the pattern ^logs-.*
 // and excludes logs-a and logs-b using ^logs-(a|b)$, expecting only logs-c to be consumed.
 func TestExcludeTopicWithRegex(t *testing.T) {
-	setFranzGo(t, true)
-
 	// Create three topics: logs-a, logs-b, logs-c
 	kafkaClient, cfg := mustNewFakeCluster(t,
 		kfake.SeedTopics(1, "logs-a"),
 		kfake.SeedTopics(1, "logs-b"),
 		kfake.SeedTopics(1, "logs-c"),
 	)
-
-	cfg.ConsumerConfig = configkafka.NewDefaultConsumerConfig()
 	cfg.GroupID = t.Name()
-	cfg.InitialOffset = "earliest"
 	cfg.AutoCommit = configkafka.AutoCommitConfig{Enable: true, Interval: 100 * time.Millisecond}
 
 	// Prepare test data
@@ -443,9 +419,9 @@ func TestExcludeTopicWithRegex(t *testing.T) {
 
 	settings, _, _ := mustNewSettings(t)
 	consumeFn := func(component.Host, *receiverhelper.ObsReport, *metadata.TelemetryBuilder) (consumeMessageFunc, error) {
-		return func(_ context.Context, msg kafkaMessage, _ attribute.Set) error {
+		return func(_ context.Context, record *kgo.Record, _ attribute.Set) error {
 			mu.Lock()
-			consumedTopics[msg.topic()]++
+			consumedTopics[record.Topic]++
 			mu.Unlock()
 			called.Add(1)
 			return nil

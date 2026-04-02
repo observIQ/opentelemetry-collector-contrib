@@ -45,6 +45,7 @@ type s3EventRecord struct {
 
 // s3EventNotification is the top-level structure for S3 event notifications
 type s3EventNotification struct {
+	Event   string          `json:"Event"`
 	Records []s3EventRecord `json:"Records"`
 }
 
@@ -141,7 +142,7 @@ func (r *s3SQSNotificationReader) readAll(ctx context.Context, _ string, callbac
 				messageBody := *message.Body
 
 				// First try to parse as direct S3 event notification
-				if err = json.Unmarshal([]byte(messageBody), &s3Event); err != nil || len(s3Event.Records) == 0 {
+				if err = json.Unmarshal([]byte(messageBody), &s3Event); err != nil || (len(s3Event.Records) == 0 && s3Event.Event != "s3:TestEvent") {
 					// If direct parsing failed, try to extract from SNS notification format
 					r.logger.Debug("Direct parsing as S3 event failed, trying SNS format", zap.Error(err))
 
@@ -156,11 +157,16 @@ func (r *s3SQSNotificationReader) readAll(ctx context.Context, _ string, callbac
 						r.logger.Warn("Message is not a valid S3 notification", zap.String("type", snsMsg.Type))
 						continue
 					}
+
 					if err = json.Unmarshal([]byte(snsMsg.Message), &s3Event); err != nil {
 						r.logger.Warn("Failed to parse S3 event from SNS message", zap.Error(err))
 						continue
 					}
 				}
+
+				// Track whether all records were successfully processed.
+				// Only delete the message if all records succeed to prevent data loss.
+				allRecordsSucceeded := true
 
 				// Process each S3 object notification
 				for _, record := range s3Event.Records {
@@ -202,6 +208,7 @@ func (r *s3SQSNotificationReader) readAll(ctx context.Context, _ string, callbac
 							zap.String("bucket", bucket),
 							zap.String("key", decodedKey),
 							zap.Error(err))
+						allRecordsSucceeded = false
 						continue
 					}
 
@@ -210,15 +217,24 @@ func (r *s3SQSNotificationReader) readAll(ctx context.Context, _ string, callbac
 						r.logger.Error("Failed to process S3 object content",
 							zap.String("key", decodedKey),
 							zap.Error(err))
+						allRecordsSucceeded = false
+						continue
 					}
 				}
 
-				_, err = r.sqsClient.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-					QueueUrl:      aws.String(r.queueURL),
-					ReceiptHandle: message.ReceiptHandle,
-				})
-				if err != nil {
-					r.logger.Warn("Failed to delete message from SQS queue", zap.Error(err))
+				// Only delete the message if all records were successfully processed.
+				// If any record failed, leave the message in the queue for retry.
+				if allRecordsSucceeded {
+					_, err = r.sqsClient.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+						QueueUrl:      aws.String(r.queueURL),
+						ReceiptHandle: message.ReceiptHandle,
+					})
+					if err != nil {
+						r.logger.Warn("Failed to delete message from SQS queue", zap.Error(err))
+					}
+				} else {
+					r.logger.Warn("Message not deleted due to processing failures, will be retried after visibility timeout",
+						zap.String("receiptHandle", *message.ReceiptHandle))
 				}
 			}
 		}

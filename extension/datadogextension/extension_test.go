@@ -1,11 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build !aix
+
 package datadogextension
 
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +26,7 @@ import (
 	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/confighttp"
+	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/extension"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -75,8 +79,13 @@ func TestExtensionLifecycle(t *testing.T) {
 		cfg := &Config{
 			API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 		ext, err := newExtension(t.Context(), cfg, set, hostProvider, uuidProvider)
@@ -148,8 +157,13 @@ func TestNotifyConfig(t *testing.T) {
 		cfg := &Config{
 			API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 		ext, err := newExtension(t.Context(), cfg, set, hostProvider, uuidProvider)
@@ -196,8 +210,13 @@ func TestCollectorResourceAttributesArePopulated(t *testing.T) {
 	cfg := &Config{
 		API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 		HTTPConfig: &httpserver.Config{
-			ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-			Path:         "/test-path",
+			ServerConfig: confighttp.ServerConfig{
+				NetAddr: confignet.AddrConfig{
+					Transport: confignet.TransportTypeTCP,
+					Endpoint:  "localhost:0",
+				},
+			},
+			Path: "/test-path",
 		},
 	}
 
@@ -211,9 +230,9 @@ func TestCollectorResourceAttributesArePopulated(t *testing.T) {
 	err = ext.NotifyConfig(t.Context(), conf)
 	require.NoError(t, err)
 
-	// Expect map with keys and values
+	// Expect map with keys and values (os.type is always injected as a fallback)
 	require.NotNil(t, ext.otelCollectorMetadata)
-	expected := map[string]string{"a_key": "1", "b_key": "2"}
+	expected := map[string]string{"a_key": "1", "b_key": "2", "os.type": runtime.GOOS}
 	assert.Equal(t, expected, ext.otelCollectorMetadata.CollectorResourceAttributes)
 
 	// Cleanup
@@ -238,8 +257,13 @@ func TestCollectorResourceAttributesWithMultipleKeys(t *testing.T) {
 	cfg := &Config{
 		API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 		HTTPConfig: &httpserver.Config{
-			ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-			Path:         "/test-path",
+			ServerConfig: confighttp.ServerConfig{
+				NetAddr: confignet.AddrConfig{
+					Transport: confignet.TransportTypeTCP,
+					Endpoint:  "localhost:0",
+				},
+			},
+			Path: "/test-path",
 		},
 	}
 
@@ -253,12 +277,13 @@ func TestCollectorResourceAttributesWithMultipleKeys(t *testing.T) {
 	err = ext.NotifyConfig(t.Context(), conf)
 	require.NoError(t, err)
 
-	// Verify all resource attributes are collected
+	// Verify all resource attributes are collected (os.type is always injected as a fallback)
 	require.NotNil(t, ext.otelCollectorMetadata)
 	expected := map[string]string{
 		"deployment.environment.name": "prod",
 		"cloud.region":                "us-east",
 		"team.name":                   "backend",
+		"os.type":                     runtime.GOOS,
 	}
 	assert.Equal(t, expected, ext.otelCollectorMetadata.CollectorResourceAttributes)
 
@@ -291,8 +316,13 @@ func TestNotifyConfigErrorPaths(t *testing.T) {
 		cfg := &Config{
 			API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 		ext, err := newExtension(t.Context(), cfg, set, hostProvider, uuidProvider)
@@ -328,8 +358,13 @@ func TestNotifyConfigErrorPaths(t *testing.T) {
 		cfg := &Config{
 			API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 		ext, err := newExtension(t.Context(), cfg, set, hostProvider, uuidProvider)
@@ -363,8 +398,13 @@ func TestNotifyConfigErrorPaths(t *testing.T) {
 		cfg := &Config{
 			API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 		ext, err := newExtension(t.Context(), cfg, set, hostProvider, uuidProvider)
@@ -444,8 +484,13 @@ func TestExtension_DeploymentTypeInPayload(t *testing.T) {
 			cfg := &Config{
 				API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 				HTTPConfig: &httpserver.Config{
-					ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-					Path:         "/test-path",
+					ServerConfig: confighttp.ServerConfig{
+						NetAddr: confignet.AddrConfig{
+							Transport: confignet.TransportTypeTCP,
+							Endpoint:  "localhost:0",
+						},
+					},
+					Path: "/test-path",
 				},
 				DeploymentType: tt.deploymentType,
 			}
@@ -492,8 +537,13 @@ func TestPeriodicPayloadSending(t *testing.T) {
 		cfg := &Config{
 			API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 		ext, err := newExtension(t.Context(), cfg, set, hostProvider, uuidProvider)
@@ -545,8 +595,13 @@ func TestPeriodicPayloadSending(t *testing.T) {
 		cfg := &Config{
 			API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 		ext, err := newExtension(t.Context(), cfg, set, hostProvider, uuidProvider)
@@ -600,8 +655,13 @@ func TestPeriodicPayloadSending(t *testing.T) {
 		cfg := &Config{
 			API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 		ext, err := newExtension(t.Context(), cfg, set, hostProvider, uuidProvider)
@@ -662,8 +722,13 @@ func TestNotifyConfigConcurrentAccess(t *testing.T) {
 		cfg := &Config{
 			API: datadogconfig.APIConfig{Key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Site: "datadoghq.com"},
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 		ext, err := newExtension(t.Context(), cfg, set, hostProvider, uuidProvider)
@@ -896,8 +961,13 @@ func TestExtensionLivenessMetric(t *testing.T) {
 			},
 			Hostname: "test-hostname-configured",
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 
@@ -968,8 +1038,13 @@ func TestExtensionLivenessMetric(t *testing.T) {
 			},
 			// No Hostname set - will be inferred
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 
@@ -1036,8 +1111,13 @@ func TestExtensionLivenessMetric(t *testing.T) {
 			},
 			Hostname: "test-hostname",
 			HTTPConfig: &httpserver.Config{
-				ServerConfig: confighttp.ServerConfig{Endpoint: "localhost:0"},
-				Path:         "/test-path",
+				ServerConfig: confighttp.ServerConfig{
+					NetAddr: confignet.AddrConfig{
+						Transport: confignet.TransportTypeTCP,
+						Endpoint:  "localhost:0",
+					},
+				},
+				Path: "/test-path",
 			},
 		}
 

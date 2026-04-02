@@ -51,8 +51,9 @@ func TestClientConfig(t *testing.T) {
 						Backoff: 5 * time.Second,
 					},
 				},
-				RackID:         "rack1",
-				UseLeaderEpoch: true,
+				RackID:          "rack1",
+				UseLeaderEpoch:  true,
+				ConnIdleTimeout: 5 * time.Minute,
 			},
 		},
 		"sasl_aws_msk_iam_oauthbearer": {
@@ -118,6 +119,13 @@ func TestClientConfig(t *testing.T) {
 				return cfg
 			}(),
 		},
+		"conn_idle_timeout": {
+			expected: func() ClientConfig {
+				cfg := NewDefaultClientConfig()
+				cfg.ConnIdleTimeout = 5 * time.Minute
+				return cfg
+			}(),
+		},
 
 		// Invalid configurations
 		"brokers_required": {
@@ -151,16 +159,16 @@ func TestConsumerConfig(t *testing.T) {
 		},
 		"full": {
 			expected: ConsumerConfig{
-				SessionTimeout:    5 * time.Second,
-				HeartbeatInterval: 2 * time.Second,
-				GroupID:           "throng",
-				InitialOffset:     "earliest",
+				SessionTimeout:         5 * time.Second,
+				HeartbeatInterval:      2 * time.Second,
+				GroupID:                "throng",
+				GroupRebalanceStrategy: "cooperative-sticky",
+				InitialOffset:          "earliest",
 				AutoCommit: AutoCommitConfig{
 					Enable:   false,
 					Interval: 10 * time.Minute,
 				},
 				MinFetchSize:          10,
-				DefaultFetchSize:      1024,
 				MaxFetchSize:          4096,
 				MaxFetchWait:          1 * time.Second,
 				MaxPartitionFetchSize: 4096,
@@ -177,7 +185,6 @@ func TestConsumerConfig(t *testing.T) {
 					Interval: 1 * time.Second,
 				},
 				MinFetchSize:          0,
-				DefaultFetchSize:      1048576,
 				MaxFetchSize:          1048576,
 				MaxFetchWait:          250 * time.Millisecond,
 				MaxPartitionFetchSize: 1048576,
