@@ -244,12 +244,9 @@ func TestInputRead_RPCInvalidBound(t *testing.T) {
 	input.maxReads = 100
 	input.currentMaxReads = 100
 
-	// Set up subscription with valid handle and enough info to reopen
+	// Set up subscription with valid handle
 	input.subscription = Subscription{
-		handle:        42, // Dummy handle
-		startAt:       "beginning",
-		sessionHandle: 0,
-		channel:       "test-channel",
+		handle: 42, // Dummy handle
 	}
 
 	// Call the method under test
@@ -484,10 +481,7 @@ func TestInputRead_Batching(t *testing.T) {
 	input.maxEventsPerPollCycle = 999
 
 	input.subscription = Subscription{
-		handle:        42,
-		startAt:       "beginning",
-		sessionHandle: 0,
-		channel:       "test-channel",
+		handle: 42,
 	}
 
 	input.read(t.Context())
