@@ -55,7 +55,7 @@ func (bc benchCase) run(b *testing.B) {
 		f := NewFactory(BenchReceiverType{}, component.StabilityLevelUndefined)
 		cfg := f.CreateDefaultConfig().(*BenchConfig)
 		cfg.maxBatchSize = bc.maxBatchSize
-		cfg.flushInterval = bc.flushInterval
+		cfg.FlushInterval = bc.flushInterval
 		cfg.NumEntries = numEntries
 		cfg.NumHosts = numHosts
 		sink := new(consumertest.LogsSink)

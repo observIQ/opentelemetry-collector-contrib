@@ -9,6 +9,10 @@ $defs:
           x-customType: github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza/operator.Config
       retry_on_failure:
         $ref: /internal/coreinternal/consumerretry.config
+      flush_interval:
+        description: Maximum time to wait before flushing an incomplete batch. Defaults to 100ms if unset or zero.
+        type: string
+        format: duration
       storage:
         x-pointer: true
         type: string

@@ -18,7 +18,10 @@ type BaseConfig struct {
 	StorageID      *component.ID        `mapstructure:"storage"`
 	RetryOnFailure consumerretry.Config `mapstructure:"retry_on_failure"`
 
+	// FlushInterval is the maximum time to wait before flushing an incomplete batch.
+	// Defaults to 100ms if unset or zero.
+	FlushInterval time.Duration `mapstructure:"flush_interval"`
+
 	// currently not configurable by users, but available for benchmarking
-	maxBatchSize  uint
-	flushInterval time.Duration
+	maxBatchSize uint
 }
