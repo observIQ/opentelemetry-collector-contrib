@@ -301,7 +301,7 @@ func TestInputReadWithRetry_UsesInputBookmarkForRecovery(t *testing.T) {
 	input.currentMaxReads = 100
 	input.bookmark = Bookmark{handle: bookmarkHandle}
 	input.subscription = Subscription{handle: 42}
-	defer input.subscription.Close() //nolint:errcheck // cleanup only
+	defer input.subscription.Close()
 
 	_, err := input.readWithRetry(100)
 	require.NoError(t, err)
@@ -340,7 +340,7 @@ func TestInputReadWithRetry_RecursiveBatchReduction(t *testing.T) {
 	input.maxReads = 100
 	input.currentMaxReads = 100
 	input.subscription = Subscription{handle: 42}
-	defer input.subscription.Close() //nolint:errcheck // cleanup only
+	defer input.subscription.Close()
 
 	_, err := input.readWithRetry(100)
 	require.NoError(t, err)

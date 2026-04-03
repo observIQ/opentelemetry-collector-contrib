@@ -291,7 +291,6 @@ func (i *Input) readBatch(ctx context.Context) bool {
 	}
 
 	events, err := i.readWithRetry(maxBatchSize)
-
 	if err != nil {
 		i.Logger().Error("Failed to read events from subscription", zap.Error(err))
 		if i.isRemote() && (errors.Is(err, windows.ERROR_INVALID_HANDLE) || errors.Is(err, errSubscriptionHandleNotOpen)) {
