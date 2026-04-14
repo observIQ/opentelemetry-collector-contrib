@@ -48,7 +48,7 @@ telemetry:
 
     receiver_windows_event_log_channel_size:
       enabled: true
-      description: The approximate number of records in the Windows Event Log channel, queried once per poll cycle via EvtGetLogInfo.
+      description: The approximate number of records in the Windows Event Log channel, sampled once per collection cycle via EvtGetLogInfo.
       stability: development
       unit: "{events}"
       gauge:
