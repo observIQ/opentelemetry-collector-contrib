@@ -179,14 +179,8 @@ func (s *Subscription) readWithRetry(maxReads int) ([]Event, int, error) {
 
 	if errors.Is(err, ErrorEVTQueryResultStale) {
 		// The bookmark cursor was overwritten by the ring buffer.
-		// Resubscribe so Windows advances the cursor to the oldest available event.
-		if closeErr := s.Close(); closeErr != nil {
-			return nil, maxReads, fmt.Errorf("failed to close stale subscription: %w", closeErr)
-		}
-		if openErr := s.Open(s.startAt, s.sessionHandle, s.channel, s.query, s.bookmark); openErr != nil {
-			return nil, maxReads, fmt.Errorf("failed to reopen stale subscription: %w", openErr)
-		}
-		return nil, maxReads, ErrorEVTQueryResultStale // named sentinel — caller logs the warning
+		// Return the sentinel; the caller (Input.readBatch) is responsible for resubscription.
+		return nil, maxReads, ErrorEVTQueryResultStale
 	}
 
 	if err != nil && !errors.Is(err, windows.ERROR_NO_MORE_ITEMS) {

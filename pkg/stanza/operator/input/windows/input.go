@@ -108,6 +108,29 @@ func (i *Input) defaultStartRemoteSession() error {
 	return nil
 }
 
+// resubscribe closes the current subscription and reopens it, tearing down and
+// recreating the remote session as well for remote connections.
+func (i *Input) resubscribe() error {
+	if err := i.subscription.Close(); err != nil {
+		return fmt.Errorf("failed to close subscription: %w", err)
+	}
+
+	if i.isRemote() {
+		if err := i.stopRemoteSession(); err != nil {
+			return fmt.Errorf("failed to stop remote session: %w", err)
+		}
+		i.subscription = NewRemoteSubscription(i.remote.Server, i.Logger())
+		if err := i.startRemoteSession(); err != nil {
+			return fmt.Errorf("failed to re-establish remote session for %s: %w", i.remote.Server, err)
+		}
+	}
+
+	if err := i.subscription.Open(i.startAt, uintptr(i.remoteSessionHandle), i.channel, i.query, i.bookmark); err != nil {
+		return fmt.Errorf("failed to reopen subscription: %w", err)
+	}
+	return nil
+}
+
 // stopRemoteSession stops the remote session if it is active.
 func (i *Input) stopRemoteSession() error {
 	if i.remoteSessionHandle != 0 {
@@ -317,35 +340,22 @@ func (i *Input) readBatch(ctx context.Context) bool {
 	}
 
 	if errors.Is(err, ErrorEVTQueryResultStale) {
-		i.Logger().Warn("Windows Event Log bookmark invalidated: ring buffer overflowed and events were dropped; subscription has been reopened",
+		i.Logger().Warn("Windows Event Log bookmark invalidated: ring buffer overflowed and events were dropped; resubscribing",
 			zap.String("channel", i.channel),
 			zap.Uint64("last_record_id", i.lastRecordID),
 		)
 		i.lastRecordID = 0 // reset: next event establishes a new baseline to avoid a false gap warning
+		if resubErr := i.resubscribe(); resubErr != nil {
+			i.Logger().Error("Failed to resubscribe after ring-buffer overflow", zap.Error(resubErr))
+		}
 		return false
 	}
 
 	if err != nil {
 		i.Logger().Error("Failed to read events from subscription", zap.Error(err))
 		if i.isRemote() && (errors.Is(err, windows.ERROR_INVALID_HANDLE) || errors.Is(err, errSubscriptionHandleNotOpen)) {
-			i.Logger().Info("Resubscribing, closing remote subscription")
-			closeErr := i.subscription.Close()
-			if closeErr != nil {
-				i.Logger().Error("Failed to close remote subscription", zap.Error(closeErr))
-				return false
-			}
-			if err := i.stopRemoteSession(); err != nil {
-				i.Logger().Error("Failed to close remote session", zap.Error(err))
-			}
-			i.Logger().Info("Resubscribing, creating remote subscription")
-			i.subscription = NewRemoteSubscription(i.remote.Server, i.Logger())
-			if err := i.startRemoteSession(); err != nil {
-				i.Logger().Error("Failed to re-establish remote session", zap.String("server", i.remote.Server), zap.Error(err))
-				return false
-			}
-			if err := i.subscription.Open(i.startAt, uintptr(i.remoteSessionHandle), i.channel, i.query, i.bookmark); err != nil {
-				i.Logger().Error("Failed to re-open subscription for remote server", zap.String("server", i.remote.Server), zap.Error(err))
-				return false
+			if resubErr := i.resubscribe(); resubErr != nil {
+				i.Logger().Error("Failed to resubscribe after connection error", zap.Error(resubErr))
 			}
 		}
 		return false
