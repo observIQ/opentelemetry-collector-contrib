@@ -77,7 +77,7 @@ telemetry:
 
     receiver_windows_event_log_missed_events:
       enabled: true
-      description: The estimated number of Windows Event Log records missed due to ring buffer gaps, detected via non-contiguous EventRecordID values. Only observed in channel mode (not query mode).
+      description: The estimated number of Windows Event Log records dropped from the ring buffer before being read, detected via gaps in consecutive EventRecordID values. Only meaningful in channel mode (not query mode). Does not count events lost during a complete ring-buffer overflow, which instead triggers a subscription reopen.
       stability: development
       unit: "{events}"
       sum:
