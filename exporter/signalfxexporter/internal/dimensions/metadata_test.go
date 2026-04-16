@@ -13,8 +13,9 @@ import (
 
 func TestGetDimensionUpdateFromMetadata(t *testing.T) {
 	type args struct {
-		defaults map[string]string
-		metadata metadata.MetadataUpdate
+		defaults            map[string]string
+		metadata            metadata.MetadataUpdate
+		stripK8sLabelPrefix bool
 	}
 	tests := []struct {
 		name string
@@ -118,6 +119,63 @@ func TestGetDimensionUpdateFromMetadata(t *testing.T) {
 			},
 		},
 		{
+			"Test k8s resource label prefix is stripped",
+			args{
+				stripK8sLabelPrefix: true,
+				metadata: metadata.MetadataUpdate{
+					ResourceIDKey: "k8s.pod.uid",
+					ResourceID:    "pod-123",
+					MetadataDelta: metadata.MetadataDelta{
+						MetadataToAdd: map[string]string{
+							"k8s.pod.label.app":                          "my-app",
+							"k8s.node.label.topology.kubernetes.io/zone": "",
+							"k8s.deployment.label.version":               "v1",
+						},
+						MetadataToRemove: map[string]string{
+							"k8s.pod.label.old-label": "old-value",
+						},
+					},
+				},
+			},
+			&DimensionUpdate{
+				Name:  "k8s.pod.uid",
+				Value: "pod-123",
+				Properties: getMapToPointers(map[string]string{
+					"app":       "my-app",
+					"version":   "v1",
+					"old-label": "",
+				}),
+				Tags: map[string]bool{
+					"topology.kubernetes.io/zone": true,
+				},
+			},
+		},
+		{
+			"Test k8s service label prefix is NOT stripped even when stripK8sLabelPrefix is true",
+			args{
+				stripK8sLabelPrefix: true,
+				metadata: metadata.MetadataUpdate{
+					ResourceIDKey: "k8s.service.uid",
+					ResourceID:    "svc-123",
+					MetadataDelta: metadata.MetadataDelta{
+						MetadataToAdd: map[string]string{
+							"k8s.service.label.app":     "my-app",
+							"k8s.service.label.version": "v1",
+						},
+					},
+				},
+			},
+			&DimensionUpdate{
+				Name:  "k8s.service.uid",
+				Value: "svc-123",
+				Properties: getMapToPointers(map[string]string{
+					"k8s.service.label.app":     "my-app",
+					"k8s.service.label.version": "v1",
+				}),
+				Tags: map[string]bool{},
+			},
+		},
+		{
 			"Test with k8s service properties",
 			args{
 				metadata: metadata.MetadataUpdate{
@@ -170,10 +228,106 @@ func TestGetDimensionUpdateFromMetadata(t *testing.T) {
 				Tags: map[string]bool{},
 			},
 		},
+		{
+			"Test k8s.pod.uid dimension converts k8s.service tag to kubernetes_service_ sfTag",
+			args{
+				metadata: metadata.MetadataUpdate{
+					ResourceIDKey: "k8s.pod.uid",
+					ResourceID:    "pod-123",
+					MetadataDelta: metadata.MetadataDelta{
+						MetadataToAdd: map[string]string{
+							"k8s.service.my-service": "",
+							"k8s.pod.name":           "my-pod",
+						},
+					},
+				},
+			},
+			&DimensionUpdate{
+				Name:  "k8s.pod.uid",
+				Value: "pod-123",
+				Properties: getMapToPointers(map[string]string{
+					"k8s.pod.name": "my-pod",
+				}),
+				Tags: map[string]bool{
+					"kubernetes_service_my-service": true,
+				},
+			},
+		},
+		{
+			"Test k8s.service.uid dimension skips conversion to kubernetes_service_",
+			args{
+				metadata: metadata.MetadataUpdate{
+					ResourceIDKey: "k8s.service.uid",
+					ResourceID:    "d5d0975c-eab9-4dc5-8db4-aec3929ce882",
+					MetadataDelta: metadata.MetadataDelta{
+						MetadataToAdd: map[string]string{
+							"k8s.service.name":                                "metrics-server",
+							"k8s.service.type":                                "ClusterIP",
+							"k8s.namespace.name":                              "kube-system",
+							"k8s.service.creation_timestamp":                  "2026-01-16T06:46:44Z",
+							"k8s.service.label.app.kubernetes.io/name":        "metrics-server",
+							"k8s.service.label.app.kubernetes.io/instance":    "metrics-server",
+							"k8s.service.label.app.kubernetes.io/version":     "0.7.2",
+							"k8s.service.label.app.kubernetes.io/managed-by":  "EKS",
+							"k8s.service.selector.app.kubernetes.io/name":     "metrics-server",
+							"k8s.service.selector.app.kubernetes.io/instance": "metrics-server",
+						},
+					},
+				},
+			},
+			&DimensionUpdate{
+				Name:  "k8s.service.uid",
+				Value: "d5d0975c-eab9-4dc5-8db4-aec3929ce882",
+
+				Properties: getMapToPointers(map[string]string{
+					"k8s.service.name":                                "metrics-server",
+					"k8s.service.type":                                "ClusterIP",
+					"k8s.namespace.name":                              "kube-system",
+					"k8s.service.creation_timestamp":                  "2026-01-16T06:46:44Z",
+					"k8s.service.label.app.kubernetes.io/name":        "metrics-server",
+					"k8s.service.label.app.kubernetes.io/instance":    "metrics-server",
+					"k8s.service.label.app.kubernetes.io/version":     "0.7.2",
+					"k8s.service.label.app.kubernetes.io/managed-by":  "EKS",
+					"k8s.service.selector.app.kubernetes.io/name":     "metrics-server",
+					"k8s.service.selector.app.kubernetes.io/instance": "metrics-server",
+				}),
+				Tags: map[string]bool{},
+			},
+		},
+		{
+			"Test k8s.service.uid property lifecycle (add, remove, update)",
+			args{
+				metadata: metadata.MetadataUpdate{
+					ResourceIDKey: "k8s.service.uid",
+					ResourceID:    "lifecycle-svc-uid",
+					MetadataDelta: metadata.MetadataDelta{
+						MetadataToAdd: map[string]string{
+							"k8s.service.label.new-label": "new-value",
+						},
+						MetadataToRemove: map[string]string{
+							"k8s.service.label.to-remove": "old-value",
+						},
+						MetadataToUpdate: map[string]string{
+							"k8s.service.label.to-update": "updated-value",
+						},
+					},
+				},
+			},
+			&DimensionUpdate{
+				Name:  "k8s.service.uid",
+				Value: "lifecycle-svc-uid",
+				Properties: map[string]*string{
+					"k8s.service.label.new-label": pointerString("new-value"),
+					"k8s.service.label.to-remove": nil,
+					"k8s.service.label.to-update": pointerString("updated-value"),
+				},
+				Tags: map[string]bool{},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, getDimensionUpdateFromMetadata(tt.args.defaults, tt.args.metadata, "-_."))
+			assert.Equal(t, tt.want, getDimensionUpdateFromMetadata(tt.args.defaults, tt.args.metadata, "-_.", tt.args.stripK8sLabelPrefix))
 		})
 	}
 }
@@ -225,4 +379,8 @@ func TestFilterKeyChars(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func pointerString(s string) *string {
+	return &s
 }

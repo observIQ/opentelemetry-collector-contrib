@@ -38,7 +38,7 @@ components:
         - groupbyattrs
         - groupbytrace
         - interval
-        - k8sattributes
+        - k8s_attributes
         - logdedup
         - metricstransform
         - probabilistic_sampler
@@ -49,10 +49,10 @@ components:
         - tail_sampling
         - transform
     receiver:
-        - filelog
+        - file_log
         - fluentforward
-        - hostmetrics
-        - httpcheck
+        - host_metrics
+        - http_check
         - jaeger
         - journald
         - k8s_cluster
