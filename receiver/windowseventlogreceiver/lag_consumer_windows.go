@@ -64,13 +64,15 @@ func (l *lagTrackingConsumer) ConsumeLogs(ctx context.Context, logs plog.Logs) e
 			sl := rl.ScopeLogs().At(j)
 			for k := 0; k < sl.LogRecords().Len(); k++ {
 				lr := sl.LogRecords().At(k)
-				ts := lr.Timestamp().AsTime()
-				if ts.IsZero() {
+				if lr.Timestamp() == 0 {
 					continue
 				}
-				obs := lr.ObservedTimestamp().AsTime()
-				if obs.IsZero() {
+				ts := lr.Timestamp().AsTime()
+				var obs time.Time
+				if lr.ObservedTimestamp() == 0 {
 					obs = now
+				} else {
+					obs = lr.ObservedTimestamp().AsTime()
 				}
 				if lag := obs.Sub(ts).Seconds(); lag > maxLag {
 					maxLag = lag

@@ -63,7 +63,7 @@ func TestLagConsumer_EmptyBatch(t *testing.T) {
 	defer func() { require.NoError(t, tel.Shutdown(t.Context())) }()
 
 	require.NoError(t, lc.ConsumeLogs(t.Context(), plog.NewLogs()))
-	require.Equal(t, 1, sink.LogRecordCount()) // empty logs still forwarded
+	require.Equal(t, 1, len(sink.AllLogs())) // empty logs still forwarded
 
 	// Observable gauge reports 0 when no lag was stored
 	metadatatest.AssertEqualReceiverWindowsEventLogLag(t, tel,
