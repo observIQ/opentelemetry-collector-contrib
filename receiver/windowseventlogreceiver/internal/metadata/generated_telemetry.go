@@ -97,7 +97,7 @@ func NewTelemetryBuilder(settings component.TelemetrySettings, options ...Teleme
 	errs = errors.Join(errs, err)
 	builder.ReceiverWindowsEventLogChannelSize, err = builder.meter.Int64Gauge(
 		"otelcol_receiver_windows_event_log_channel_size",
-		metric.WithDescription("The approximate number of records in the Windows Event Log channel, queried once per poll cycle via EvtGetLogInfo. [Development]"),
+		metric.WithDescription("The approximate number of records in the Windows Event Log channel, sampled once per collection cycle via EvtGetLogInfo. [Development]"),
 		metric.WithUnit("{events}"),
 	)
 	errs = errors.Join(errs, err)
@@ -116,7 +116,7 @@ func NewTelemetryBuilder(settings component.TelemetrySettings, options ...Teleme
 	errs = errors.Join(errs, err)
 	builder.ReceiverWindowsEventLogMissedEvents, err = builder.meter.Int64Counter(
 		"otelcol_receiver_windows_event_log_missed_events",
-		metric.WithDescription("The estimated number of Windows Event Log records missed due to ring buffer gaps, detected via non-contiguous EventRecordID values. Only observed in channel mode (not query mode). [Development]"),
+		metric.WithDescription("The estimated number of Windows Event Log records dropped from the ring buffer before being read, detected via gaps in consecutive EventRecordID values. Only meaningful in channel mode (not query mode). Does not count events lost during a complete ring-buffer overflow, which instead triggers a subscription reopen. [Development]"),
 		metric.WithUnit("{events}"),
 	)
 	errs = errors.Join(errs, err)

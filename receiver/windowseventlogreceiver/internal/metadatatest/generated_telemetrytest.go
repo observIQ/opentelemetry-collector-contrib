@@ -16,7 +16,7 @@ import (
 
 func NewSettings(tt *componenttest.Telemetry) receiver.Settings {
 	set := receivertest.NewNopSettings(receivertest.NopType)
-	set.ID = component.NewID(component.MustNewType("windowseventlog"))
+	set.ID = component.NewID(component.MustNewType("windows_event_log"))
 	set.TelemetrySettings = tt.NewTelemetrySettings()
 	return set
 }
@@ -39,7 +39,7 @@ func AssertEqualReceiverWindowsEventLogBatchSize(t *testing.T, tt *componenttest
 func AssertEqualReceiverWindowsEventLogChannelSize(t *testing.T, tt *componenttest.Telemetry, dps []metricdata.DataPoint[int64], opts ...metricdatatest.Option) {
 	want := metricdata.Metrics{
 		Name:        "otelcol_receiver_windows_event_log_channel_size",
-		Description: "The approximate number of records in the Windows Event Log channel, queried once per poll cycle via EvtGetLogInfo. [Development]",
+		Description: "The approximate number of records in the Windows Event Log channel, sampled once per collection cycle via EvtGetLogInfo. [Development]",
 		Unit:        "{events}",
 		Data: metricdata.Gauge[int64]{
 			DataPoints: dps,
@@ -82,7 +82,7 @@ func AssertEqualReceiverWindowsEventLogLag(t *testing.T, tt *componenttest.Telem
 func AssertEqualReceiverWindowsEventLogMissedEvents(t *testing.T, tt *componenttest.Telemetry, dps []metricdata.DataPoint[int64], opts ...metricdatatest.Option) {
 	want := metricdata.Metrics{
 		Name:        "otelcol_receiver_windows_event_log_missed_events",
-		Description: "The estimated number of Windows Event Log records missed due to ring buffer gaps, detected via non-contiguous EventRecordID values. Only observed in channel mode (not query mode). [Development]",
+		Description: "The estimated number of Windows Event Log records dropped from the ring buffer before being read, detected via gaps in consecutive EventRecordID values. Only meaningful in channel mode (not query mode). Does not count events lost during a complete ring-buffer overflow, which instead triggers a subscription reopen. [Development]",
 		Unit:        "{events}",
 		Data: metricdata.Sum[int64]{
 			Temporality: metricdata.CumulativeTemporality,

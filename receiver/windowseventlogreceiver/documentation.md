@@ -2,16 +2,6 @@
 
 # windows_event_log
 
-## Feature Gates
-
-This component has the following feature gates:
-
-| Feature Gate | Stage | Description | From Version | To Version | Reference |
-| ------------ | ----- | ----------- | ------------ | ---------- | --------- |
-| `domainControllers.autodiscovery` | alpha | When enabled and is remote automatically discover domain controllers through joined controllers and  start collecting logs from specified channel. | v0.150.0 | N/A | [Link](https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/44156) |
-
-For more information about feature gates, see the [Feature Gates](https://github.com/open-telemetry/opentelemetry-collector/blob/main/featuregate/README.md) documentation.
-
 ## Internal Telemetry
 
 The following telemetry is emitted by this component.
@@ -32,7 +22,7 @@ The number of events fetched from the Windows Event Log API in a single batch re
 
 ### otelcol_receiver_windows_event_log_channel_size
 
-The approximate number of records in the Windows Event Log channel, queried once per poll cycle via EvtGetLogInfo.
+The approximate number of records in the Windows Event Log channel, sampled once per collection cycle via EvtGetLogInfo.
 
 | Unit | Metric Type | Value Type | Stability |
 | ---- | ----------- | ---------- | --------- |
@@ -74,7 +64,7 @@ The lag between the time a Windows event was originally logged and the time it w
 
 ### otelcol_receiver_windows_event_log_missed_events
 
-The estimated number of Windows Event Log records missed due to ring buffer gaps, detected via non-contiguous EventRecordID values. Only observed in channel mode (not query mode).
+The estimated number of Windows Event Log records dropped from the ring buffer before being read, detected via gaps in consecutive EventRecordID values. Only meaningful in channel mode (not query mode). Does not count events lost during a complete ring-buffer overflow, which instead triggers a subscription reopen.
 
 | Unit | Metric Type | Value Type | Monotonic | Stability |
 | ---- | ----------- | ---------- | --------- | --------- |
@@ -85,3 +75,13 @@ The estimated number of Windows Event Log records missed due to ring buffer gaps
 | Name | Description | Values | Semantic Convention |
 | ---- | ----------- | ------ | ------------------- |
 | channel | The name of the Windows Event Log channel. | Any Str | - |
+
+## Feature Gates
+
+This component has the following feature gates:
+
+| Feature Gate | Stage | Description | From Version | To Version | Reference |
+| ------------ | ----- | ----------- | ------------ | ---------- | --------- |
+| `domainControllers.autodiscovery` | alpha | When enabled and is remote automatically discover domain controllers through joined controllers and  start collecting logs from specified channel. | v0.150.0 | N/A | [Link](https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/44156) |
+
+For more information about feature gates, see the [Feature Gates](https://github.com/open-telemetry/opentelemetry-collector/blob/main/featuregate/README.md) documentation.
