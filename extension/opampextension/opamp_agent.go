@@ -161,10 +161,10 @@ func (o *opampAgent) Start(ctx context.Context, host component.Host) error {
 	}
 
 	if mi, ok := host.(hostcapabilities.ModuleInfo); ok {
-		o.initAvailableComponents(mi.GetModuleInfos())
+		o.initAvailableComponents(host, mi.GetModuleInfos())
 	} else if o.capabilities.ReportsAvailableComponents {
 		// init empty availableComponents to not get an error when starting the opampClient
-		o.initAvailableComponents(service.ModuleInfos{})
+		o.initAvailableComponents(host, service.ModuleInfos{})
 	}
 
 	if o.availableComponents != nil {
@@ -536,28 +536,33 @@ func (o *opampAgent) initHealthReporting() {
 	go o.componentHealthEventLoop()
 }
 
-func (o *opampAgent) initAvailableComponents(moduleInfos service.ModuleInfos) {
+func (o *opampAgent) initAvailableComponents(host component.Host, moduleInfos service.ModuleInfos) {
 	if !o.capabilities.ReportsAvailableComponents {
 		return
+	}
+
+	var factorySource hostcapabilities.ComponentFactory
+	if cf, ok := host.(hostcapabilities.ComponentFactory); ok {
+		factorySource = cf
 	}
 
 	o.availableComponents = &protobufs.AvailableComponents{
 		Hash: generateAvailableComponentsHash(moduleInfos),
 		Components: map[string]*protobufs.ComponentDetails{
 			"receivers": {
-				SubComponentMap: createComponentTypeAvailableComponentDetails(moduleInfos.Receiver),
+				SubComponentMap: createComponentTypeAvailableComponentDetails(factorySource, component.KindReceiver, moduleInfos.Receiver),
 			},
 			"processors": {
-				SubComponentMap: createComponentTypeAvailableComponentDetails(moduleInfos.Processor),
+				SubComponentMap: createComponentTypeAvailableComponentDetails(factorySource, component.KindProcessor, moduleInfos.Processor),
 			},
 			"exporters": {
-				SubComponentMap: createComponentTypeAvailableComponentDetails(moduleInfos.Exporter),
+				SubComponentMap: createComponentTypeAvailableComponentDetails(factorySource, component.KindExporter, moduleInfos.Exporter),
 			},
 			"extensions": {
-				SubComponentMap: createComponentTypeAvailableComponentDetails(moduleInfos.Extension),
+				SubComponentMap: createComponentTypeAvailableComponentDetails(factorySource, component.KindExtension, moduleInfos.Extension),
 			},
 			"connectors": {
-				SubComponentMap: createComponentTypeAvailableComponentDetails(moduleInfos.Connector),
+				SubComponentMap: createComponentTypeAvailableComponentDetails(factorySource, component.KindConnector, moduleInfos.Connector),
 			},
 		},
 	}
@@ -594,10 +599,18 @@ func addComponentTypeComponentsToStringBuilder(builder *strings.Builder, compone
 	}
 }
 
-func createComponentTypeAvailableComponentDetails(componentTypeComponents map[component.Type]service.ModuleInfo) map[string]*protobufs.ComponentDetails {
+// typeAliasHolder mirrors the DeprecatedAlias accessor implemented by factories
+// built via xreceiver/xprocessor/xexporter/xextension/xconnector NewFactory.
+// The collector's interface lives in an internal package, so we restate it
+// here and rely on Go's structural typing.
+type typeAliasHolder interface {
+	DeprecatedAlias() component.Type
+}
+
+func createComponentTypeAvailableComponentDetails(factorySource hostcapabilities.ComponentFactory, kind component.Kind, componentTypeComponents map[component.Type]service.ModuleInfo) map[string]*protobufs.ComponentDetails {
 	availableComponentDetails := map[string]*protobufs.ComponentDetails{}
 	for componentType, r := range componentTypeComponents {
-		availableComponentDetails[componentType.String()] = &protobufs.ComponentDetails{
+		details := &protobufs.ComponentDetails{
 			Metadata: []*protobufs.KeyValue{
 				{
 					Key: "code.namespace",
@@ -609,6 +622,24 @@ func createComponentTypeAvailableComponentDetails(componentTypeComponents map[co
 				},
 			},
 		}
+		availableComponentDetails[componentType.String()] = details
+
+		if factorySource == nil {
+			continue
+		}
+		factory := factorySource.GetFactory(kind, componentType)
+		if factory == nil {
+			continue
+		}
+		holder, ok := factory.(typeAliasHolder)
+		if !ok {
+			continue
+		}
+		alias := holder.DeprecatedAlias()
+		if alias.String() == "" {
+			continue
+		}
+		availableComponentDetails[alias.String()] = details
 	}
 	return availableComponentDetails
 }

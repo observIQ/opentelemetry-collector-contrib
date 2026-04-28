@@ -279,9 +279,28 @@ func newAvailableComponentsHost(t *testing.T) component.Host {
 	}
 }
 
-func (*availableComponentsHost) GetFactory(component.Kind, component.Type) component.Factory {
+func (ach *availableComponentsHost) GetFactory(kind component.Kind, typ component.Type) component.Factory {
+	// Only the apachespark receiver advertises a deprecated alias; everything
+	// else returns nil so we also exercise the no-factory branch.
+	if kind == component.KindReceiver && typ == componentNewTypeNoErr(ach.t, "apachespark") {
+		return fakeAliasFactory{
+			typ:   typ,
+			alias: componentNewTypeNoErr(ach.t, "apache_spark"),
+		}
+	}
 	return nil
 }
+
+// fakeAliasFactory is a minimal component.Factory that also exposes a
+// DeprecatedAlias accessor matching the one produced by xreceiver.NewFactory.
+type fakeAliasFactory struct {
+	typ   component.Type
+	alias component.Type
+}
+
+func (f fakeAliasFactory) Type() component.Type                { return f.typ }
+func (fakeAliasFactory) CreateDefaultConfig() component.Config { return nil }
+func (f fakeAliasFactory) DeprecatedAlias() component.Type     { return f.alias }
 
 func (*availableComponentsHost) GetExtensions() map[component.ID]component.Component {
 	return nil
@@ -337,6 +356,18 @@ func generateTestAvailableComponents() *protobufs.AvailableComponents {
 						},
 					},
 					"apachespark": {
+						Metadata: []*protobufs.KeyValue{
+							{
+								Key: "code.namespace",
+								Value: &protobufs.AnyValue{
+									Value: &protobufs.AnyValue_StringValue{
+										StringValue: "apachespark@v0.117.0",
+									},
+								},
+							},
+						},
+					},
+					"apache_spark": {
 						Metadata: []*protobufs.KeyValue{
 							{
 								Key: "code.namespace",
