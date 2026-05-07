@@ -41,26 +41,30 @@ func (bc *azureBlobClient) listBlobs(ctx context.Context, containerName string) 
 	return blobs, nil
 }
 
-func (bc *azureBlobClient) readBlob(ctx context.Context, containerName, blobName string) (*bytes.Buffer, error) {
+func (bc *azureBlobClient) readBlob(ctx context.Context, containerName, blobName string) (downloadedData *bytes.Buffer, err error) {
 	defer func() {
+		if err != nil {
+			return
+		}
 		_, blobDeleteErr := bc.serviceClient.DeleteBlob(ctx, containerName, blobName, nil)
 		if blobDeleteErr != nil {
 			bc.logger.Error("failed to delete blob", zap.Error(blobDeleteErr))
 		}
 	}()
 
-	get, err := bc.serviceClient.DownloadStream(ctx, containerName, blobName, nil)
-	if err != nil {
-		return nil, err
+	get, getErr := bc.serviceClient.DownloadStream(ctx, containerName, blobName, nil)
+	if getErr != nil {
+		err = getErr
+		return
 	}
 
-	downloadedData := &bytes.Buffer{}
+	downloadedData = &bytes.Buffer{}
 	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
 	defer retryReader.Close()
 
 	_, err = downloadedData.ReadFrom(retryReader)
 
-	return downloadedData, err
+	return
 }
 
 func newBlobClientFromConnectionString(connectionString string, logger *zap.Logger) (*azureBlobClient, error) {
