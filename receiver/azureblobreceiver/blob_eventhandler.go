@@ -78,7 +78,7 @@ func (p *blobEventHandler) processContainer(ctx context.Context, containerName s
 	}
 }
 
-func (p *blobEventHandler) processBlob(ctx context.Context, containerName string, blobName string, consume func(context.Context, []byte) error) {
+func (p *blobEventHandler) processBlob(ctx context.Context, containerName, blobName string, consume func(context.Context, []byte) error) {
 	if ctx.Err() != nil {
 		return
 	}
