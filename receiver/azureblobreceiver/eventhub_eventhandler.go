@@ -162,6 +162,7 @@ func (p *eventHubEventHandler) processBlobCreatedEventType(ctx context.Context, 
 		}
 	default:
 		p.logger.Debug("Unknown container name", zap.String("containerName", containerName))
+		return nil
 	}
 
 	if err := p.blobClient.deleteBlob(ctx, containerName, blobName); err != nil {
