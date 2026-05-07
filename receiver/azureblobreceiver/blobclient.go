@@ -43,9 +43,7 @@ func (bc *azureBlobClient) listBlobs(ctx context.Context, containerName string) 
 }
 
 func (bc *azureBlobClient) readBlob(ctx context.Context, containerName, blobName string) (*bytes.Buffer, error) {
-	var err error
-	var get azblob.DownloadStreamResponse
-	get, err = bc.serviceClient.DownloadStream(ctx, containerName, blobName, nil)
+	get, err := bc.serviceClient.DownloadStream(ctx, containerName, blobName, nil)
 	if err != nil {
 		return nil, err
 	}
