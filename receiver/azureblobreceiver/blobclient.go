@@ -41,7 +41,8 @@ func (bc *azureBlobClient) listBlobs(ctx context.Context, containerName string) 
 	return blobs, nil
 }
 
-func (bc *azureBlobClient) readBlob(ctx context.Context, containerName, blobName string) (downloadedData *bytes.Buffer, err error) {
+func (bc *azureBlobClient) readBlob(ctx context.Context, containerName, blobName string) (*bytes.Buffer, error) {
+	var err error
 	defer func() {
 		if err != nil {
 			return
@@ -52,19 +53,19 @@ func (bc *azureBlobClient) readBlob(ctx context.Context, containerName, blobName
 		}
 	}()
 
-	get, getErr := bc.serviceClient.DownloadStream(ctx, containerName, blobName, nil)
-	if getErr != nil {
-		err = getErr
-		return
+	var get azblob.DownloadStreamResponse
+	get, err = bc.serviceClient.DownloadStream(ctx, containerName, blobName, nil)
+	if err != nil {
+		return nil, err
 	}
 
-	downloadedData = &bytes.Buffer{}
+	downloadedData := &bytes.Buffer{}
 	retryReader := get.NewRetryReader(ctx, &azblob.RetryReaderOptions{})
 	defer retryReader.Close()
 
 	_, err = downloadedData.ReadFrom(retryReader)
 
-	return
+	return downloadedData, err
 }
 
 func newBlobClientFromConnectionString(connectionString string, logger *zap.Logger) (*azureBlobClient, error) {
