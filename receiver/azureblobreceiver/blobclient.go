@@ -15,6 +15,7 @@ import (
 type blobClient interface {
 	readBlob(ctx context.Context, containerName, blobName string) (*bytes.Buffer, error)
 	listBlobs(ctx context.Context, containerName string) ([]string, error)
+	deleteBlob(ctx context.Context, containerName, blobName string) error
 }
 
 type azureBlobClient struct {
@@ -43,16 +44,6 @@ func (bc *azureBlobClient) listBlobs(ctx context.Context, containerName string) 
 
 func (bc *azureBlobClient) readBlob(ctx context.Context, containerName, blobName string) (*bytes.Buffer, error) {
 	var err error
-	defer func() {
-		if err != nil {
-			return
-		}
-		_, blobDeleteErr := bc.serviceClient.DeleteBlob(ctx, containerName, blobName, nil)
-		if blobDeleteErr != nil {
-			bc.logger.Error("failed to delete blob", zap.Error(blobDeleteErr))
-		}
-	}()
-
 	var get azblob.DownloadStreamResponse
 	get, err = bc.serviceClient.DownloadStream(ctx, containerName, blobName, nil)
 	if err != nil {
@@ -66,6 +57,11 @@ func (bc *azureBlobClient) readBlob(ctx context.Context, containerName, blobName
 	_, err = downloadedData.ReadFrom(retryReader)
 
 	return downloadedData, err
+}
+
+func (bc *azureBlobClient) deleteBlob(ctx context.Context, containerName, blobName string) error {
+	_, err := bc.serviceClient.DeleteBlob(ctx, containerName, blobName, nil)
+	return err
 }
 
 func newBlobClientFromConnectionString(connectionString string, logger *zap.Logger) (*azureBlobClient, error) {
