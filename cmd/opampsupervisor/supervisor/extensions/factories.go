@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/collector/extension"
 	"go.opentelemetry.io/collector/extension/extensiontest"
 
+	"github.com/observiq/bindplane-otel-contrib/extension/opampgateway"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/basicauthextension"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/bearertokenauthextension"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/oauth2clientauthextension"
@@ -23,6 +24,7 @@ func Factories() map[component.Type]extension.Factory {
 		bearertokenauthextension.NewFactory(),
 		basicauthextension.NewFactory(),
 		oauth2clientauthextension.NewFactory(),
+		opampgateway.NewFactory(),
 	}
 	result := make(map[component.Type]extension.Factory, len(fs))
 	for _, f := range fs {
