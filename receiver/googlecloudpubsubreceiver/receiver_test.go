@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 	"go.opentelemetry.io/collector/pdata/plog"
@@ -499,8 +500,8 @@ func TestHandleEncodingErrorWarnLog(t *testing.T) {
 			recv, logs := createObservedReceiver(t, srv)
 			msg := invalidMessage("msg-" + tt.signal + "-001")
 
-			// Error should be returned (the default policy is propagate)
-			assert.Error(t, tt.handle(recv, t.Context(), msg))
+			// The default policy acknowledges and drops, so no error is returned
+			assert.NoError(t, tt.handle(recv, t.Context(), msg))
 
 			warnLogs := logs.FilterLevelExact(zapcore.WarnLevel)
 			require.Equal(t, 1, warnLogs.Len(), "expected exactly one warn log entry on encoding error")
@@ -525,7 +526,7 @@ func TestHandleEncodingErrorWarnRateLimited(t *testing.T) {
 	recv.logsUnmarshaler = &plog.ProtoUnmarshaler{}
 
 	for i := range 10 {
-		assert.Error(t, recv.handleLog(ctx, invalidMessage(fmt.Sprintf("msg-%d", i)), uncompressed))
+		assert.NoError(t, recv.handleLog(ctx, invalidMessage(fmt.Sprintf("msg-%d", i)), uncompressed))
 	}
 
 	warnLogs := logs.FilterLevelExact(zapcore.WarnLevel)
@@ -566,7 +567,7 @@ func TestDecodeErrorPolicies(t *testing.T) {
 		ignoreEncodingError bool
 		wantErr             error
 	}{
-		{name: "default propagates", wantErr: assert.AnError},
+		{name: "default ignores (ack and drop)", wantErr: nil},
 		{name: "propagate", onDecodeError: "propagate", wantErr: assert.AnError},
 		{name: "ignore", onDecodeError: "ignore", wantErr: nil},
 		{name: "nack", onDecodeError: "nack", wantErr: internal.ErrNack},
@@ -606,9 +607,11 @@ func TestPipelineErrorPolicies(t *testing.T) {
 		wantNack        bool
 		wantErr         bool
 	}{
-		{name: "default acks on pipeline error", consumerErr: assert.AnError},
-		{name: "ack acks on pipeline error", onPipelineError: "ack", consumerErr: assert.AnError},
-		{name: "nack nacks on pipeline error", onPipelineError: "nack", consumerErr: assert.AnError, wantNack: true},
+		{name: "transient error is neither acked nor nacked", consumerErr: assert.AnError, wantErr: true},
+		{name: "transient error is neither acked nor nacked with nack policy", onPipelineError: "nack", consumerErr: assert.AnError, wantErr: true},
+		{name: "default acks on permanent pipeline error", consumerErr: consumererror.NewPermanent(assert.AnError)},
+		{name: "ack acks on permanent pipeline error", onPipelineError: "ack", consumerErr: consumererror.NewPermanent(assert.AnError)},
+		{name: "nack nacks on permanent pipeline error", onPipelineError: "nack", consumerErr: consumererror.NewPermanent(assert.AnError), wantNack: true},
 		{name: "nack never nacks on context cancellation", onPipelineError: "nack", consumerErr: context.Canceled, wantErr: true},
 	}
 	for _, tt := range tests {

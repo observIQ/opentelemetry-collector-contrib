@@ -33,10 +33,12 @@ The following configuration options are supported:
    emulator instance. Only has effect if Endpoint is not ""
 * `on_decode_error` (Optional): What to do with a message that the configured encoding fails to decode. See
   [Error handling](#error-handling) for more details. One of:
-  * `propagate` (default): don't acknowledge the message, it is redelivered after the ack deadline expires.
-  * `ignore`: acknowledge and drop the message.
+  * `ignore` (default): acknowledge and drop the message, counting it in the encoding error metric.
+  * `propagate`: do not acknowledge the message; it is redelivered after the ack deadline expires. This was the previous default and makes an undecodable message redeliver forever — prefer `ignore` or `nack`.
   * `nack`: negatively acknowledge the message, so the subscription retry policy or dead-letter policy applies.
-* `on_pipeline_error` (Optional): What to do with a message that the downstream pipeline rejects. See
+* `on_pipeline_error` (Optional): What to do with a message that the downstream pipeline rejects with a permanent
+  error. Transient rejections (a full sending queue, memory limiter refusal) are never acknowledged nor negatively
+  acknowledged, so the message is redelivered after the ack deadline regardless of this setting. See
   [Error handling](#error-handling) for more details. One of:
   * `ack` (default): acknowledge and drop the message.
   * `nack`: negatively acknowledge the message, so the subscription retry policy or dead-letter policy applies.
@@ -114,8 +116,9 @@ The subscription should also be of delivery type `Pull`.
 The receiver acknowledges a message once it is decoded and handed to the pipeline. Two options control what
 happens on failure:
 
-* `on_decode_error` applies when the configured encoding fails to decode a message. With the default
-  `propagate` the message is not acknowledged and is redelivered after the ack deadline expires; monitor the
+* `on_decode_error` applies when the configured encoding fails to decode a message. The default `ignore`
+  acknowledges and drops the message so one undecodable message cannot occupy redelivery capacity forever;
+  with `propagate` the message is not acknowledged and is redelivered after the ack deadline expires; monitor the
   `receiver.googlecloudpubsub.encoding_error` metric to detect this. Note that ack deadline expiry does *not*
   count toward a subscription dead-letter policy's delivery attempts, so an undecodable message is redelivered
   forever. Use `ignore` to acknowledge and drop such messages, or `nack` to negatively acknowledge them.

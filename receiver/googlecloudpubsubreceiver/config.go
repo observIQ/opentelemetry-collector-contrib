@@ -48,20 +48,24 @@ type Config struct {
 
 	// Ignore errors when the configured encoder fails to decoding a PubSub messages.
 	//
-	// Deprecated: use OnDecodeError set to "ignore" instead.
+	// Deprecated: use on_decode_error set to "ignore" instead.
 	IgnoreEncodingError bool `mapstructure:"ignore_encoding_error"`
 
-	// OnDecodeError sets how a message that the configured encoding fails to decode is
-	// handled. "propagate" (the default) leaves the message unacknowledged, so it is
-	// redelivered after the ack deadline expires. "ignore" acknowledges and drops the
-	// message. "nack" negatively acknowledges the message (a modify ack deadline of 0),
-	// so the subscription retry policy or dead letter policy applies.
+	// on_decode_error sets how a message that the configured encoding fails to decode is
+	// handled. "ignore" (the default) acknowledges and drops the message, counting it in
+	// the encoding error metric. "propagate" leaves the message unacknowledged, so it is
+	// redelivered after the ack deadline expires; this was the previous default and it
+	// makes an undecodable message redeliver forever. "nack" negatively acknowledges the
+	// message (a modify ack deadline of 0), so the subscription retry policy or dead
+	// letter policy applies.
 	OnDecodeError string `mapstructure:"on_decode_error"`
 
-	// OnPipelineError sets how a message that the downstream pipeline rejects is handled.
-	// "ack" (the default) acknowledges and drops the message. "nack" negatively
-	// acknowledges the message, so the subscription retry policy or dead letter policy
-	// applies.
+	// on_pipeline_error sets how a message that the downstream pipeline rejects with a
+	// permanent error is handled. "ack" (the default) acknowledges and drops the message.
+	// "nack" negatively acknowledges the message, so the subscription retry policy or
+	// dead letter policy applies. Transient rejections (a full sending queue, memory
+	// limiter refusal) are never acknowledged nor negatively acknowledged, so the message
+	// is redelivered after the ack deadline expires regardless of this setting.
 	OnPipelineError string `mapstructure:"on_pipeline_error"`
 
 	// The client id that will be used by Pubsub to make load balancing decisions
@@ -107,10 +111,7 @@ func (config *Config) decodeErrorPolicy() string {
 	if config.OnDecodeError != "" {
 		return config.OnDecodeError
 	}
-	if config.IgnoreEncodingError {
-		return onErrorIgnore
-	}
-	return onErrorPropagate
+	return onErrorIgnore
 }
 
 func (config *Config) validate() error {

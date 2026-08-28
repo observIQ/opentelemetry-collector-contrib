@@ -18,6 +18,7 @@ import (
 	"cloud.google.com/go/pubsub/v2/apiv1/pubsubpb"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/ptrace"
@@ -271,19 +272,26 @@ func (receiver *pubsubReceiver) logDecodeError(signal string, message *pubsubpb.
 }
 
 // handlePipelineError applies the on_pipeline_error policy to a message the
-// downstream consumer rejected.
+// downstream consumer rejected. Only permanent errors are governed by the
+// policy: transient rejections (a full sending queue, memory limiter refusal)
+// and shutdown cancellations leave the message unacknowledged, so it is
+// redelivered after the ack deadline instead of being dropped or counted
+// toward a dead letter policy.
 func (receiver *pubsubReceiver) handlePipelineError(err error) error {
-	if err == nil || receiver.config.OnPipelineError != onErrorNack {
-		// default policy: ack and drop, let Pubsub handle the flow control
+	if err == nil {
 		return nil
 	}
 	if errors.Is(err, context.Canceled) {
-		// The collector is shutting down, the data isn't bad: leave the message
-		// unacknowledged (neither ack nor nack), so it is redelivered to a healthy
-		// subscriber instead of counting toward the dead letter policy.
 		return err
 	}
-	return internal.ErrNack
+	if !consumererror.IsPermanent(err) {
+		return err
+	}
+	if receiver.config.OnPipelineError == onErrorNack {
+		return internal.ErrNack
+	}
+	// default policy: ack and drop
+	return nil
 }
 
 func (receiver *pubsubReceiver) handleTrace(ctx context.Context, message *pubsubpb.ReceivedMessage, compression buildInCompression) error {

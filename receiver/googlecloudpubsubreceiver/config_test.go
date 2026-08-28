@@ -165,7 +165,10 @@ func TestConfigValidationErrorPolicies(t *testing.T) {
 
 func TestDecodeErrorPolicyDefaults(t *testing.T) {
 	c := NewFactory().CreateDefaultConfig().(*Config)
+	assert.Equal(t, "ignore", c.decodeErrorPolicy())
+	c.OnDecodeError = "propagate"
 	assert.Equal(t, "propagate", c.decodeErrorPolicy())
+	c.OnDecodeError = ""
 	c.IgnoreEncodingError = true
 	assert.Equal(t, "ignore", c.decodeErrorPolicy())
 	c.OnDecodeError = "nack"
