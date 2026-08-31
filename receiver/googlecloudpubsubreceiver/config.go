@@ -47,9 +47,9 @@ type Config struct {
 	Compression string `mapstructure:"compression"`
 
 	// Ignore errors when the configured encoder fails to decoding a PubSub messages.
-	// Setting this to true behaves as on_decode_error set to "ignore", which is also
-	// the default; setting it together with a conflicting on_decode_error fails
-	// validation.
+	// This asks for the behavior of on_decode_error set to "ignore", which is also the
+	// default, so setting it changes nothing on its own; setting it together with a
+	// conflicting on_decode_error fails validation.
 	//
 	// Deprecated: use on_decode_error set to "ignore" instead.
 	IgnoreEncodingError bool `mapstructure:"ignore_encoding_error"`
@@ -108,17 +108,13 @@ func (fcc *FlowControlConfig) getInternalConfig() *internal.FlowControlConfig {
 	}
 }
 
-// decodeErrorPolicy resolves the effective on_decode_error policy, mapping the
-// deprecated ignore_encoding_error flag when on_decode_error is unset.
+// decodeErrorPolicy resolves the effective on_decode_error policy. The
+// deprecated ignore_encoding_error flag asks for "ignore", which is also the
+// default, so an unset on_decode_error resolves to "ignore" either way; setting
+// the flag together with a conflicting on_decode_error fails validation.
 func (config *Config) decodeErrorPolicy() string {
 	if config.OnDecodeError != "" {
 		return config.OnDecodeError
-	}
-	if config.IgnoreEncodingError {
-		// The deprecated flag maps to "ignore", which is also the default; it is
-		// honored explicitly so the mapping (and the conflict validation) stay
-		// truthful for configs that still set it.
-		return onErrorIgnore
 	}
 	return onErrorIgnore
 }

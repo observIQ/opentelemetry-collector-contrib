@@ -653,3 +653,86 @@ func TestPipelineErrorPolicies(t *testing.T) {
 		})
 	}
 }
+
+// TestUndeliverableMessagePolicies verifies that a message the multiplexing
+// handler cannot deliver - an unknown encoding, or a signal without a consumer -
+// follows the on_decode_error policy instead of silently redelivering forever
+// (propagate) or vanishing unaccounted (the previous bare ack).
+func TestUndeliverableMessagePolicies(t *testing.T) {
+	tests := []struct {
+		name          string
+		attributes    map[string]string
+		onDecodeError string
+		wantErr       error
+		wantSignal    string
+	}{
+		{
+			name:       "unknown encoding is ignored by default",
+			attributes: map[string]string{"ce-type": "com.example.unknown.v1"},
+			wantErr:    nil,
+			wantSignal: "unknown",
+		},
+		{
+			name:          "unknown encoding nacks under nack policy",
+			attributes:    map[string]string{"ce-type": "com.example.unknown.v1"},
+			onDecodeError: "nack",
+			wantErr:       internal.ErrNack,
+			wantSignal:    "unknown",
+		},
+		{
+			name: "signal without consumer is ignored by default",
+			attributes: map[string]string{
+				"ce-type":      "org.opentelemetry.otlp.traces.v1",
+				"content-type": "application/protobuf",
+			},
+			wantErr:    nil,
+			wantSignal: "traces",
+		},
+		{
+			name: "signal without consumer nacks under nack policy",
+			attributes: map[string]string{
+				"ce-type":      "org.opentelemetry.otlp.traces.v1",
+				"content-type": "application/protobuf",
+			},
+			onDecodeError: "nack",
+			wantErr:       internal.ErrNack,
+			wantSignal:    "traces",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := pstest.NewServer()
+			defer srv.Close()
+
+			recv, logs := createObservedReceiver(t, srv)
+			// Only a logs consumer is attached, so a trace message has no consumer.
+			recv.logsConsumer = consumertest.NewNop()
+			recv.logsUnmarshaler = &plog.ProtoUnmarshaler{}
+			recv.config.OnDecodeError = tt.onDecodeError
+
+			obsrecv, err := receiverhelper.NewObsReport(receiverhelper.ObsReportSettings{
+				ReceiverID:             component.NewID(metadata.Type),
+				Transport:              reportTransport,
+				LongLivedCtx:           false,
+				ReceiverCreateSettings: recv.settings,
+			})
+			require.NoError(t, err)
+			recv.obsrecv = obsrecv
+
+			msg := &pb.ReceivedMessage{
+				AckId:   "ack-undeliverable",
+				Message: &pb.PubsubMessage{MessageId: "msg-undeliverable-001", Attributes: tt.attributes},
+			}
+			err = recv.handleMultiplexedMessage(t.Context(), msg)
+			if tt.wantErr == nil {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorIs(t, err, tt.wantErr)
+			}
+
+			warnLogs := logs.FilterLevelExact(zapcore.WarnLevel)
+			require.Equal(t, 1, warnLogs.Len(), "expected one warn log for the undeliverable message")
+			assert.Equal(t, tt.wantSignal, warnLogs.All()[0].ContextMap()["signal"])
+		})
+	}
+}

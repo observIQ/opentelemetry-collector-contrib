@@ -39,7 +39,7 @@ properties:
   flow_control:
     $ref: flow_control_config
   ignore_encoding_error:
-    description: 'Ignore errors when the configured encoder fails to decoding a PubSub messages. Deprecated: use on_decode_error set to "ignore" instead.'
+    description: 'Ignore errors when the configured encoder fails to decoding a PubSub messages. This asks for the behavior of on_decode_error set to "ignore", which is also the default, so setting it changes nothing on its own; setting it together with a conflicting on_decode_error fails validation. Deprecated: use on_decode_error set to "ignore" instead.'
     type: boolean
   insecure:
     description: Only has effect if Endpoint is not ""

@@ -77,6 +77,15 @@ const (
 	gZip                            = iota
 )
 
+var (
+	// errUnknownEncoding is returned for a message whose attributes match no
+	// known encoding, so no unmarshaler can be selected for it.
+	errUnknownEncoding = errors.New("unknown encoding")
+	// errNoConsumer is returned for a message whose signal has no consumer
+	// attached to this receiver, so it can never be delivered.
+	errNoConsumer = errors.New("no consumer attached for the signal of the message")
+)
+
 // consumerCount returns the number of attached consumers, useful for detecting errors in pipelines
 func (receiver *pubsubReceiver) consumerCount() int {
 	count := 0
@@ -403,6 +412,35 @@ func convertEncoding(encodingConfig string) (encoding buildInEncoding) {
 	return unknown
 }
 
+// handleMultiplexedMessage routes a message to the consumer of its detected
+// signal. A message that cannot be delivered - an encoding no unmarshaler
+// handles, or a signal without a consumer attached - follows the same
+// on_decode_error policy as a message that fails to decode, so it neither
+// redelivers forever nor vanishes unaccounted.
+func (receiver *pubsubReceiver) handleMultiplexedMessage(ctx context.Context, message *pubsubpb.ReceivedMessage) error {
+	encoding, compression := receiver.detectEncoding(message.Message.Attributes)
+
+	switch encoding {
+	case otlpProtoTrace:
+		if receiver.tracesConsumer != nil {
+			return receiver.handleTrace(ctx, message, compression)
+		}
+		return receiver.handleDecodeError(ctx, "traces", message, errNoConsumer)
+	case otlpProtoMetric:
+		if receiver.metricsConsumer != nil {
+			return receiver.handleMetric(ctx, message, compression)
+		}
+		return receiver.handleDecodeError(ctx, "metrics", message, errNoConsumer)
+	case otlpProtoLog:
+		if receiver.logsConsumer != nil {
+			return receiver.handleLog(ctx, message, compression)
+		}
+		return receiver.handleDecodeError(ctx, "logs", message, errNoConsumer)
+	default:
+		return receiver.handleDecodeError(ctx, "unknown", message, errUnknownEncoding)
+	}
+}
+
 func (receiver *pubsubReceiver) createMultiplexingReceiverHandler(ctx context.Context) error {
 	var err error
 	receiver.handler, err = internal.NewHandler(
@@ -413,27 +451,7 @@ func (receiver *pubsubReceiver) createMultiplexingReceiverHandler(ctx context.Co
 		receiver.config.ClientID,
 		receiver.config.Subscription,
 		receiver.config.FlowControlConfig.getInternalConfig(),
-		func(ctx context.Context, message *pubsubpb.ReceivedMessage) error {
-			encoding, compression := receiver.detectEncoding(message.Message.Attributes)
-
-			switch encoding {
-			case otlpProtoTrace:
-				if receiver.tracesConsumer != nil {
-					return receiver.handleTrace(ctx, message, compression)
-				}
-			case otlpProtoMetric:
-				if receiver.metricsConsumer != nil {
-					return receiver.handleMetric(ctx, message, compression)
-				}
-			case otlpProtoLog:
-				if receiver.logsConsumer != nil {
-					return receiver.handleLog(ctx, message, compression)
-				}
-			default:
-				return errors.New("unknown encoding")
-			}
-			return nil
-		},
+		receiver.handleMultiplexedMessage,
 	)
 	if err != nil {
 		return err
