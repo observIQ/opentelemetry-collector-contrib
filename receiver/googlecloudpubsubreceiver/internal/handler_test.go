@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,12 +22,30 @@ import (
 	"go.opentelemetry.io/collector/receiver/receivertest"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/googlecloudpubsubreceiver/internal/metadata"
 )
 
-func createHandler(ctx context.Context, t *testing.T) (cleanupFn func(), srv *pstest.Server, handler *StreamHandler) {
+type flakySubscriberClient struct {
+	SubscriberClient
+	// failures is the number of upcoming StreamingPull calls that must fail
+	failures atomic.Int32
+	calls    atomic.Int32
+}
+
+func (c *flakySubscriberClient) StreamingPull(ctx context.Context, opts ...gax.CallOption) (pubsubpb.Subscriber_StreamingPullClient, error) {
+	c.calls.Add(1)
+	if c.failures.Load() > 0 {
+		c.failures.Add(-1)
+		return nil, status.Error(codes.Unauthenticated, "transport: per-RPC creds failed due to error: oauth2: cannot fetch token")
+	}
+	return c.SubscriberClient.StreamingPull(ctx, opts...)
+}
+
+func createServer(ctx context.Context, t *testing.T) (cleanupFn func(), srv *pstest.Server, client SubscriberClient) {
 	srv = pstest.NewServer()
 
 	var copts []option.ClientOption
@@ -51,16 +70,25 @@ func createHandler(ctx context.Context, t *testing.T) (cleanupFn func(), srv *ps
 	})
 	assert.NoError(t, err)
 
+	client, err = pubsub.NewSubscriptionAdminClient(ctx, copts...)
+	assert.NoError(t, err)
+	return cleanupFn, srv, client
+}
+
+func createHandlerWithClient(ctx context.Context, t *testing.T, client SubscriberClient, callback func(context.Context, *pubsubpb.ReceivedMessage) error) *StreamHandler {
 	settings := receivertest.NewNopSettings(metadata.Type)
 	telemetryBuilder, _ := metadata.NewTelemetryBuilder(settings.TelemetrySettings)
+	handler, err := NewHandler(ctx, settings, telemetryBuilder, client, "client-id", "projects/my-project/subscriptions/otlp",
+		nil, callback)
+	assert.NoError(t, err)
+	return handler
+}
 
-	client, err := pubsub.NewSubscriptionAdminClient(ctx, copts...)
-	assert.NoError(t, err)
-	handler, err = NewHandler(ctx, settings, telemetryBuilder, client, "client-id", "projects/my-project/subscriptions/otlp",
-		nil, func(context.Context, *pubsubpb.ReceivedMessage) error {
-			return nil
-		})
-	assert.NoError(t, err)
+func createHandler(ctx context.Context, t *testing.T) (cleanupFn func(), srv *pstest.Server, handler *StreamHandler) {
+	cleanupFn, srv, client := createServer(ctx, t)
+	handler = createHandlerWithClient(ctx, t, client, func(context.Context, *pubsubpb.ReceivedMessage) error {
+		return nil
+	})
 	return cleanupFn, srv, handler
 }
 
@@ -250,6 +278,67 @@ func TestCancelNowFlushesPendingViaUnaryRPC(t *testing.T) {
 	default:
 		t.Fatal("expected pending nacks to be flushed over the unary ModifyAckDeadline RPC on shutdown")
 	}
+}
+
+// TestRecoverableStreamSurvivesFailedReinit makes the server close every stream shortly after it is
+// created and makes StreamingPull fail twice on re-initialization. The handler must not spawn its
+// goroutines against the nil stream and must recover once StreamingPull succeeds again.
+func TestRecoverableStreamSurvivesFailedReinit(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	cleanupFn, srv, client := createServer(ctx, t)
+	defer cleanupFn()
+	// every stream is closed by the server shortly after creation, forcing the recovery loop
+	srv.SetStreamTimeout(200 * time.Millisecond)
+
+	flaky := &flakySubscriberClient{SubscriberClient: client}
+	received := make(chan string, 16)
+	handler := createHandlerWithClient(ctx, t, flaky, func(_ context.Context, message *pubsubpb.ReceivedMessage) error {
+		received <- string(message.Message.Data)
+		return nil
+	})
+	// the initial stream was created by NewHandler; the next two re-initializations fail
+	flaky.failures.Store(2)
+	handler.RecoverableStream(ctx)
+	defer handler.CancelNow()
+
+	// initial + 2 failed + 1 successful re-initialization
+	require.Eventually(t, func() bool { return flaky.calls.Load() >= 4 }, 10*time.Second, 10*time.Millisecond)
+	assert.Equal(t, int32(0), flaky.failures.Load())
+
+	srv.Publish("projects/my-project/topics/otlp", []byte("after-recovery"), nil)
+	select {
+	case data := <-received:
+		assert.Equal(t, "after-recovery", data)
+	case <-time.After(10 * time.Second):
+		t.Fatal("message was not received after stream recovery")
+	}
+}
+
+// TestRecoverableStreamStopsWhenContextCanceled cancels the context the handler was started with,
+// without calling CancelNow. The recovery loop can never recreate a stream with a canceled context,
+// so it must stop instead of retrying (or crashing) forever.
+func TestRecoverableStreamStopsWhenContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cleanupFn, srv, handler := createHandler(ctx, t)
+	defer cleanupFn()
+
+	srv.Publish("projects/my-project/topics/otlp", []byte{}, nil)
+	handler.RecoverableStream(ctx)
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		handler.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("recovery loop did not stop after its context was canceled")
+	}
+	handler.CancelNow()
 }
 
 func TestExponentialBackoff(t *testing.T) {
