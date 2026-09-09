@@ -102,6 +102,7 @@ func (handler *StreamHandler) initStream(ctx context.Context) error {
 	}
 	if err := handler.stream.Send(&request); err != nil {
 		_ = handler.stream.CloseSend()
+		handler.stream = nil
 		return err
 	}
 	handler.acks = nil
@@ -123,7 +124,20 @@ func (handler *StreamHandler) RecoverableStream(ctx context.Context) {
 }
 
 func (handler *StreamHandler) recoverableStream(ctx context.Context) {
-	for handler.isRunning.Load() {
+	for handler.isRunning.Load() && ctx.Err() == nil {
+		if handler.stream == nil {
+			// The previous stream could not be re-created. Retry before starting the request and
+			// response loops, as both dereference the stream.
+			if err := handler.initStream(ctx); err != nil {
+				handler.retryAttempt++
+				handler.settings.Logger.Error("Failed to recover stream.",
+					zap.Error(err), zap.Int("retry_attempt", handler.retryAttempt))
+				sleep(ctx, exponentialBackoff(handler.retryAttempt))
+				continue
+			}
+			handler.retryAttempt = 0
+		}
+
 		// Create a new cancelable context for the handler, so we can recover the stream
 		var loopCtx context.Context
 		loopCtx, cancel := context.WithCancel(ctx)
@@ -140,20 +154,25 @@ func (handler *StreamHandler) recoverableStream(ctx context.Context) {
 			cancel()
 			handler.streamWaitGroup.Wait()
 		}
-		if handler.isRunning.Load() {
-			err := handler.initStream(ctx)
-			if err != nil {
-				handler.settings.Logger.Error("Failed to recovery stream.")
-				handler.retryAttempt++
-			} else {
-				handler.retryAttempt = 0
-			}
-		}
+		// the stream is done, a new one is created at the top of the loop
+		handler.stream = nil
 		handler.settings.Logger.Debug("End of recovery loop, restarting.")
-		time.Sleep(exponentialBackoff(handler.retryAttempt))
 	}
 	handler.settings.Logger.Warn("Shutting down recovery loop.")
 	handler.handlerWaitGroup.Done()
+}
+
+// sleep waits for the duration or until the context is done, so a shutdown is not delayed by a backoff
+func sleep(ctx context.Context, d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
 
 func (handler *StreamHandler) CancelNow() {
