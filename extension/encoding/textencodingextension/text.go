@@ -6,6 +6,7 @@ package textencodingextension // import "github.com/open-telemetry/opentelemetry
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 	"regexp"
 	"time"
@@ -33,6 +34,11 @@ func (r *textLogCodec) UnmarshalLogs(buf []byte) (plog.Logs, error) {
 	}
 
 	logs, err := decoder.DecodeLogs()
+	if errors.Is(err, io.EOF) {
+		// The streaming decoder signals an exhausted stream with io.EOF, which for a
+		// one-shot unmarshal simply means the payload contained no records.
+		return plog.NewLogs(), nil
+	}
 	if err != nil {
 		return plog.Logs{}, err
 	}
