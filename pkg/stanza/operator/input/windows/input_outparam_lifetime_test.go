@@ -84,7 +84,7 @@ func TestPollAndReadKeepsEvtGetLogInfoOutParamsAlive(t *testing.T) {
 	input.pollInterval = time.Millisecond
 	input.maxReads = 1
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	input.wg.Add(1)
 	go input.pollAndRead(ctx)
 	require.Eventually(t, func() bool { return proc.calls.Load() >= 200 }, 2*time.Minute, 10*time.Millisecond)
