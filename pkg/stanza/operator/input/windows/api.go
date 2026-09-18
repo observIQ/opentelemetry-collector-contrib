@@ -13,23 +13,32 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// The procedures below must stay *windows.LazyProc and be called directly: LazyProc.Call carries
+// //go:uintptrescapes, which keeps every uintptr(unsafe.Pointer(p)) argument alive for the duration of
+// the call. Routing the call through an interface or a function variable loses that guarantee, and the
+// garbage collector may then free an argument while the Windows API is still using it.
 var (
 	api = windows.NewLazySystemDLL("wevtapi.dll")
 
-	openLogProc               SyscallProc = api.NewProc("EvtOpenLog")
-	getLogInfoProc            SyscallProc = api.NewProc("EvtGetLogInfo")
-	subscribeProc             SyscallProc = api.NewProc("EvtSubscribe")
-	queryProc                 SyscallProc = api.NewProc("EvtQuery")
-	nextProc                  SyscallProc = api.NewProc("EvtNext")
-	renderProc                SyscallProc = api.NewProc("EvtRender")
-	closeProc                 SyscallProc = api.NewProc("EvtClose")
-	createBookmarkProc        SyscallProc = api.NewProc("EvtCreateBookmark")
-	createRenderContextProc   SyscallProc = api.NewProc("EvtCreateRenderContext")
-	updateBookmarkProc        SyscallProc = api.NewProc("EvtUpdateBookmark")
-	openPublisherMetadataProc SyscallProc = api.NewProc("EvtOpenPublisherMetadata")
-	formatMessageProc         SyscallProc = api.NewProc("EvtFormatMessage")
-	openSessionProc           SyscallProc = api.NewProc("EvtOpenSession")
+	openLogProc               = api.NewProc("EvtOpenLog")
+	getLogInfoProc            = api.NewProc("EvtGetLogInfo")
+	subscribeProc             = api.NewProc("EvtSubscribe")
+	queryProc                 = api.NewProc("EvtQuery")
+	nextProc                  = api.NewProc("EvtNext")
+	renderProc                = api.NewProc("EvtRender")
+	closeProc                 = api.NewProc("EvtClose")
+	createBookmarkProc        = api.NewProc("EvtCreateBookmark")
+	createRenderContextProc   = api.NewProc("EvtCreateRenderContext")
+	updateBookmarkProc        = api.NewProc("EvtUpdateBookmark")
+	openPublisherMetadataProc = api.NewProc("EvtOpenPublisherMetadata")
+	formatMessageProc         = api.NewProc("EvtFormatMessage")
+	openSessionProc           = api.NewProc("EvtOpenSession")
 )
+
+var _ = []*windows.LazyProc{
+	openLogProc, getLogInfoProc, subscribeProc, queryProc, nextProc, renderProc, closeProc, createBookmarkProc,
+	createRenderContextProc, updateBookmarkProc, openPublisherMetadataProc, formatMessageProc, openSessionProc,
+}
 
 type EvtRPCLogin struct {
 	Server   *uint16
@@ -37,11 +46,6 @@ type EvtRPCLogin struct {
 	Domain   *uint16
 	Password *uint16
 	Flags    uint32
-}
-
-// SyscallProc is a syscall procedure.
-type SyscallProc interface {
-	Call(...uintptr) (uintptr, uintptr, error)
 }
 
 const (
