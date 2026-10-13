@@ -92,9 +92,27 @@ where `code` is a Splunk HEC status code. It uses these codes:
 | 400  | 12 / 13       | Event field is required / cannot be blank |
 | 400  | 15            | Error in handling indexed fields |
 | 500  | 8             | Internal server error |
+| 503  | 9             | Server is busy (transient pipeline error, retry with backoff) |
 
 See Splunk's [HTTP Event Collector response codes][hec-codes] for the full list
 of status and sub-code values.
 
-[configtls]: https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configtls
 [hec-codes]: https://docs.splunk.com/Documentation/Splunk/latest/Data/TroubleshootHTTPEventCollector
+
+## Delivery guarantees
+
+The receiver hands data to the pipeline before responding to the client, so it
+provides at-least-once delivery. If the pipeline accepts a batch but the client
+never receives the success response (for example the connection drops before the
+response is written), the client will resend the batch and the data is delivered
+again, producing duplicates downstream.
+
+To detect and avoid duplicates, enable [Splunk indexer acknowledgment][hec-ack]
+via the `ack` extension (see the `ack` setting above) and have the sender use the
+acknowledgment protocol: the sender includes a channel, the receiver returns an
+`ackId`, and the sender confirms delivery by polling the ack endpoint before it
+considers a batch complete. This lets a sender safely retry without assuming a
+lost response means the data was dropped.
+
+[configtls]: https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configtls
+[hec-ack]: https://docs.splunk.com/Documentation/Splunk/latest/Data/AboutHECIDXAck
