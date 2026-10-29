@@ -750,6 +750,83 @@ func Test_writeDeadlineExtendedThroughRealServerChain(t *testing.T) {
 		"expected the write deadline to be extended on the real connection through ResponseController.Unwrap")
 }
 
+func Test_consumer_err(t *testing.T) {
+	currentTime := float64(time.Now().UnixNano()) / 1e6
+	splunkMsg := buildSplunkHecMsg(currentTime, 5)
+	config := createDefaultConfig().(*Config)
+	config.ServerConfig.NetAddr.Endpoint = "localhost:0" // Actually not creating the endpoint
+	rcv, err := newReceiver(receivertest.NewNopSettings(metadata.Type), *config)
+	assert.NoError(t, err)
+	rcv.logsConsumer = consumertest.NewErr(errors.New("bad consumer"))
+
+	w := httptest.NewRecorder()
+	msgBytes, err := json.Marshal(splunkMsg)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost", bytes.NewReader(msgBytes))
+	rcv.handleReq(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+
+	var body map[string]any
+	assert.NoError(t, json.Unmarshal(respBytes, &body))
+
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Equal(t, map[string]any{"text": "Server is busy", "code": float64(9)}, body)
+}
+
+func Test_consumer_err_metrics(t *testing.T) {
+	currentTime := float64(time.Now().UnixNano()) / 1e6
+	splunkMsg := buildSplunkHecMetricsMsg("metric", currentTime, 13, 2)
+	config := createDefaultConfig().(*Config)
+	config.ServerConfig.NetAddr.Endpoint = "localhost:0" // Actually not creating the endpoint
+	rcv, err := newReceiver(receivertest.NewNopSettings(metadata.Type), *config)
+	assert.NoError(t, err)
+	rcv.metricsConsumer = consumertest.NewErr(errors.New("bad consumer"))
+
+	w := httptest.NewRecorder()
+	msgBytes, err := json.Marshal(splunkMsg)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost", bytes.NewReader(msgBytes))
+	rcv.handleReq(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+
+	var body map[string]any
+	assert.NoError(t, json.Unmarshal(respBytes, &body))
+
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Equal(t, map[string]any{"text": "Server is busy", "code": float64(9)}, body)
+}
+
+func Test_consumer_err_raw(t *testing.T) {
+	config := createDefaultConfig().(*Config)
+	config.ServerConfig.NetAddr.Endpoint = "localhost:0" // Actually not creating the endpoint
+	rcv, err := newReceiver(receivertest.NewNopSettings(metadata.Type), *config)
+	assert.NoError(t, err)
+	rcv.logsConsumer = consumertest.NewErr(errors.New("bad consumer"))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "http://localhost", strings.NewReader("raw log line"))
+	rcv.handleRawReq(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+
+	var body map[string]any
+	assert.NoError(t, json.Unmarshal(respBytes, &body))
+
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	assert.Equal(t, map[string]any{"text": "Server is busy", "code": float64(9)}, body)
+}
+
 func Test_consumer_err_permanent(t *testing.T) {
 	currentTime := float64(time.Now().UnixNano()) / 1e6
 	splunkMsg := buildSplunkHecMsg(currentTime, 5)
