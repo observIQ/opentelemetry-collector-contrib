@@ -6,6 +6,7 @@ package splunkhecexporter // import "github.com/open-telemetry/opentelemetry-col
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +23,13 @@ import (
 // Wrapped permanent so non-splitting signals drop it; the logs path detects it
 // (errors.Is) and splits instead.
 var errPayloadTooLarge = errors.New("splunk hec payload too large")
+
+const (
+	// Splunk HEC codes returned on an accepted (HTTP 200) request whose server is approaching capacity.
+	// https://docs.splunk.com/Documentation/Splunk/latest/Data/TroubleshootHTTPEventCollector
+	splunkCodeApproachingQueueCapacity = 24
+	splunkCodeApproachingAckCapacity   = 25
+)
 
 type hecWorker interface {
 	send(context.Context, buffer, map[string]string) error
@@ -80,8 +88,21 @@ func (hec *defaultHecWorker) send(ctx context.Context, buf buffer, headers map[s
 		return err
 	}
 
-	// Drain the response body to avoid leaking connections.
+	// Data was accepted (200), so codes 24/25 warn rather than retry (a retry would duplicate it).
+	// Read enough to find the code, then drain the rest so the connection can be reused.
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	_, _ = io.Copy(io.Discard, resp.Body)
+	var splunkResp struct {
+		Code int `json:"code"`
+	}
+	if json.Unmarshal(body, &splunkResp) == nil {
+		switch splunkResp.Code {
+		case splunkCodeApproachingQueueCapacity, splunkCodeApproachingAckCapacity:
+			hec.logger.Warn("Splunk HEC accepted the data but is approaching capacity; consider reducing the send rate",
+				zap.Int("splunk_response_code", splunkResp.Code),
+				zap.String("host", hec.url.String()))
+		}
+	}
 
 	return nil
 }
