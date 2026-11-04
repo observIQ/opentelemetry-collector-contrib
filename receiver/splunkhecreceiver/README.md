@@ -96,5 +96,29 @@ where `code` is a Splunk HEC status code. It uses these codes:
 See Splunk's [HTTP Event Collector response codes][hec-codes] for the full list
 of status and sub-code values.
 
+## Delivery guarantees
+
+The receiver hands data to the pipeline before responding to the client, so it
+provides at-least-once delivery. If the pipeline accepts a batch but the client
+never receives the success response (for example the connection drops before the
+response is written), the client will resend the batch and the data is delivered
+again, producing duplicates downstream.
+
+To detect and avoid duplicates, enable [Splunk indexer acknowledgment][hec-ack]
+via the `ack` extension (see the `ack` setting above) and have the sender use the
+acknowledgment protocol: the sender includes a channel, the receiver returns an
+`ackId`, and the sender confirms delivery by polling the ack endpoint before it
+considers a batch complete. This lets a sender safely retry without assuming a
+lost response means the data was dropped.
+
+A single request can carry both log and metric events. The receiver hands the
+logs to the pipeline first, then the metrics. If the logs are accepted but the
+metrics are not, the receiver responds with an error and a retrying client
+resends the whole request, so the logs are delivered again. Acknowledgment does
+not flag this case: an `ackId` is only issued once the entire request has been
+accepted, so the failed attempt returns no `ackId`. Senders that need to avoid
+these duplicates should send logs and metrics in separate requests.
+
 [configtls]: https://github.com/open-telemetry/opentelemetry-collector/blob/main/config/configtls
 [hec-codes]: https://docs.splunk.com/Documentation/Splunk/latest/Data/TroubleshootHTTPEventCollector
+[hec-ack]: https://docs.splunk.com/Documentation/Splunk/latest/Data/AboutHECIDXAck
