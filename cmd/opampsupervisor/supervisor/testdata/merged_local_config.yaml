@@ -35,6 +35,8 @@ service:
       encoding: json
       error_output_paths: ["stderr"]
       output_paths: ["stdout"]
+    metrics:
+      level: none
     resource:
       attributes:
         - name: service.name

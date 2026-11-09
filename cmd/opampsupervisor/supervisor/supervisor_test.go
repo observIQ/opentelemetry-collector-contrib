@@ -1322,6 +1322,8 @@ service:
                 - stderr
             output_paths:
                 - stdout
+        metrics:
+            level: none
         resource:
             attributes:
                 - name: service.instance.id
@@ -1426,6 +1428,8 @@ service:
                 - stderr
             output_paths:
                 - stdout
+        metrics:
+            level: none
         resource:
             attributes:
                 - name: service.instance.id
@@ -1615,6 +1619,8 @@ service:
                 - stderr
             output_paths:
                 - stdout
+        metrics:
+            level: none
         resource:
             attributes:
                 - name: service.instance.id
@@ -1737,6 +1743,8 @@ service:
                 - stderr
             output_paths:
                 - stdout
+        metrics:
+            level: none
         resource: null
 `
 
@@ -3204,6 +3212,7 @@ service:
                             endpoint: localhost-logs
                             protocol: http/protobuf
         metrics:
+            level: none
             readers:
                 - periodic:
                     exporter:
@@ -4445,6 +4454,8 @@ service:
                 - stderr
             output_paths:
                 - stdout
+        metrics:
+            level: none
         resource:
             attributes:
                 - name: service.instance.id
@@ -4486,6 +4497,7 @@ service:
             output_paths:
                 - stdout
         metrics:
+            level: none
             readers:
                 - periodic:
                     exporter:
@@ -4718,6 +4730,8 @@ service:
                 - stderr
             output_paths:
                 - stdout
+        metrics:
+            level: none
         resource:
             attributes:
                 - name: service.instance.id
