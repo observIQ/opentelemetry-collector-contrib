@@ -4770,3 +4770,94 @@ service:
 		require.Equal(t, expectedMergedConfigMulti, gotConfig)
 	})
 }
+
+func writeLongRunningExecutable(t *testing.T) string {
+	t.Helper()
+
+	executablePath := filepath.Join(t.TempDir(), "fake-collector")
+	require.NoError(t, os.WriteFile(executablePath, []byte("#!/bin/sh\nexec sleep 3600\n"), 0o600))
+	require.NoError(t, os.Chmod(executablePath, 0o700))
+	return executablePath
+}
+
+func TestSupervisor_runAgentProcessReportsAppliedOnHealthy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as the fake agent")
+	}
+
+	tests := []struct {
+		name        string
+		healthy     bool
+		wantApplied bool
+	}{
+		{name: "healthy agent reports applied before the apply timeout", healthy: true, wantApplied: true},
+		{name: "unhealthy agent waits for the apply timeout", healthy: false, wantApplied: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newComposeMergedConfigTestSupervisor(t, writeLongRunningExecutable(t), false)
+			// Long enough that only an early report can satisfy the test.
+			s.config.Agent.ConfigApplyTimeout = time.Hour
+
+			ps, err := loadOrCreatePersistentState(filepath.Join(t.TempDir(), persistentStateFileName), "018fee23-4a51-7303-a441-73faed7d9deb", zap.NewNop())
+			require.NoError(t, err)
+			s.persistentState = ps
+			s.agentConn = &atomic.Value{}
+			s.effectiveConfig = &atomic.Value{}
+			s.doneChan = make(chan struct{})
+			s.agentReadyChan = make(chan struct{}, 1)
+			s.agentHealthyChan = make(chan struct{}, 1)
+			mp := metric.NewMeterProvider()
+			defer func() { _ = mp.Shutdown(t.Context()) }()
+			s.metrics, err = telemetry.NewMetrics(mp)
+			require.NoError(t, err)
+
+			var applied atomic.Bool
+			s.opampClient = &mockOpAMPClient{
+				setHealthFunc: func(*protobufs.ComponentHealth) {},
+				setRemoteConfigStatusFunc: func(rcs *protobufs.RemoteConfigStatus) error {
+					if rcs.Status == protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLIED {
+						applied.Store(true)
+					}
+					return nil
+				},
+			}
+
+			remoteConfig := &protobufs.AgentRemoteConfig{
+				Config: &protobufs.AgentConfigMap{
+					ConfigMap: map[string]*protobufs.AgentConfigObject{
+						"": {Body: []byte("receivers:\n  nop: {}\n")},
+					},
+				},
+				ConfigHash: []byte("new-hash"),
+			}
+			s.remoteConfig.Store(remoteConfig)
+			_, err = s.composeMergedConfig(remoteConfig)
+			require.NoError(t, err)
+
+			loopDone := make(chan struct{})
+			go func() {
+				defer close(loopDone)
+				s.runAgentProcess()
+			}()
+			t.Cleanup(func() {
+				close(s.doneChan)
+				<-loopDone
+			})
+
+			s.hasNewConfig <- struct{}{}
+			require.Eventually(t, s.commander.IsRunning, 10*time.Second, 50*time.Millisecond)
+
+			s.handleAgentOpAMPMessage(&mockConn{}, &protobufs.AgentToServer{
+				Health: &protobufs.ComponentHealth{Healthy: tt.healthy},
+			})
+
+			if tt.wantApplied {
+				require.Eventually(t, applied.Load, 5*time.Second, 50*time.Millisecond)
+			} else {
+				require.Never(t, applied.Load, time.Second, 50*time.Millisecond)
+			}
+		})
+	}
+}

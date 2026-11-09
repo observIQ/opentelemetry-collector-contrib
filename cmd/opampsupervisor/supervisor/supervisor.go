@@ -198,6 +198,9 @@ type Supervisor struct {
 	// agentReadyChan is a channel that can be used to wait for the agent to
 	// start in case [agentReady] is false.
 	agentReadyChan chan struct{}
+	// agentHealthyChan signals runAgentProcess that the agent reported a healthy status, so a
+	// pending config can be reported as applied without waiting out ConfigApplyTimeout.
+	agentHealthyChan chan struct{}
 
 	// agentRestarting is true if the agent is restarting.
 	agentRestarting atomic.Bool
@@ -247,6 +250,7 @@ func NewSupervisor(ctx context.Context, logger *zap.Logger, cfg config.Superviso
 		featureGates:                   map[string]struct{}{},
 		agentReady:                     atomic.Bool{},
 		agentReadyChan:                 make(chan struct{}, 1),
+		agentHealthyChan:               make(chan struct{}, 1),
 		metrics:                        &supervisorTelemetry.Metrics{},
 		heartbeatIntervalSeconds:       30,
 		initialOpampConnSuccess:        atomic.Bool{},
@@ -977,6 +981,12 @@ func (s *Supervisor) handleAgentOpAMPMessage(conn serverTypes.Connection, messag
 		if !s.agentReady.Load() && message.Health.Healthy {
 			s.usingLastWorkingRemoteConfig.Store(false)
 			s.markAgentReady()
+		}
+		if message.Health.Healthy {
+			select {
+			case s.agentHealthyChan <- struct{}{}:
+			default:
+			}
 		}
 	}
 
@@ -2021,6 +2031,11 @@ func (s *Supervisor) runAgentProcess() {
 		select {
 		case <-s.hasNewConfig:
 			s.lastHealthFromClient.Store(nil)
+			// drop a healthy signal from the previous config so it can't mark this one applied
+			select {
+			case <-s.agentHealthyChan:
+			default:
+			}
 			s.telemetrySettings.Logger.Debug("agent has new config", zap.String("previous_health", s.lastHealthFromClient.Load().String()))
 			if !configApplyTimeoutTimer.Stop() {
 				select {
@@ -2142,6 +2157,13 @@ func (s *Supervisor) runAgentProcess() {
 			if err != nil {
 				s.telemetrySettings.Logger.Error("restarting agent failed", zap.Error(err))
 				s.reportActiveConfigStatus(protobufs.RemoteConfigStatuses_RemoteConfigStatuses_FAILED, err.Error())
+			}
+
+		case <-s.agentHealthyChan:
+			// report applied as soon as the agent is healthy rather than waiting out the
+			// apply timeout. Stop returns false when no config apply is in progress.
+			if configApplyTimeoutTimer.Stop() {
+				s.reportActiveConfigStatus(protobufs.RemoteConfigStatuses_RemoteConfigStatuses_APPLIED, "")
 			}
 
 		case <-configApplyTimeoutTimer.C:
