@@ -30,6 +30,11 @@ func runInteractive() error {
 	featuregate.GlobalRegistry().RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
+	// Before loading the config, so its errors are captured too
+	if err := redirectDiscardedStderr(*configFlag); err != nil {
+		log.Printf("Could not redirect stderr: %v", err)
+	}
+
 	cfg, err := config.Load(*configFlag)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
